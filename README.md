@@ -13,6 +13,11 @@ Si `flutter` no se reconoce, agrega `C:/Users/PC/Documents/Flutter/flutter/bin` 
 Para Android, conecta un teléfono con depuración USB, autoriza el equipo y selecciona el dispositivo en VS Code. Ejecuta `flutter devices` y `flutter run`. Acepta las licencias mediante `flutter doctor --android-licenses` después de leerlas. La compilación Android requiere Java y los componentes del SDK que indique `flutter doctor`.
 
 ## Lo disponible
+- Demostración local de agrupación y verificación: tres perfiles ficticios
+  distintos, misma categoría, hasta 150 m y 30 minutos desde el primer reporte.
+  El administrador de prueba revisa desde el primer reporte, verifica o
+  descarta con motivo. No gestiona atención de autoridades. Instrucciones y
+  límites en [docs/report-validation-demo.md](docs/report-validation-demo.md).
 - Pantallas de mapa, reportes y configuración; formulario con validación de coordenadas.
 - Reportes guardados localmente, categorías y detalle. No aparecen reportes ficticios.
 - Servicio de GPS y seguimiento en primer plano. Requiere consentimiento y ubicación habilitada; se detiene al pasar la app a segundo plano.
@@ -35,7 +40,7 @@ Para mostrar Google Maps en web, se necesita una clave distinta restringida por 
 
 `BackendClient` es un adaptador inicial para HTTP y WebSocket; todavía no está conectado a las pantallas. Su contrato propuesto es GET /incidents con token y una lista JSON de incidentes. Requiere HTTPS/WSS. Falta implementar FastAPI, autenticación, permisos, reconexión WebSocket y sincronización antes de publicar reportes entre dispositivos.
 
-La IA de cámaras se ejecutará en el servidor/equipo con RTX 4060. Esta entrega no incorpora análisis de video, cuentas ni panel de validación del operador. El proyecto generado contiene Android y web; iOS se preparará en un Mac con Xcode.
+La IA de cámaras se ejecutará en el servidor/equipo con RTX 4060. Esta entrega no incorpora análisis de video ni cuentas reales. La revisión de reportes usa un panel local con perfiles ficticios; no sustituye un panel autenticado de operadores. El proyecto generado contiene Android y web; iOS se preparará en un Mac con Xcode.
 
 ## Código
 La preparación de IA incorpora una pestaña de candidatos pendientes de revisión,

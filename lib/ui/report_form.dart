@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../data/incident_store.dart';
-import '../models/incident.dart';
+import '../models/report.dart';
 import '../services/location_service.dart';
 import 'map_panel.dart';
-
-const categories = ['Todos', 'Robo', 'Auxilio', 'Agresión', 'Riesgo'];
 
 class ReportForm extends StatefulWidget {
   const ReportForm({super.key, required this.store});
@@ -71,8 +69,9 @@ class _ReportFormState extends State<ReportForm> {
     setState(() => saving = true);
     final now = DateTime.now();
     final ok = await widget.store.add(
-      Incident(
+      Report(
         id: now.microsecondsSinceEpoch.toString(),
+        reporterId: widget.store.profile.id,
         type: category,
         place: place.text.trim(),
         description: description.text.trim(),
@@ -90,7 +89,7 @@ class _ReportFormState extends State<ReportForm> {
       );
     } else {
       message(
-        'No se pudo guardar. Revisa el almacenamiento y vuelve a intentarlo.',
+        widget.store.actionError ?? 'No se pudo guardar. Inténtalo de nuevo.',
       );
     }
   }
@@ -109,16 +108,18 @@ class _ReportFormState extends State<ReportForm> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Modo local: no contacta a emergencias ni publica a otros usuarios.',
+                  'Demostración local: 3 perfiles distintos hacen visible un caso '
+                  'sin verificar. Misma categoría, hasta 150 m y 30 minutos. '
+                  'No contacta a emergencias ni publica a otros dispositivos.',
                 ),
+                Text('Reportando como: ${widget.store.profile.label}'),
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
                   initialValue: category,
                   decoration: const InputDecoration(
                     labelText: 'Tipo de incidente',
                   ),
-                  items: categories
-                      .skip(1)
+                  items: incidentCategories
                       .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
                   onChanged: saving
@@ -194,7 +195,12 @@ class _ReportFormState extends State<ReportForm> {
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: saving || widget.store.error != null ? null : save,
+                  onPressed:
+                      saving ||
+                          widget.store.error != null ||
+                          widget.store.profile.isAdmin
+                      ? null
+                      : save,
                   icon: const Icon(Icons.save_outlined),
                   label: Text(saving ? 'Guardando…' : 'Guardar reporte local'),
                 ),
