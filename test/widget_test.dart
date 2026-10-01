@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:alerta_ciudadana/app.dart';
 import 'package:alerta_ciudadana/data/incident_store.dart';
-import 'package:alerta_ciudadana/models/incident.dart';
+import 'package:alerta_ciudadana/models/report.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -11,8 +11,9 @@ void main() {
     final store = IncidentStore(preferences)..load();
     expect(
       await store.add(
-        Incident(
+        Report(
           id: '1',
+          reporterId: 'neighbor-1',
           type: 'Robo',
           place: 'Prueba',
           description: '',
@@ -32,8 +33,9 @@ void main() {
     expect(store.error, isNotNull);
     expect(
       await store.add(
-        Incident(
+        Report(
           id: '1',
+          reporterId: 'neighbor-1',
           type: 'Robo',
           place: 'Prueba',
           description: '',

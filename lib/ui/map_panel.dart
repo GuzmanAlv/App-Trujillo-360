@@ -130,8 +130,13 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           markerId: MarkerId(i.id),
                           position: LatLng(i.latitude, i.longitude),
                           infoWindow: InfoWindow(
-                            title: i.type,
-                            snippet: i.place,
+                            title: '${i.type} · ${i.status.label}',
+                            snippet: '${i.place} · ${i.reporterCount} perfiles',
+                          ),
+                          icon: BitmapDescriptor.defaultMarkerWithHue(
+                            i.status == VerificationStatus.verified
+                                ? BitmapDescriptor.hueGreen
+                                : BitmapDescriptor.hueOrange,
                           ),
                           onTap: () => widget.onIncident?.call(i),
                         ),
@@ -154,37 +159,53 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                 : ColoredBox(
                     color: const Color(0xffe3ebe5),
                     child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(22),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.map_outlined,
-                              size: 46,
-                              color: Color(0xff087f68),
-                            ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Google Maps pendiente',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(22),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.map_outlined,
+                                size: 46,
+                                color: Color(0xff087f68),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Puedes probar los reportes locales. El mapa real necesita una clave configurada.',
-                              textAlign: TextAlign.center,
-                            ),
-                            if (widget.selected != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: Text(
-                                  '${widget.selected!.latitude.toStringAsFixed(5)}, ${widget.selected!.longitude.toStringAsFixed(5)}',
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Google Maps pendiente',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                          ],
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Puedes probar los reportes locales. El mapa real necesita una clave configurada.',
+                                textAlign: TextAlign.center,
+                              ),
+                              if (widget.selected != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    '${widget.selected!.latitude.toStringAsFixed(5)}, ${widget.selected!.longitude.toStringAsFixed(5)}',
+                                  ),
+                                ),
+                              for (final incident in widget.incidents)
+                                Card(
+                                  child: ListTile(
+                                    title: Text(
+                                      '${incident.type} · ${incident.place}',
+                                    ),
+                                    subtitle: Text(
+                                      '${incident.status.label} · '
+                                      '${incident.reporterCount} perfiles distintos',
+                                    ),
+                                    onTap: () =>
+                                        widget.onIncident?.call(incident),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

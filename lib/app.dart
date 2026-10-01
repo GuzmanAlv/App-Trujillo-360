@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'data/incident_store.dart';
 import 'models/incident.dart';
+import 'models/report.dart';
+import 'models/demo_profile.dart';
 import 'core/config.dart';
 import 'services/push_service.dart';
 import 'ui/map_panel.dart';
 import 'ui/report_form.dart';
 import 'data/ai_detection_store.dart';
 import 'ui/ai_detection_panel.dart';
+import 'ui/incident_details.dart';
+import 'ui/review_panel.dart';
 
 class TrujilloApp extends StatelessWidget {
   const TrujilloApp({super.key, required this.store});
@@ -48,73 +52,46 @@ class _HomePageState extends State<HomePage> {
   String filter = 'Todos';
   String pushStatus = 'Sin activar';
   bool requestingPush = false;
-  List<Incident> get visible => widget.store.items
+  List<Incident> get visible => widget.store.mapItems
       .where((i) => filter == 'Todos' || i.type == filter)
       .toList();
-  void details(Incident i) => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(i.type, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 10),
-            Text(i.place),
-            const SizedBox(height: 12),
-            Text(
-              i.description.isEmpty
-                  ? 'Sin descripción adicional.'
-                  : i.description,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '${i.latitude.toStringAsFixed(6)}, ${i.longitude.toStringAsFixed(6)}',
-            ),
-            Text(
-              'Registrado: ${i.createdAt.toLocal().toString().substring(0, 16)}',
-            ),
-            const SizedBox(height: 12),
-            const Chip(label: Text('Sin verificar · Solo en este dispositivo')),
-            const Text(
-              'Atención: sin asignar. Este reporte no se ha enviado a operadores.',
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-  Widget list() => visible.isEmpty
-      ? const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'No hay reportes en esta categoría.\nCrea uno con el botón Reportar.',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        )
-      : ListView.builder(
-          itemCount: visible.length,
-          itemBuilder: (context, index) {
-            final i = visible[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(16),
-                leading: const Icon(Icons.location_on_outlined),
-                title: Text('${i.type} · ${i.place}'),
-                subtitle: const Text('Sin verificar · Reporte local'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => details(i),
+  void details(Incident i) => showIncidentDetails(context, widget.store, i.id);
+  Widget list() {
+    final cases = widget.store.ownItems
+        .where((i) => filter == 'Todos' || i.type == filter)
+        .toList();
+    return cases.isEmpty
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'No has reportado en esta categoría.\nCrea uno con el botón Reportar.',
+                textAlign: TextAlign.center,
               ),
-            );
-          },
-        );
+            ),
+          )
+        : ListView.builder(
+            itemCount: cases.length,
+            itemBuilder: (context, index) {
+              final i = cases[index];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: Text('${i.type} · ${i.place}'),
+                  subtitle: Text(
+                    '${i.status.label} · ${i.reporterCount} perfiles distintos\n'
+                    '${i.isVisible ? 'Visible en mapa' : 'No visible en mapa'}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => details(i),
+                ),
+              );
+            },
+          );
+  }
+
   Widget settings() => ListView(
     padding: const EdgeInsets.all(24),
     children: [
@@ -180,7 +157,7 @@ class _HomePageState extends State<HomePage> {
         leading: Icon(Icons.person_outline),
         title: Text('Cuentas y panel de operadores'),
         subtitle: Text(
-          'Pendientes de autenticación y backend. Esta app no simula confirmaciones de operadores.',
+          'Perfiles ficticios para probar reportes y revisión. No hay cuentas reales ni autenticación.',
         ),
       ),
     ],
@@ -195,7 +172,7 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: const [
-          Chip(label: Text('LOCAL')),
+          Chip(label: Text('DEMO')),
           SizedBox(width: 12),
         ],
       ),
@@ -205,6 +182,39 @@ class _HomePageState extends State<HomePage> {
             constraints: const BoxConstraints(maxWidth: 1280),
             child: Column(
               children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: DropdownButtonFormField<DemoProfile>(
+                    key: const Key('demo-profile'),
+                    initialValue: widget.store.profile,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Perfil de prueba',
+                    ),
+                    items: DemoProfile.values
+                        .map(
+                          (p) =>
+                              DropdownMenuItem(value: p, child: Text(p.label)),
+                        )
+                        .toList(),
+                    onChanged: widget.store.saving
+                        ? null
+                        : (p) {
+                            if (p == null) return;
+                            setState(() => tab = 0);
+                            widget.store.selectProfile(p);
+                          },
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Demo local: los perfiles y la verificación son simulados.',
+                  ),
+                ),
                 if (widget.store.error != null)
                   MaterialBanner(
                     content: Text(widget.store.error!),
@@ -225,10 +235,12 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Reportes locales para probar el proyecto. Sin conexión con emergencias.',
+                              'Visible con 3 perfiles distintos o verificación de prueba. '
+                              'Misma categoría, hasta 150 m y 30 minutos. Sin conexión con emergencias.',
                             ),
                             const SizedBox(height: 12),
                             filters(),
+                            Text('${visible.length} casos visibles'),
                             const SizedBox(height: 12),
                             Expanded(
                               child: MapPanel(
@@ -251,6 +263,8 @@ class _HomePageState extends State<HomePage> {
                       ),
                       settings(),
                       AiDetectionPanel(store: aiStore),
+                      if (widget.store.profile.isAdmin)
+                        ReviewPanel(store: widget.store),
                     ],
                   ),
                 ),
@@ -259,7 +273,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-      floatingActionButton: tab >= 2
+      floatingActionButton: tab >= 2 || widget.store.profile.isAdmin
           ? null
           : FloatingActionButton.extended(
               onPressed: () => Navigator.push(
@@ -274,20 +288,28 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
         onDestinationSelected: (i) => setState(() => tab = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.map_outlined), label: 'Mapa'),
-          NavigationDestination(
-            icon: Icon(Icons.notifications_none),
-            label: 'Reportes',
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.map_outlined),
+            label: 'Mapa',
           ),
-          NavigationDestination(
+          const NavigationDestination(
+            icon: Icon(Icons.notifications_none),
+            label: 'Mis reportes',
+          ),
+          const NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             label: 'Configuración',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.videocam_outlined),
             label: 'IA',
           ),
+          if (widget.store.profile.isAdmin)
+            const NavigationDestination(
+              icon: Icon(Icons.fact_check_outlined),
+              label: 'Revisión',
+            ),
         ],
       ),
     ),
@@ -295,7 +317,7 @@ class _HomePageState extends State<HomePage> {
   Widget filters() => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
     child: Row(
-      children: categories
+      children: ['Todos', ...incidentCategories]
           .map(
             (c) => Padding(
               padding: const EdgeInsets.only(right: 8),
