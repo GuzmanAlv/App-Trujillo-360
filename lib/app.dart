@@ -15,6 +15,12 @@ class TrujilloApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Trujillo 360',
     debugShowCheckedModeBanner: false,
+    // Reserva el espacio de navegación de Android para todas las rutas.
+    // SafeArea elimina ese margen del MediaQuery de los hijos para no duplicarlo.
+    builder: (context, child) => SafeArea(
+      top: false,
+      child: child ?? const SizedBox.shrink(),
+    ),
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff087f68)),
