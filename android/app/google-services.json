@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "20186172766",
+    "project_id": "project-43edb74d-04c5-4d00-962",
+    "storage_bucket": "project-43edb74d-04c5-4d00-962.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:20186172766:android:80dcce63a5777ac6c293cf",
+        "android_client_info": {
+          "package_name": "pe.com.alertaciudadana.alerta_ciudadana"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9Wt_hEP6frth0mD5BTqijXbcFjf5JPHE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -35,6 +35,13 @@ migrate_working_dir/
 /android/maps.properties
 /config/local.json
 
+# Backend local configuration and Python environment
+/backend/.env
+/backend/.env.*
+!/backend/.env.example
+/backend/.venv/
+__pycache__/
+
 # Symbolication related
 app.*.symbols
 
@@ -45,3 +52,4 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+.pytest_cache/
