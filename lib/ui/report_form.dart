@@ -4,6 +4,7 @@ import '../data/incident_store.dart';
 import '../models/incident.dart';
 import '../services/location_service.dart';
 import 'map_panel.dart';
+import 'report_style.dart';
 
 const categories = ['Todos', 'Robo', 'Auxilio', 'Agresión', 'Riesgo'];
 
@@ -119,7 +120,27 @@ class _ReportFormState extends State<ReportForm> {
                   ),
                   items: categories
                       .skip(1)
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c,
+                          child: Row(
+                            children: [
+                              Icon(
+                                ReportStyle.forCategory(c).icon,
+                                color: ReportStyle.forCategory(c).color,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                c,
+                                style: TextStyle(
+                                  color: ReportStyle.forCategory(c).color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: saving
                       ? null

@@ -5,6 +5,7 @@ import 'core/config.dart';
 import 'services/push_service.dart';
 import 'ui/map_panel.dart';
 import 'ui/report_form.dart';
+import 'ui/report_style.dart';
 import 'data/ai_detection_store.dart';
 import 'ui/ai_detection_panel.dart';
 
@@ -17,10 +18,8 @@ class TrujilloApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     // Reserva el espacio de navegación de Android para todas las rutas.
     // SafeArea elimina ese margen del MediaQuery de los hijos para no duplicarlo.
-    builder: (context, child) => SafeArea(
-      top: false,
-      child: child ?? const SizedBox.shrink(),
-    ),
+    builder: (context, child) =>
+        SafeArea(top: false, child: child ?? const SizedBox.shrink()),
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff087f68)),
@@ -68,7 +67,20 @@ class _HomePageState extends State<HomePage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(i.type, style: Theme.of(context).textTheme.headlineSmall),
+            Row(
+              children: [
+                ReportCategoryIcon(category: i.type),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    i.type,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: ReportStyle.forCategory(i.type).color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
             Text(i.place),
             const SizedBox(height: 12),
@@ -112,9 +124,11 @@ class _HomePageState extends State<HomePage> {
               margin: const EdgeInsets.only(bottom: 10),
               child: ListTile(
                 contentPadding: const EdgeInsets.all(16),
-                leading: const Icon(Icons.location_on_outlined),
+                leading: ReportCategoryIcon(category: i.type),
                 title: Text('${i.type} · ${i.place}'),
-                subtitle: const Text('Sin verificar · Reporte local'),
+                subtitle: Text(
+                  'Reportado ${reportTime(i.createdAt)} · Sin verificar',
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => details(i),
               ),
@@ -306,7 +320,28 @@ class _HomePageState extends State<HomePage> {
             (c) => Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
+                avatar: Icon(
+                  ReportStyle.forCategory(c).icon,
+                  size: 20,
+                  color: ReportStyle.forCategory(c).color,
+                ),
                 label: Text(c),
+                labelStyle: TextStyle(
+                  color: ReportStyle.forCategory(c).color,
+                  fontWeight: filter == c ? FontWeight.w700 : FontWeight.w500,
+                ),
+                showCheckmark: false,
+                backgroundColor: ReportStyle.forCategory(
+                  c,
+                ).color.withValues(alpha: 0.05),
+                selectedColor: ReportStyle.forCategory(
+                  c,
+                ).color.withValues(alpha: 0.16),
+                side: BorderSide(
+                  color: ReportStyle.forCategory(
+                    c,
+                  ).color.withValues(alpha: filter == c ? 0.65 : 0.22),
+                ),
                 selected: filter == c,
                 onSelected: (_) => setState(() => filter = c),
               ),

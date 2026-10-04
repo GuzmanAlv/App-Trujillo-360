@@ -6,6 +6,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../core/config.dart';
 import '../models/incident.dart';
 import '../services/location_service.dart';
+import 'report_style.dart';
+import 'report_marker.dart';
 
 const trujillo = LatLng(-8.1116, -79.0288);
 
@@ -29,12 +31,59 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   GoogleMapController? controller;
   StreamSubscription<Position>? subscription;
   final service = LocationService();
+  final Map<String, BitmapDescriptor> reportIcons = {};
+  int iconGeneration = 0;
+
+  String iconKey(Incident incident) =>
+      '${incident.type}|${reportTime(incident.createdAt)}';
+
+  Future<void> prepareReportIcons() async {
+    final generation = ++iconGeneration;
+    final incidents = List<Incident>.of(widget.incidents);
+    final next = <String, BitmapDescriptor>{};
+    for (final incident in incidents) {
+      final key = iconKey(incident);
+      if (next.containsKey(key)) continue;
+      try {
+        next[key] =
+            reportIcons[key] ??
+            BitmapDescriptor.bytes(
+              await renderReportMarker(
+                incident.type,
+                reportTime(incident.createdAt),
+              ),
+              imagePixelRatio: 2,
+              width: 174,
+              height: 82,
+            );
+      } catch (_) {
+        // Keep a category-colored marker if image rendering is unavailable.
+      }
+      if (!mounted || generation != iconGeneration) return;
+    }
+    if (!mounted || generation != iconGeneration) return;
+    setState(() {
+      reportIcons
+        ..clear()
+        ..addAll(next);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant MapPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.incidents, widget.incidents)) {
+      prepareReportIcons();
+    }
+  }
+
   LatLng? location;
   bool following = false, busy = false, foreground = true;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    prepareReportIcons();
   }
 
   @override
@@ -129,8 +178,23 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                         Marker(
                           markerId: MarkerId(i.id),
                           position: LatLng(i.latitude, i.longitude),
+                          anchor: reportIcons.containsKey(iconKey(i))
+                              ? const Offset(0.5, 78 / 82)
+                              : const Offset(0.5, 1),
+                          icon:
+                              reportIcons[iconKey(i)] ??
+                              BitmapDescriptor.defaultMarkerWithHue(
+                                switch (i.type) {
+                                  'Robo' => BitmapDescriptor.hueOrange,
+                                  'Auxilio' => BitmapDescriptor.hueAzure,
+                                  'Agresión' => BitmapDescriptor.hueRose,
+                                  'Riesgo' => BitmapDescriptor.hueViolet,
+                                  _ => BitmapDescriptor.hueGreen,
+                                },
+                              ),
                           infoWindow: InfoWindow(
-                            title: i.type,
+                            title:
+                                '${i.type} · Reportado ${reportTime(i.createdAt)}',
                             snippet: i.place,
                           ),
                           onTap: () => widget.onIncident?.call(i),
