@@ -31,7 +31,7 @@ def main():
         finally:
             conn.rollback()
     with connect() as conn:
-        assert conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 3
+        assert conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 4
         assert conn.execute('SELECT * FROM trujillo.users').fetchall() == []
     print('OK: PostGIS, duplicados, permisos de revisión y rol limitado. Datos de prueba revertidos.')
 

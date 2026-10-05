@@ -1,3 +1,5 @@
+import 'report_photo.dart';
+
 class Incident {
   const Incident({
     required this.id,
@@ -9,11 +11,13 @@ class Incident {
     required this.createdAt,
     this.ownerUid,
     this.remoteId,
+    this.photos = const [],
   });
   final String id, type, place, description;
   final double latitude, longitude;
   final DateTime createdAt;
   final String? ownerUid, remoteId;
+  final List<ReportPhoto> photos;
   String get deliveryLabel => remoteId != null
       ? 'Enviado · Pendiente de verificación'
       : ownerUid != null
@@ -29,6 +33,7 @@ class Incident {
     createdAt: createdAt,
     ownerUid: ownerUid,
     remoteId: serverId,
+    photos: photos,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -40,6 +45,7 @@ class Incident {
     'createdAt': createdAt.toIso8601String(),
     'ownerUid': ownerUid,
     'remoteId': remoteId,
+    'photos': photos.map((photo) => photo.toJson()).toList(),
   };
   factory Incident.fromJson(Map<String, dynamic> j) {
     final lat = (j['latitude'] as num).toDouble();
@@ -57,6 +63,12 @@ class Incident {
       createdAt: DateTime.parse(j['createdAt'] as String),
       ownerUid: j['ownerUid'] as String?,
       remoteId: j['remoteId'] as String?,
+      photos: ((j['photos'] as List?) ?? const [])
+          .map(
+            (photo) =>
+                ReportPhoto.fromJson(Map<String, dynamic>.from(photo as Map)),
+          )
+          .toList(),
     );
   }
 }

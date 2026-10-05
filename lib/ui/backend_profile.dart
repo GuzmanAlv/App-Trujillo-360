@@ -48,8 +48,9 @@ class _BackendProfileState extends State<BackendProfile> {
         if (response.statusCode == 401 && attempt == 0) continue;
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body) as Map<String, dynamic>;
-          if (data['id'] is! String || data['status'] != 'active')
+          if (data['id'] is! String || data['status'] != 'active') {
             throw const FormatException();
+          }
           status = 'Cuenta conectada a Supabase.';
         } else {
           status = switch (response.statusCode) {

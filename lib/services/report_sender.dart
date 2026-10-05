@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../data/incident_store.dart';
 import '../models/incident.dart';
+import 'photo_store.dart';
 
 class ReportSender {
   static const endpoint = String.fromEnvironment('BACKEND_URL');
@@ -37,6 +38,12 @@ class ReportSender {
           (!local && base.scheme != 'https')) {
         return 'Falta configurar la conexión al servidor. El reporte queda pendiente.';
       }
+      final photos = <Map<String, String>>[];
+      for (final photo in report.photos) {
+        final bytes = await PhotoStore.read(photo);
+        if (bytes.length > PhotoStore.maxBytes) throw const FormatException();
+        photos.add({'id': photo.id, 'content_base64': base64Encode(bytes)});
+      }
       for (var attempt = 0; attempt < 2; attempt++) {
         final token = await user.getIdToken(attempt == 1);
         if (token == null) return 'Inicia sesión nuevamente para enviar.';
@@ -54,15 +61,20 @@ class ReportSender {
             'latitude': report.latitude,
             'longitude': report.longitude,
             'occurred_at': report.createdAt.toUtc().toIso8601String(),
+            'photos': photos,
           });
         final response = await (() async => http.Response.fromStream(
           await client.send(request),
-        ))().timeout(const Duration(seconds: 25));
+        ))().timeout(const Duration(seconds: 60));
         if (response.statusCode == 401 && attempt == 0) continue;
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body) as Map<String, dynamic>;
-          if (data['request_id'] != report.id || data['id'] is! String)
+          if (data['request_id'] != report.id ||
+              data['id'] is! String ||
+              (report.photos.isNotEmpty &&
+                  data['photo_count'] != report.photos.length)) {
             throw const FormatException();
+          }
           if (!await store.add(report.delivered(data['id'] as String))) {
             return 'Recibido por el servidor. No se pudo actualizar la copia local; reintenta para sincronizarla.';
           }
@@ -73,7 +85,9 @@ class ReportSender {
           403 => 'Tu cuenta no tiene permitido enviar reportes.',
           409 => 'Conflicto de envío. Conservamos el reporte para revisión.',
           422 =>
-            'El reporte contiene datos inválidos o tiene más de siete días.',
+            'Revisa los datos y las fotos (JPEG o PNG, hasta 2 MB). El reporte no puede tener más de siete días.',
+          413 =>
+            'Las fotos superan el tamaño permitido. El reporte se conservó en este dispositivo.',
           _ =>
             'Servidor no disponible. El reporte queda pendiente para reintentar.',
         };

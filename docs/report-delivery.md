@@ -20,8 +20,10 @@ original puede enviarlo. Reportes locales anteriores no se suben automáticament
 Una respuesta perdida se recupera repitiendo la misma petición: el servidor
 devuelve el reporte existente. Un bloqueo transaccional serializa reintentos
 simultáneos por usuario/UUID. El mismo UUID con otro contenido devuelve 409.
-No hay sincronización de historial entre celulares ni consulta de estados posteriores
-todavía. La etiqueta local refleja la recepción, no una verificación del incidente.
+No hay sincronización de historial entre celulares. GET /reports/{id} permite
+consultar el estado y las fotos del reporte propio desde su pantalla de detalle.
+La etiqueta de envío local refleja la recepción, no una verificación del incidente.
+Ver [fotos y detalle](report-photos.md); requiere la migración 004.
 
 ## Prueba manual
 

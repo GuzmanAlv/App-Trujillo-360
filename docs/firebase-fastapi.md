@@ -35,7 +35,8 @@ El HTTP local se permite únicamente en debug y para localhost/127.0.0.1;
 release requiere HTTPS. Repetir adb reverse si se desconecta el USB.
 
 Consultar Supabase → esquema trujillo → tabla users: debe aparecer una fila por
-UID de Firebase, incluso tras repetir la conexión. Los reportes siguen locales.
+UID de Firebase, incluso tras repetir la conexión. Los reportes se envían mediante
+POST /reports; ver report-delivery.md y report-photos.md.
 
 Pruebas: python -m pytest; python verify_identity_database.py (utiliza el rol
 restringido; todas sus filas de prueba se revierten). La comprobación real del

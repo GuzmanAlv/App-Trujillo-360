@@ -6,6 +6,9 @@ POST /reports guarda reportes autenticados e incidentes pendientes; Flutter cons
 una copia local y permite reintentos sin duplicados. Publicación y corroboración
 están pendientes. Ver [envío de reportes](../docs/report-delivery.md).
 Consultar [la guía de conexión de identidad](../docs/firebase-fastapi.md).
+Reportes con fotos opcionales y consulta de detalle: [guía de fotos](../docs/report-photos.md).
+Aplicar `python migrate.py` para actualizar el esquema a la versión 4 antes de
+iniciar esta versión del backend.
 
 ## Ejecutar
 

@@ -3,7 +3,7 @@ import 'data/incident_store.dart';
 import 'models/incident.dart';
 import 'core/config.dart';
 import 'services/push_service.dart';
-import 'services/report_sender.dart';
+import 'ui/report_details_page.dart';
 import 'ui/map_panel.dart';
 import 'ui/report_form.dart';
 import 'ui/report_style.dart';
@@ -58,66 +58,10 @@ class _HomePageState extends State<HomePage> {
   List<Incident> get visible => widget.store.items
       .where((i) => filter == 'Todos' || i.type == filter)
       .toList();
-  void details(Incident i) => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ReportCategoryIcon(category: i.type),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    i.type,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: ReportStyle.forCategory(i.type).color,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(i.place),
-            const SizedBox(height: 12),
-            Text(
-              i.description.isEmpty
-                  ? 'Sin descripción adicional.'
-                  : i.description,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '${i.latitude.toStringAsFixed(6)}, ${i.longitude.toStringAsFixed(6)}',
-            ),
-            Text(
-              'Registrado: ${i.createdAt.toLocal().toString().substring(0, 16)}',
-            ),
-            const SizedBox(height: 12),
-            Chip(label: Text(i.deliveryLabel)),
-            if (i.ownerUid != null && i.remoteId == null)
-              FilledButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  final result = await ReportSender.send(i, widget.store);
-                  if (mounted)
-                    ScaffoldMessenger.of(
-                      this.context,
-                    ).showSnackBar(SnackBar(content: Text(result)));
-                },
-                child: const Text('Reintentar envío'),
-              ),
-            const Text(
-              'Atención: sin asignar. La revisión por operadores todavía no está habilitada.',
-            ),
-          ],
-        ),
-      ),
+  void details(Incident incident) => Navigator.push(
+    context,
+    MaterialPageRoute<void>(
+      builder: (_) => ReportDetailsPage(report: incident, store: widget.store),
     ),
   );
   Widget list() => visible.isEmpty

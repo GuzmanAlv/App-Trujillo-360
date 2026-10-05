@@ -4,10 +4,27 @@ from psycopg.rows import dict_row
 from app.auth import identity
 from app.db import connect
 from app.reports import router as reports_router
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 app = FastAPI(title='Trujillo 360 API', version='0.1.0',
               description='Piloto: identidad Firebase y perfil en Supabase.')
 app.include_router(reports_router)
+
+
+@app.middleware('http')
+async def limit_report_body(request: Request, call_next):
+    if request.method == 'POST' and request.url.path == '/reports':
+        # Three 2-MB images expand to about 8 MB when encoded in JSON.
+        chunks = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > 9 * 1024 * 1024:
+                return JSONResponse({'detail': 'Fotos demasiado grandes'}, status_code=413)
+            chunks.append(chunk)
+        request._body = b''.join(chunks)
+    return await call_next(request)
 
 
 @app.get('/health')
@@ -21,7 +38,7 @@ def ready():
         with connect() as conn:
             version = conn.execute(
                 'SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0]
-            if version != 3:
+            if version != 4:
                 raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError):
         # Do not disclose host, credentials or database diagnostics over HTTP.
