@@ -31,13 +31,8 @@ def main():
         finally:
             conn.rollback()
     with connect() as conn:
-        assert conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 1
-        try:
-            conn.execute('SELECT * FROM trujillo.users')
-        except psycopg.errors.InsufficientPrivilege:
-            conn.rollback()
-        else:
-            raise AssertionError('El rol inicial no debe leer datos personales')
+        assert conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 3
+        assert conn.execute('SELECT * FROM trujillo.users').fetchall() == []
     print('OK: PostGIS, duplicados, permisos de revisión y rol limitado. Datos de prueba revertidos.')
 
 

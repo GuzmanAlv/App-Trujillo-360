@@ -17,5 +17,6 @@ def test_database_error_is_redacted():
 
 
 def test_no_unauthenticated_writes():
-    for resource in ('users', 'reports', 'incidents', 'reviews'):
+    assert client.post('/reports', json={}).status_code == 401
+    for resource in ('users', 'incidents', 'reviews'):
         assert client.post('/' + resource, json={}).status_code == 404

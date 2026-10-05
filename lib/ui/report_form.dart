@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import '../services/report_sender.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../data/incident_store.dart';
 import '../models/incident.dart';
@@ -69,26 +72,37 @@ class _ReportFormState extends State<ReportForm> {
 
   Future<void> save() async {
     if (saving || !form.currentState!.validate()) return;
+    final user = Firebase.apps.isEmpty
+        ? null
+        : FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      message(
+        'Inicia sesión con Google en Configuración para enviar reportes.',
+      );
+      return;
+    }
     setState(() => saving = true);
     final now = DateTime.now();
-    final ok = await widget.store.add(
-      Incident(
-        id: now.microsecondsSinceEpoch.toString(),
-        type: category,
-        place: place.text.trim(),
-        description: description.text.trim(),
-        latitude: double.parse(lat.text.replaceAll(',', '.')),
-        longitude: double.parse(lng.text.replaceAll(',', '.')),
-        createdAt: now,
-      ),
+    final report = Incident(
+      id: ReportSender.requestId(),
+      ownerUid: user.uid,
+      type: category,
+      place: place.text.trim(),
+      description: description.text.trim(),
+      latitude: double.parse(lat.text.replaceAll(',', '.')),
+      longitude: double.parse(lng.text.replaceAll(',', '.')),
+      createdAt: now,
     );
+    final ok = await widget.store.add(report);
+    final result = ok
+        ? await ReportSender.send(report, widget.store)
+        : 'No se pudo guardar la copia local. Intenta nuevamente.';
     if (!mounted) return;
     setState(() => saving = false);
     if (ok) {
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      message(
-        'Reporte guardado en este dispositivo. No se ha enviado al servidor.',
-      );
+      messenger.showSnackBar(SnackBar(content: Text(result)));
     } else {
       message(
         'No se pudo guardar. Revisa el almacenamiento y vuelve a intentarlo.',
@@ -110,7 +124,7 @@ class _ReportFormState extends State<ReportForm> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Modo local: no contacta a emergencias ni publica a otros usuarios.',
+                  'Se enviará a Trujillo 360 como pendiente de verificación. No contacta a emergencias.',
                 ),
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
@@ -217,7 +231,7 @@ class _ReportFormState extends State<ReportForm> {
                 FilledButton.icon(
                   onPressed: saving || widget.store.error != null ? null : save,
                   icon: const Icon(Icons.save_outlined),
-                  label: Text(saving ? 'Guardando…' : 'Guardar reporte local'),
+                  label: Text(saving ? 'Enviando…' : 'Enviar reporte'),
                 ),
               ],
             ),

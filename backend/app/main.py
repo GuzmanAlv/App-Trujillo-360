@@ -1,9 +1,13 @@
 import psycopg
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from psycopg.rows import dict_row
+from app.auth import identity
 from app.db import connect
+from app.reports import router as reports_router
 
 app = FastAPI(title='Trujillo 360 API', version='0.1.0',
-              description='Base del piloto. Login y operaciones ciudadanas pendientes.')
+              description='Piloto: identidad Firebase y perfil en Supabase.')
+app.include_router(reports_router)
 
 
 @app.get('/health')
@@ -17,9 +21,31 @@ def ready():
         with connect() as conn:
             version = conn.execute(
                 'SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0]
-            if version != 1:
+            if version != 3:
                 raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError):
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
     return {'status': 'ready', 'schema_version': version}
+
+
+@app.get('/me')
+def me(claims=Depends(identity)):
+    name = str(claims.get('name') or 'Usuario').strip()[:100] or 'Usuario'
+    try:
+        with connect() as conn:
+            conn.execute("SELECT set_config('app.firebase_uid', %s, true)", (claims['sub'],))
+            conn.execute('''INSERT INTO trujillo.users(auth_provider, auth_subject, display_name)
+                            VALUES ('firebase', %s, %s)
+                            ON CONFLICT (auth_provider, auth_subject) DO NOTHING''', (claims['sub'], name))
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute('''SELECT id, display_name, role, status, created_at
+                                  FROM trujillo.users WHERE auth_provider='firebase' AND auth_subject=%s''', (claims['sub'],))
+                user = cursor.fetchone()
+            if user is None:
+                raise RuntimeError('Perfil no disponible')
+            if user['status'] != 'active':
+                raise HTTPException(403, 'Cuenta suspendida')
+            return user
+    except (psycopg.Error, RuntimeError):
+        raise HTTPException(503, 'No se pudo consultar el perfil') from None

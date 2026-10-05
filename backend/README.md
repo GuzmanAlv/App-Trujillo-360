@@ -1,8 +1,11 @@
 # Backend de Trujillo 360
 
 FastAPI en la laptop y PostgreSQL/PostGIS en Supabase mediante Session pooler.
-La primera etapa incluye esquema y endpoints de salud. Flutter aún guarda sus
-reportes localmente. Login, publicación y corroboración automática están pendientes.
+Incluye esquema, endpoints de salud y GET /me autenticado con Firebase.
+POST /reports guarda reportes autenticados e incidentes pendientes; Flutter conserva
+una copia local y permite reintentos sin duplicados. Publicación y corroboración
+están pendientes. Ver [envío de reportes](../docs/report-delivery.md).
+Consultar [la guía de conexión de identidad](../docs/firebase-fastapi.md).
 
 ## Ejecutar
 
@@ -16,14 +19,17 @@ Abrir http://127.0.0.1:8000/docs. GET /health comprueba el proceso; GET /ready
 verifica conexión y versión del esquema con un usuario limitado.
 Para pruebas en Wi-Fi se puede cambiar el host a 0.0.0.0 y usar la IP local de
 la laptop, permitiendo el puerto 8000 solo en la red privada de Windows.
-No se ha cambiado el firewall ni conectado Flutter al backend.
+La prueba actual de Flutter usa USB con adb reverse y localhost; no requiere cambiar
+el firewall. El cliente solo permite HTTP local en debug; para Wi-Fi usar HTTPS.
 
 ## Configuración y permisos
 
 .env contiene credenciales administrativas para migraciones; .env.runtime contiene
 las credenciales del rol trujillo_api, generadas por migrate.py. Ambos están
 excluidos de Git. El servidor HTTP solo carga .env.runtime. No incluirlos en el APK.
-El rol inicial solo puede leer la versión del esquema. No accede a datos personales.
+El rol lee la versión del esquema y crea/consulta el perfil de la identidad
+validada con RLS. Puede ejecutar submit_report, pero no escribir directamente
+en reports/incidents ni modificar roles o suspensiones.
 TLS está habilitado con sslmode=require. Antes del despliegue público configurar
 verify-full y el certificado CA correspondiente.
 
@@ -63,7 +69,7 @@ libre en la primera ejecución. verify_database.py revierte todos los datos de p
 
 ## Próxima etapa
 
-Validar tokens de login Google, roles y suspensión; agregar límites de envío.
+Agregar límites de envío y recuperación del historial desde el servidor.
 Implementar agrupación transaccional, tres usuarios distintos, consulta con
 visibilidad según estado y revisión auditada. Los estados previstos son pending,
 corroborated, verified, discarded y closed; sus transiciones no están automatizadas.

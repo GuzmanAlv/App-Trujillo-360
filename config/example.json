@@ -1,5 +1,6 @@
 {
   "MAPS_ENABLED": false,
+  "BACKEND_URL": "",
   "FIREBASE_API_KEY": "",
   "FIREBASE_APP_ID": "",
   "FIREBASE_PROJECT_ID": "",

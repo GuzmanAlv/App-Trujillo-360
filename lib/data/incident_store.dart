@@ -34,13 +34,15 @@ class IncidentStore extends ChangeNotifier {
     saving = true;
     notifyListeners();
     try {
-      final next = [incident, ..._items];
+      final next = [incident, ..._items.where((i) => i.id != incident.id)];
       final ok = await preferences.setString(
         key,
         jsonEncode(next.map((i) => i.toJson()).toList()),
       );
       if (!ok) return false;
-      _items.insert(0, incident);
+      _items
+        ..clear()
+        ..addAll(next);
       return true;
     } catch (_) {
       return false;

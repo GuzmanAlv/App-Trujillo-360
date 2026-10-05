@@ -39,6 +39,7 @@ migrate_working_dir/
 /backend/.env
 /backend/.env.*
 !/backend/.env.example
+!/backend/.env.auth.example
 /backend/.venv/
 __pycache__/
 

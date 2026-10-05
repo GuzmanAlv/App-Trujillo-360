@@ -12,7 +12,20 @@
           "package_name": "pe.com.alertaciudadana.alerta_ciudadana"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "20186172766-tj6mvjl439dn9qlbc8pr6qea4d175ama.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "pe.com.alertaciudadana.alerta_ciudadana",
+            "certificate_hash": "2e9164d1649c218e7b0ff172858455ec96ba9273"
+          }
+        },
+        {
+          "client_id": "20186172766-5cse1iaau23hvjvugsl9tn7t0m0l2qs7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyC9Wt_hEP6frth0mD5BTqijXbcFjf5JPHE"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "20186172766-5cse1iaau23hvjvugsl9tn7t0m0l2qs7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

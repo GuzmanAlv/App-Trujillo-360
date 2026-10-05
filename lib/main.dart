@@ -16,7 +16,7 @@ Future<void> main() async {
         home: Scaffold(
           body: Center(
             child: Text(
-              'No se pudo iniciar el almacenamiento. Reabre la aplicación.',
+              'No se pudo iniciar Firebase o el almacenamiento. Revisa la configuración y reabre la aplicación.',
             ),
           ),
         ),

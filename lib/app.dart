@@ -3,9 +3,11 @@ import 'data/incident_store.dart';
 import 'models/incident.dart';
 import 'core/config.dart';
 import 'services/push_service.dart';
+import 'services/report_sender.dart';
 import 'ui/map_panel.dart';
 import 'ui/report_form.dart';
 import 'ui/report_style.dart';
+import 'ui/account_panel.dart';
 import 'data/ai_detection_store.dart';
 import 'ui/ai_detection_panel.dart';
 
@@ -97,9 +99,21 @@ class _HomePageState extends State<HomePage> {
               'Registrado: ${i.createdAt.toLocal().toString().substring(0, 16)}',
             ),
             const SizedBox(height: 12),
-            const Chip(label: Text('Sin verificar · Solo en este dispositivo')),
+            Chip(label: Text(i.deliveryLabel)),
+            if (i.ownerUid != null && i.remoteId == null)
+              FilledButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  final result = await ReportSender.send(i, widget.store);
+                  if (mounted)
+                    ScaffoldMessenger.of(
+                      this.context,
+                    ).showSnackBar(SnackBar(content: Text(result)));
+                },
+                child: const Text('Reintentar envío'),
+              ),
             const Text(
-              'Atención: sin asignar. Este reporte no se ha enviado a operadores.',
+              'Atención: sin asignar. La revisión por operadores todavía no está habilitada.',
             ),
           ],
         ),
@@ -127,7 +141,7 @@ class _HomePageState extends State<HomePage> {
                 leading: ReportCategoryIcon(category: i.type),
                 title: Text('${i.type} · ${i.place}'),
                 subtitle: Text(
-                  'Reportado ${reportTime(i.createdAt)} · Sin verificar',
+                  'Reportado ${reportTime(i.createdAt)} · ${i.deliveryLabel}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => details(i),
@@ -143,6 +157,7 @@ class _HomePageState extends State<HomePage> {
         style: Theme.of(context).textTheme.headlineSmall,
       ),
       const SizedBox(height: 20),
+      const AccountPanel(),
       ListTile(
         leading: const Icon(Icons.map_outlined),
         title: const Text('Google Maps'),
@@ -156,14 +171,14 @@ class _HomePageState extends State<HomePage> {
         leading: Icon(Icons.cloud_off_outlined),
         title: Text('Backend y WebSocket'),
         subtitle: Text(
-          'No conectados. Los reportes se guardan únicamente en este dispositivo.',
+          'Los reportes enviados se guardan en el servidor. WebSocket pendiente.',
         ),
       ),
       const ListTile(
         leading: Icon(Icons.lock_outline),
         title: Text('Privacidad'),
         subtitle: Text(
-          'Tu ubicación no se envía al servidor. El seguimiento se detiene al salir de la app. Usa datos de prueba: el almacenamiento local no está cifrado.',
+          'Al enviar un reporte se comparte su ubicación con el servidor. El seguimiento GPS se detiene al salir de la app. La copia local no está cifrada.',
         ),
       ),
       ListTile(
@@ -199,9 +214,7 @@ class _HomePageState extends State<HomePage> {
       const ListTile(
         leading: Icon(Icons.person_outline),
         title: Text('Cuentas y panel de operadores'),
-        subtitle: Text(
-          'Pendientes de autenticación y backend. Esta app no simula confirmaciones de operadores.',
-        ),
+        subtitle: Text('Panel de operadores pendiente de conexión al backend.'),
       ),
     ],
   );
@@ -215,7 +228,7 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: const [
-          Chip(label: Text('LOCAL')),
+          Chip(label: Text('PILOTO')),
           SizedBox(width: 12),
         ],
       ),
@@ -245,7 +258,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Reportes locales para probar el proyecto. Sin conexión con emergencias.',
+                              'Tus reportes en este dispositivo. Sin conexión con emergencias.',
                             ),
                             const SizedBox(height: 12),
                             filters(),
