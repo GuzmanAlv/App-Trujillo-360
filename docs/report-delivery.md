@@ -8,8 +8,8 @@ permisos restringidos al rol del backend; anon/authenticated no pueden invocarla
 Se validan categoría, texto, coordenadas y fecha con zona horaria. Los reportes
 nuevos deben tener como máximo siete días y no más de cinco minutos de adelanto.
 El reporte y su incidente pendiente se insertan juntos o ninguno se guarda.
-Cada envío nuevo crea un incidente pendiente; no hay agrupación ni corroboración
-automática todavía. No se asignan operadores ni se publican a otros usuarios.
+La migración 005 agrupa reportes compatibles y corrobora con tres cuentas;
+consultar corroboration.md. No se asignan operadores ni se publican a otros usuarios.
 
 Flutter exige login y guarda primero una copia con UID propietario e identificador
 UUID. Solo tras recibir un 200 válido muestra Enviado. Si falla la conexión, el

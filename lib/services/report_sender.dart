@@ -75,15 +75,26 @@ class ReportSender {
                   data['photo_count'] != report.photos.length)) {
             throw const FormatException();
           }
-          if (!await store.add(report.delivered(data['id'] as String))) {
+          if (!await store.add(
+            report.delivered(
+              data['id'] as String,
+              status: data['status'] as String? ?? 'pending',
+              count: data['corroboration_count'] as int? ?? 1,
+              review: data['needs_review'] as bool? ?? false,
+            ),
+          )) {
             return 'Recibido por el servidor. No se pudo actualizar la copia local; reintenta para sincronizarla.';
           }
-          return 'Reporte enviado. Pendiente de verificación.';
+          return data['status'] == 'corroborated'
+              ? 'Reporte enviado. Incidente corroborado por tres o más cuentas.'
+              : data['needs_review'] == true
+              ? 'Reporte enviado. Hay varias coincidencias y requiere revisión.'
+              : 'Reporte enviado: ${data['corroboration_count'] ?? 1} de 3 cuentas para corroborar.';
         }
         return switch (response.statusCode) {
           401 => 'Sesión vencida. Inicia sesión nuevamente.',
           403 => 'Tu cuenta no tiene permitido enviar reportes.',
-          409 => 'Conflicto de envío. Conservamos el reporte para revisión.',
+          409 => _conflictMessage(response.body),
           422 =>
             'Revisa los datos y las fotos (JPEG o PNG, hasta 2 MB). El reporte no puede tener más de siete días.',
           413 =>
@@ -99,5 +110,13 @@ class ReportSender {
       client.close();
       _sending.remove(report.id);
     }
+  }
+
+  static String _conflictMessage(String body) {
+    try {
+      final detail = (jsonDecode(body) as Map<String, dynamic>)['detail'];
+      if (detail is String && detail.startsWith('Ya reportaste')) return detail;
+    } catch (_) {}
+    return 'Conflicto de envío. Conservamos el reporte para revisión.';
   }
 }

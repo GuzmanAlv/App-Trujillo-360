@@ -5,6 +5,23 @@ import 'package:alerta_ciudadana/models/incident.dart';
 import 'package:alerta_ciudadana/services/report_sender.dart';
 
 void main() {
+  test('Corroboration survives reload and differs from verification', () {
+    final original = Incident(
+      id: 'id',
+      type: 'Robo',
+      place: 'Prueba',
+      description: '',
+      latitude: 0,
+      longitude: 0,
+      createdAt: DateTime.now(),
+    );
+    final restored = Incident.fromJson(
+      original.delivered('server', status: 'corroborated', count: 3).toJson(),
+    );
+    expect(restored.corroborationCount, 3);
+    expect(restored.deliveryLabel, 'Corroborado por la comunidad');
+    expect(restored.remoteStatus, isNot('verified'));
+  });
   test(
     'Pending delivery survives reload and acknowledgement replaces it',
     () async {

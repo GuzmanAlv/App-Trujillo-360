@@ -11,8 +11,12 @@ class RemoteReportDetails {
     required this.status,
     required this.receivedAt,
     required this.photos,
+    this.corroborationCount = 1,
+    this.needsReview = false,
   });
   final String status;
+  final int corroborationCount;
+  final bool needsReview;
   final DateTime receivedAt;
   final List<Uint8List> photos;
 }
@@ -53,6 +57,8 @@ Future<RemoteReportDetails> fetchReportDetails(Incident report) async {
       }
       return RemoteReportDetails(
         status: json['status'] as String,
+        corroborationCount: json['corroboration_count'] as int? ?? 1,
+        needsReview: json['needs_review'] as bool? ?? false,
         receivedAt: DateTime.parse(json['received_at'] as String),
         photos: (json['photos'] as List)
             .map((photo) => base64Decode(photo['content_base64'] as String))

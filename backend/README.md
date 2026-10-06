@@ -1,5 +1,8 @@
 # Backend de Trujillo 360
 
+Para mantenerlo activo en Windows y reconectar el celular por USB, consultar
+[servidor local persistente](../docs/local-server.md).
+
 FastAPI en la laptop y PostgreSQL/PostGIS en Supabase mediante Session pooler.
 Incluye esquema, endpoints de salud y GET /me autenticado con Firebase.
 POST /reports guarda reportes autenticados e incidentes pendientes; Flutter conserva
@@ -73,6 +76,6 @@ libre en la primera ejecución. verify_database.py revierte todos los datos de p
 ## Próxima etapa
 
 Agregar límites de envío y recuperación del historial desde el servidor.
-Implementar agrupación transaccional, tres usuarios distintos, consulta con
-visibilidad según estado y revisión auditada. Los estados previstos son pending,
-corroborated, verified, discarded y closed; sus transiciones no están automatizadas.
+La agrupación transaccional y el paso de pending a corroborated con tres cuentas
+ya están implementados; consultar [reglas y pruebas](../docs/corroboration.md).
+Faltan consulta comunitaria del mapa y revisión auditada por operadores.

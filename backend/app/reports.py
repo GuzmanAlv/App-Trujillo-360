@@ -50,6 +50,8 @@ def submit_report(report: ReportInput, claims=Depends(identity)):
                  report.latitude, report.longitude, report.occurred_at, Jsonb(photos))).fetchone()[0]
     except psycopg.errors.InsufficientPrivilege:
         raise HTTPException(403, 'Cuenta no disponible para reportar') from None
+    except psycopg.errors.NoDataFound:
+        raise HTTPException(409, 'Ya reportaste este incidente. Tu cuenta solo cuenta una vez.') from None
     except psycopg.errors.RaiseException:
         raise HTTPException(409, 'Identificador de envío reutilizado con datos diferentes') from None
     except (psycopg.errors.InvalidParameterValue, psycopg.errors.CheckViolation):
@@ -68,7 +70,8 @@ def report_details(report_id: UUID, response: Response, claims=Depends(identity)
                 cursor.execute('''SELECT r.id, r.request_id, r.category, r.place, r.description,
                     extensions.ST_Y(r.location::extensions.geometry) AS latitude,
                     extensions.ST_X(r.location::extensions.geometry) AS longitude,
-                    r.occurred_at, r.received_at, i.status
+                    r.occurred_at, r.received_at, i.status, r.incident_id,
+                    i.corroboration_count, i.needs_review
                     FROM trujillo.reports r JOIN trujillo.incidents i ON i.id=r.incident_id
                     WHERE r.id=%s''', (report_id,))
                 report = cursor.fetchone()

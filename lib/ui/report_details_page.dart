@@ -41,6 +41,14 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     });
     try {
       final value = await fetchReportDetails(report);
+      await widget.store.add(
+        report.delivered(
+          report.remoteId!,
+          status: value.status,
+          count: value.corroborationCount,
+          review: value.needsReview,
+        ),
+      );
       if (mounted) setState(() => remote = value);
     } catch (_) {
       if (mounted) {
@@ -123,6 +131,18 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
                   ),
                 ),
                 if (loading) const LinearProgressIndicator(),
+                if (remote != null) ...[
+                  Text(
+                    '${remote!.corroborationCount} de 3 cuentas distintas para corroborar.',
+                  ),
+                  const Text(
+                    'La corroboración comunitaria no equivale a una verificación por un operador.',
+                  ),
+                  if (remote!.needsReview)
+                    const Text(
+                      'Coincide con varios incidentes. Pendiente de revisión para agruparlo.',
+                    ),
+                ],
                 if (note != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),

@@ -36,7 +36,7 @@ def main():
             another_request = uuid4()
             try:
                 with conn.transaction():
-                    conn.execute(query, (another_request, *args[1:]))
+                    conn.execute(query, (another_request, *args[1:4], -9.0, *args[5:]))
                 raise AssertionError('Se aceptó una foto perteneciente a otro reporte')
             except psycopg.errors.UniqueViolation:
                 pass

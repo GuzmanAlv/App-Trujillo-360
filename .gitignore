@@ -41,6 +41,7 @@ migrate_working_dir/
 !/backend/.env.example
 !/backend/.env.auth.example
 /backend/.venv/
+/backend/logs/
 __pycache__/
 
 # Symbolication related

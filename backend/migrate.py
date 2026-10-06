@@ -12,7 +12,7 @@ def main():
         exists = conn.execute("SELECT to_regclass('trujillo.schema_migrations')").fetchone()[0]
         if not exists:
             conn.execute((ROOT / 'migrations/001_initial.sql').read_text(encoding='utf-8'))
-        elif conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] not in (1, 2, 3, 4):
+        elif conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] not in (1, 2, 3, 4, 5):
             raise RuntimeError('Versión inesperada; no se modificó el esquema')
         role = 'trujillo_api'
         role_exists = conn.execute('SELECT 1 FROM pg_roles WHERE rolname=%s', (role,)).fetchone()
@@ -37,7 +37,9 @@ def main():
             conn.execute((ROOT / 'migrations/003_reports.sql').read_text(encoding='utf-8'))
         if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 3:
             conn.execute((ROOT / 'migrations/004_report_photos.sql').read_text(encoding='utf-8'))
-    print('Migración 4 lista. Reportes con fotos y consulta de detalles habilitados.')
+        if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 4:
+            conn.execute((ROOT / 'migrations/005_corroboration.sql').read_text(encoding='utf-8'))
+    print('Migración 5 lista. Corroboración de tres usuarios habilitada.')
 
 
 if __name__ == '__main__':
