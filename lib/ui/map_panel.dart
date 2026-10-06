@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -165,6 +166,15 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
           Positioned.fill(
             child: enabled
                 ? GoogleMap(
+                    // The form scrolls vertically. Gestures starting inside its
+                    // location picker belong to the map, including pan and pinch.
+                    gestureRecognizers: widget.onPick != null
+                        ? {
+                            Factory<OneSequenceGestureRecognizer>(
+                              () => EagerGestureRecognizer(),
+                            ),
+                          }
+                        : const <Factory<OneSequenceGestureRecognizer>>{},
                     initialCameraPosition: CameraPosition(
                       target: widget.selected ?? trujillo,
                       zoom: 14,
