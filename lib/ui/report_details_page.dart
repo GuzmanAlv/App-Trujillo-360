@@ -24,7 +24,12 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
   String? note;
   Incident get report =>
       widget.store.items
-          .where((item) => item.id == widget.report.id)
+          .where(
+            (item) =>
+                item.id == widget.report.id &&
+                item.ownerUid == widget.report.ownerUid &&
+                item.remoteId == widget.report.remoteId,
+          )
           .firstOrNull ??
       widget.report;
   @override

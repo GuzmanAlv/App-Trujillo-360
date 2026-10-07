@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID
 import base64
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Query
 from pydantic import BaseModel, ConfigDict, Field, AwareDatetime, field_validator
 from app.auth import identity
 from app.db import connect
@@ -84,3 +84,43 @@ def report_details(report_id: UUID, response: Response, claims=Depends(identity)
                 return report
     except (psycopg.Error, RuntimeError):
         raise HTTPException(503, 'No se pudo consultar el reporte') from None
+
+
+@router.get('/incidents/nearby')
+def nearby_incidents(response: Response,
+    latitude: float = Query(ge=-90, le=90, allow_inf_nan=False),
+    longitude: float = Query(ge=-180, le=180, allow_inf_nan=False),
+    radius: int = Query(default=3000, ge=100, le=3000),
+    claims=Depends(identity)):
+    try:
+        with connect() as conn:
+            conn.execute("SELECT set_config('app.firebase_uid', %s, true)", (claims['sub'],))
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute('SELECT * FROM trujillo.nearby_incidents(%s,%s,%s)',
+                               (latitude, longitude, radius))
+                response.headers['Cache-Control'] = 'private, no-store'
+                return cursor.fetchall()
+    except psycopg.errors.InsufficientPrivilege:
+        raise HTTPException(403, 'Cuenta no disponible') from None
+    except (psycopg.Error, RuntimeError):
+        raise HTTPException(503, 'No se pudieron consultar los reportes cercanos') from None
+
+
+@router.get('/reports')
+def my_reports(response: Response, claims=Depends(identity)):
+    """RLS restricts this history to the authenticated active owner."""
+    try:
+        with connect() as conn:
+            conn.execute("SELECT set_config('app.firebase_uid', %s, true)", (claims['sub'],))
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute('''SELECT r.id, r.request_id, r.category, r.place, r.description,
+                    extensions.ST_Y(r.location::extensions.geometry) AS latitude,
+                    extensions.ST_X(r.location::extensions.geometry) AS longitude,
+                    r.occurred_at, i.status, i.corroboration_count, i.needs_review
+                    FROM trujillo.reports r JOIN trujillo.incidents i ON i.id=r.incident_id
+                    WHERE r.withdrawn_at IS NULL
+                    ORDER BY r.occurred_at DESC, r.id''')
+                response.headers['Cache-Control'] = 'private, no-store'
+                return cursor.fetchall()
+    except (psycopg.Error, RuntimeError):
+        raise HTTPException(503, 'No se pudo consultar tu historial') from None

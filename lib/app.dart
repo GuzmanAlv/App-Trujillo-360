@@ -4,6 +4,7 @@ import 'models/incident.dart';
 import 'core/config.dart';
 import 'services/push_service.dart';
 import 'ui/report_details_page.dart';
+import 'ui/reports_panel.dart';
 import 'ui/map_panel.dart';
 import 'ui/report_form.dart';
 import 'ui/report_style.dart';
@@ -64,35 +65,6 @@ class _HomePageState extends State<HomePage> {
       builder: (_) => ReportDetailsPage(report: incident, store: widget.store),
     ),
   );
-  Widget list() => visible.isEmpty
-      ? const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'No hay reportes en esta categoría.\nCrea uno con el botón Reportar.',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        )
-      : ListView.builder(
-          itemCount: visible.length,
-          itemBuilder: (context, index) {
-            final i = visible[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(16),
-                leading: ReportCategoryIcon(category: i.type),
-                title: Text('${i.type} · ${i.place}'),
-                subtitle: Text(
-                  'Reportado ${reportTime(i.createdAt)} · ${i.deliveryLabel}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => details(i),
-              ),
-            );
-          },
-        );
   Widget settings() => ListView(
     padding: const EdgeInsets.all(24),
     children: [
@@ -167,9 +139,18 @@ class _HomePageState extends State<HomePage> {
     listenable: widget.store,
     builder: (context, _) => Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Trujillo 360',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        centerTitle: false,
+        titleSpacing: 12,
+        title: Semantics(
+          label: 'Trujillo 360',
+          image: true,
+          child: Image.asset(
+            'assets/branding/logo.png',
+            height: 44,
+            width: 220,
+            fit: BoxFit.contain,
+            alignment: Alignment.centerLeft,
+          ),
         ),
         actions: const [
           Chip(label: Text('PILOTO')),
@@ -222,7 +203,14 @@ class _HomePageState extends State<HomePage> {
                           children: [
                             filters(),
                             const SizedBox(height: 16),
-                            Expanded(child: list()),
+                            Expanded(
+                              child: ReportsPanel(
+                                store: widget.store,
+                                filter: filter,
+                                onReport: details,
+                                active: tab == 1,
+                              ),
+                            ),
                           ],
                         ),
                       ),

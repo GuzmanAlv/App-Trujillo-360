@@ -96,16 +96,30 @@ class _AccountPanelState extends State<AccountPanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Mi cuenta',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Row(
+                  children: [
+                    AccountAvatar(
+                      photoUrl: user?.photoURL,
+                      name: user?.displayName,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        user == null
+                            ? 'Mi cuenta'
+                            : (user.displayName?.trim().isNotEmpty == true
+                                  ? user.displayName!
+                                  : 'Usuario'),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  user == null
-                      ? 'Inicia sesión para identificarte en Trujillo 360.'
-                      : (user.displayName ?? 'Usuario'),
-                ),
+                if (user == null)
+                  const Text(
+                    'Inicia sesión para identificarte en Trujillo 360.',
+                  ),
                 if (user?.email != null) Text(user!.email!),
                 if (user != null) const Text('Sesión iniciada con Firebase.'),
                 if (user != null)
@@ -146,6 +160,49 @@ class _AccountPanelState extends State<AccountPanel> {
           ),
         );
       },
+    );
+  }
+}
+
+class AccountAvatar extends StatelessWidget {
+  const AccountAvatar({super.key, this.photoUrl, this.name});
+  final String? photoUrl, name;
+  @override
+  Widget build(BuildContext context) {
+    final parts = (name ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .take(2);
+    final initials = parts
+        .map((p) => String.fromCharCode(p.runes.first))
+        .join()
+        .toUpperCase();
+    final url = Uri.tryParse(photoUrl ?? '');
+    final fallback = CircleAvatar(
+      radius: 24,
+      child: initials.isEmpty
+          ? const Icon(Icons.person_outline)
+          : Text(initials),
+    );
+    return Semantics(
+      label: 'Foto de perfil',
+      image: true,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: url?.scheme == 'https' && url!.host.isNotEmpty
+            ? ClipOval(
+                child: Image.network(
+                  url.toString(),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => fallback,
+                  loadingBuilder: (_, child, progress) =>
+                      progress == null ? child : fallback,
+                ),
+              )
+            : fallback,
+      ),
     );
   }
 }

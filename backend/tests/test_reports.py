@@ -32,3 +32,41 @@ def test_storage_failure_is_not_success(client):
         response=client.post('/reports',json=payload())
         assert response.status_code==503
         assert 'secret' not in response.text
+
+
+@pytest.mark.parametrize('query', [
+    'latitude=91&longitude=0', 'latitude=0&longitude=181',
+    'latitude=nan&longitude=0', 'latitude=0&longitude=0&radius=3001',
+])
+def test_invalid_nearby_query_never_reaches_database(client, query):
+    with patch('app.reports.connect') as connection:
+        assert client.get('/incidents/nearby?' + query).status_code == 422
+        connection.assert_not_called()
+
+
+def test_nearby_failure_is_not_empty_success(client):
+    with patch('app.reports.connect', side_effect=RuntimeError('secret')):
+        response = client.get('/incidents/nearby?latitude=-8.11&longitude=-79.02')
+        assert response.status_code == 503
+        assert 'secret' not in response.text
+
+
+def test_account_history_uses_authenticated_database_context(client):
+    from unittest.mock import MagicMock
+    connection = MagicMock()
+    cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = []
+    with patch('app.reports.connect', return_value=connection):
+        response = client.get('/reports')
+    assert response.status_code == 200
+    assert response.json() == []
+    assert response.headers['cache-control'] == 'private, no-store'
+    connection.__enter__.return_value.execute.assert_called_once_with(
+        "SELECT set_config('app.firebase_uid', %s, true)", ('test-uid',))
+
+
+def test_account_history_failure_is_not_empty_success(client):
+    with patch('app.reports.connect', side_effect=RuntimeError('secret')):
+        response = client.get('/reports')
+    assert response.status_code == 503
+    assert 'secret' not in response.text

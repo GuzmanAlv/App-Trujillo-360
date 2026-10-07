@@ -1,11 +1,11 @@
 {
-    "name": "alerta_ciudadana",
-    "short_name": "alerta_ciudadana",
+    "name": "Trujillo 360",
+    "short_name": "Trujillo 360",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#f4f6f2",
+    "theme_color": "#087f68",
+    "description": "Reportes de tu comunidad y ubicación en Trujillo.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
