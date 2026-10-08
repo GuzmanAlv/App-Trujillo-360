@@ -1,3 +1,4 @@
+import logging
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException
 from psycopg.rows import dict_row
@@ -6,6 +7,31 @@ from app.db import connect
 from app.reports import router as reports_router
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger('uvicorn.error')
+
+
+def readiness_failure_reason(error):
+    """Allowlisted diagnostics only: never log raw database errors or credentials."""
+    if isinstance(error, RuntimeError):
+        return 'migracion_pendiente' if str(error) == 'Migración pendiente' else 'configuracion_incompleta'
+    if isinstance(error, psycopg.errors.InsufficientPrivilege):
+        return 'permisos_base_de_datos'
+    if isinstance(error, psycopg.errors.UndefinedTable):
+        return 'esquema_no_encontrado'
+    message = str(error).lower()
+    for fragments, reason in [
+        (('password authentication failed',), 'credenciales_rechazadas'),
+        (('tenant or user not found',), 'usuario_o_proyecto_pooler_incorrecto'),
+        (('could not translate host name', 'name or service not known', 'nodename nor servname', 'name resolution'), 'host_no_resuelto'),
+        (('timeout expired', 'connection timeout'), 'conexion_agoto_tiempo'),
+        (('connection refused', 'network is unreachable', 'no route to host'), 'conexion_no_disponible'),
+        (('ssl',), 'conexion_ssl'),
+    ]:
+        if any(fragment in message for fragment in fragments):
+            return reason
+    return 'error_base_de_datos'
+
 
 app = FastAPI(title='Trujillo 360 API', version='0.1.0',
               description='Piloto: identidad Firebase y perfil en Supabase.')
@@ -40,7 +66,8 @@ def ready():
                 'SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0]
             if version != 11:
                 raise RuntimeError('Migración pendiente')
-    except (psycopg.Error, RuntimeError):
+    except (psycopg.Error, RuntimeError) as error:
+        logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
     return {'status': 'ready', 'schema_version': version}
