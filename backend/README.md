@@ -10,7 +10,7 @@ una copia local y permite reintentos sin duplicados. Publicación y corroboraci�
 están pendientes. Ver [envío de reportes](../docs/report-delivery.md).
 Consultar [la guía de conexión de identidad](../docs/firebase-fastapi.md).
 Reportes con fotos opcionales y consulta de detalle: [guía de fotos](../docs/report-photos.md).
-Aplicar `python migrate.py` para actualizar el esquema a la versión 4 antes de
+Aplicar `python migrate.py` para actualizar el esquema a la versión 9 antes de
 iniciar esta versión del backend.
 
 ## Ejecutar
@@ -75,7 +75,9 @@ libre en la primera ejecución. verify_database.py revierte todos los datos de p
 
 ## Próxima etapa
 
-Agregar límites de envío y recuperación del historial desde el servidor.
+El historial por cuenta (GET /reports) y los incidentes cercanos (GET /incidents/nearby) están implementados.
+Para publicar el backend, seguir [la guía de Render](../docs/render-deployment.md).
+Quedan pendientes los límites de envío.
 La agrupación transaccional y el paso de pending a corroborated con tres cuentas
 ya están implementados; consultar [reglas y pruebas](../docs/corroboration.md).
 Faltan consulta comunitaria del mapa y revisión auditada por operadores.

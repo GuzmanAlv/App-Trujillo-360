@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: trujillo-360-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.lock.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: PGHOST
+        sync: false
+      - key: PGPORT
+        value: '5432'
+      - key: PGDATABASE
+        value: postgres
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      - key: PGSSLMODE
+        value: require

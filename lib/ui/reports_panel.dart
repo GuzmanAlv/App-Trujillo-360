@@ -3,10 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../services/my_reports_client.dart';
 import 'package:flutter/material.dart';
+import '../data/nearby_reports_store.dart';
 import 'package:geolocator/geolocator.dart';
 import '../data/incident_store.dart';
 import '../models/incident.dart';
-import '../services/location_service.dart';
 import '../services/nearby_reports_client.dart';
 import 'report_style.dart';
 
@@ -17,55 +17,51 @@ class ReportsPanel extends StatefulWidget {
     required this.filter,
     required this.onReport,
     required this.active,
+    required this.nearby,
+    required this.onNearbySelected,
+    this.onSessionChanged,
   });
   final IncidentStore store;
   final String filter;
   final ValueChanged<Incident> onReport;
   final bool active;
+  final NearbyReportsStore nearby;
+  final ValueChanged<bool> onNearbySelected;
+  final VoidCallback? onSessionChanged;
   @override
   State<ReportsPanel> createState() => _ReportsPanelState();
 }
 
-class _ReportsPanelState extends State<ReportsPanel>
-    with WidgetsBindingObserver {
-  final locationService = LocationService();
-  StreamSubscription<Position>? subscription;
+class _ReportsPanelState extends State<ReportsPanel> {
   StreamSubscription<User?>? authSubscription;
   List<Incident> history = [];
   bool historyLoading = false;
   String? historyNote;
   int historyGeneration = 0;
-  Position? position;
-  List<Incident> community = [];
-  bool mine = false, locating = false, loading = false;
-  bool enabled = false;
-  String? note;
-  int generation = 0;
-  int fetchGeneration = 0;
-  DateTime? lastFetch;
-  Timer? refreshTimer;
+  bool mine = false;
+  bool corroboratedOnly = false;
+  bool get locating => widget.nearby.locating;
+  bool get loading => widget.nearby.loading;
+  String? get note => widget.nearby.note;
+  Position? get position => widget.nearby.position;
+  Future<void> start() => widget.nearby.start();
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     if (Firebase.apps.isNotEmpty) {
       authSubscription = FirebaseAuth.instance.authStateChanges().listen((
         user,
       ) {
         historyGeneration++;
-        fetchGeneration++;
+        widget.nearby.clearSession();
+        widget.onSessionChanged?.call();
         setState(() {
           history = [];
-          community = [];
           historyNote = null;
           historyLoading = false;
-          loading = false;
         });
         if (user != null) {
           loadHistory();
-        }
-        if (widget.active && !mine && position != null) {
-          refresh();
         }
       });
     }
@@ -77,38 +73,12 @@ class _ReportsPanelState extends State<ReportsPanel>
     if (widget.active && !oldWidget.active) {
       loadHistory();
     }
-    if (!widget.active) {
-      stop();
-    } else if (!oldWidget.active && enabled && !mine) {
-      start();
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) {
-      stop();
-    } else if (widget.active && enabled && !mine) {
-      start();
-    }
-  }
-
-  void stop() {
-    subscription?.cancel();
-    subscription = null;
-    refreshTimer?.cancel();
-    generation++;
-    fetchGeneration++;
-    locating = false;
-    loading = false;
   }
 
   @override
   void dispose() {
-    stop();
     authSubscription?.cancel();
     historyGeneration++;
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -149,91 +119,7 @@ class _ReportsPanelState extends State<ReportsPanel>
     }
   }
 
-  Future<void> start() async {
-    if (locating) return;
-    enabled = true;
-    final ticket = ++generation;
-    setState(() {
-      locating = true;
-      note = null;
-    });
-    try {
-      final p = await locationService.current();
-      if (!mounted || ticket != generation) return;
-      update(p);
-      await subscription?.cancel();
-      if (!mounted || ticket != generation) return;
-      subscription = locationService.watch().listen(
-        update,
-        onError: (_) {
-          stop();
-          if (mounted) {
-            setState(
-              () => note = 'Se interrumpió la ubicación. Vuelve a activarla.',
-            );
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted && ticket == generation) {
-        setState(
-          () => note = e is LocationFailure
-              ? e.message
-              : 'No se pudo obtener tu ubicación. Vuelve a intentar.',
-        );
-      }
-    } finally {
-      if (mounted && ticket == generation) setState(() => locating = false);
-    }
-  }
-
-  void update(Position p) {
-    if (!mounted) return;
-    setState(() => position = p);
-    refreshTimer?.cancel();
-    final elapsed = lastFetch == null
-        ? const Duration(seconds: 10)
-        : DateTime.now().difference(lastFetch!);
-    if (elapsed >= const Duration(seconds: 10)) {
-      refresh();
-    } else {
-      refreshTimer = Timer(const Duration(seconds: 10) - elapsed, refresh);
-    }
-  }
-
-  Future<void> refresh() async {
-    if (position == null) return;
-    final ticket = ++fetchGeneration;
-    final p = position!;
-    lastFetch = DateTime.now();
-    setState(() {
-      loading = true;
-      note = null;
-    });
-    try {
-      final result = await fetchNearbyReports(p.latitude, p.longitude);
-      if (mounted && ticket == fetchGeneration) {
-        setState(() => community = result);
-      }
-    } catch (e) {
-      if (mounted && ticket == fetchGeneration) {
-        setState(
-          () => note = e is StateError
-              ? e.message.toString()
-              : 'No se pudieron actualizar los reportes cercanos.',
-        );
-      }
-    } finally {
-      if (mounted && ticket == fetchGeneration) setState(() => loading = false);
-    }
-  }
-
-  double distance(Incident i) => Geolocator.distanceBetween(
-    position!.latitude,
-    position!.longitude,
-    i.latitude,
-    i.longitude,
-  );
+  double distance(Incident i) => widget.nearby.distance(i);
   String distanceLabel(Incident i) {
     final m = distance(i);
     return m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
@@ -242,11 +128,20 @@ class _ReportsPanelState extends State<ReportsPanel>
   List<Incident> get items {
     final uid = currentReportOwner;
     final own = mergeMyReports(uid, history, widget.store.items);
-    final result = (mine ? own : community)
+    final result = (mine ? own : widget.nearby.filtered(widget.filter))
         .where((i) => widget.filter == 'Todos' || i.type == widget.filter)
+        .where(
+          (i) =>
+              mine ||
+              !corroboratedOnly ||
+              ((i.remoteStatus == 'corroborated' ||
+                      i.remoteStatus == 'verified') &&
+                  i.corroborationCount >= 3 &&
+                  !i.needsReview),
+        )
         .toList();
     if (!mine && position != null) {
-      result.removeWhere((i) => distance(i) > 3000);
+      result.removeWhere((i) => distance(i) > NearbyReportsStore.searchRadius);
       result.sort((a, b) => distance(a).compareTo(distance(b)));
     } else {
       result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -276,18 +171,32 @@ class _ReportsPanelState extends State<ReportsPanel>
           onSelectionChanged: (value) {
             setState(() => mine = value.single);
             if (mine) {
-              stop();
               loadHistory();
-            } else if (enabled) {
-              start();
             }
+            widget.onNearbySelected(!mine);
           },
         ),
         const SizedBox(height: 12),
+        if (!mine) ...[
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('Todos')),
+              ButtonSegment(
+                value: true,
+                label: Text('Corroborados'),
+                icon: Icon(Icons.verified_outlined),
+              ),
+            ],
+            selected: {corroboratedOnly},
+            onSelectionChanged: (value) =>
+                setState(() => corroboratedOnly = value.single),
+          ),
+          const SizedBox(height: 12),
+        ],
         Text(
           mine
               ? 'Tus reportes, estés donde estés.'
-              : 'Reportes de la comunidad a menos de 3 km.',
+              : 'Reportes de la comunidad a menos de 1 km.',
         ),
         if (mine) ...[
           TextButton.icon(
@@ -339,7 +248,9 @@ class _ReportsPanelState extends State<ReportsPanel>
                         ? 'Consultando reportes cercanos…'
                         : note != null
                         ? 'La consulta de reportes cercanos no está disponible.'
-                        : 'No hay reportes en esta categoría a menos de 3 km.',
+                        : corroboratedOnly
+                        ? 'No hay incidentes corroborados en esta categoría a menos de 1 km.'
+                        : 'No hay reportes en esta categoría a menos de 1 km.',
                     textAlign: TextAlign.center,
                   ),
                 )
@@ -347,15 +258,36 @@ class _ReportsPanelState extends State<ReportsPanel>
                   itemCount: reports.length,
                   itemBuilder: (context, index) {
                     final i = reports[index];
+                    final communityConfirmed =
+                        !mine &&
+                        i.remoteStatus == 'corroborated' &&
+                        i.corroborationCount >= 3 &&
+                        !i.needsReview;
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
                       child: ListTile(
                         contentPadding: const EdgeInsets.all(16),
                         leading: ReportCategoryIcon(category: i.type),
                         title: Text('${i.type} · ${i.place}'),
-                        subtitle: Text(
-                          '${mine ? '' : '${distanceLabel(i)} · '}Reportado ${reportTime(i.createdAt)} · ${i.deliveryLabel}',
-                        ),
+                        subtitle: communityConfirmed
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${distanceLabel(i)} · Reportado ${reportTime(i.createdAt)}',
+                                  ),
+                                  const Text(
+                                    'Corroborado por la comunidad',
+                                    style: TextStyle(
+                                      color: Color(0xff087f68),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Text(
+                                '${mine ? '' : '${distanceLabel(i)} · '}Reportado ${reportTime(i.createdAt)} · ${i.deliveryLabel}',
+                              ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () {
                           if (mine) {

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'data/incident_store.dart';
+import 'data/nearby_reports_store.dart';
+import 'data/map_incidents_store.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'models/incident.dart';
 import 'core/config.dart';
 import 'services/push_service.dart';
 import 'ui/report_details_page.dart';
+import 'ui/community_incident_page.dart';
 import 'ui/reports_panel.dart';
 import 'ui/map_panel.dart';
 import 'ui/report_form.dart';
@@ -37,17 +41,57 @@ class TrujilloApp extends StatelessWidget {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.store});
+  const HomePage({
+    super.key,
+    required this.store,
+    this.nearby,
+    this.mapIncidents,
+  });
   final IncidentStore store;
+  final NearbyReportsStore? nearby;
+  final MapIncidentsStore? mapIncidents;
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final aiStore = AiDetectionStore();
+  late final NearbyReportsStore nearby = widget.nearby ?? NearbyReportsStore();
+  late final MapIncidentsStore mapIncidents =
+      widget.mapIncidents ?? MapIncidentsStore();
+  bool reportsNearbySelected = true;
+  bool foreground = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  void updateNearbyActivity() {
+    nearby.setActive(
+      foreground && (tab == 0 || (tab == 1 && reportsNearbySelected)),
+    );
+    mapIncidents.setActive(foreground && tab == 0);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    foreground = state == AppLifecycleState.resumed;
+    updateNearbyActivity();
+  }
+
+  void communityDetails(Incident incident) => Navigator.push(
+    context,
+    MaterialPageRoute<void>(
+      builder: (_) => CommunityIncidentPage(incident: incident),
+    ),
+  );
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    nearby.dispose();
+    mapIncidents.dispose();
     aiStore.dispose();
     super.dispose();
   }
@@ -56,9 +100,7 @@ class _HomePageState extends State<HomePage> {
   String filter = 'Todos';
   String pushStatus = 'Sin activar';
   bool requestingPush = false;
-  List<Incident> get visible => widget.store.items
-      .where((i) => filter == 'Todos' || i.type == filter)
-      .toList();
+  List<Incident> get visible => mapIncidents.filtered(filter);
   void details(Incident incident) => Navigator.push(
     context,
     MaterialPageRoute<void>(
@@ -136,7 +178,7 @@ class _HomePageState extends State<HomePage> {
   );
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.store,
+    listenable: Listenable.merge([widget.store, nearby, mapIncidents]),
     builder: (context, _) => Scaffold(
       appBar: AppBar(
         centerTitle: false,
@@ -183,15 +225,33 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Tus reportes en este dispositivo. Sin conexión con emergencias.',
+                              'Incidentes corroborados. Toca el mapa para explorar 500 m.',
                             ),
                             const SizedBox(height: 12),
                             filters(),
                             const SizedBox(height: 12),
+                            if (mapIncidents.loading)
+                              const LinearProgressIndicator(),
+                            if (mapIncidents.note != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(mapIncidents.note!),
+                              ),
                             Expanded(
                               child: MapPanel(
                                 incidents: visible,
-                                onIncident: details,
+                                onIncident: communityDetails,
+                                currentLocation: nearby.position == null
+                                    ? null
+                                    : LatLng(
+                                        nearby.position!.latitude,
+                                        nearby.position!.longitude,
+                                      ),
+                                onLocate: nearby.start,
+                                locating: nearby.locating,
+                                locationRadius: 500,
+                                onViewportChanged: mapIncidents.setBounds,
+                                active: tab == 0,
                               ),
                             ),
                           ],
@@ -209,6 +269,12 @@ class _HomePageState extends State<HomePage> {
                                 filter: filter,
                                 onReport: details,
                                 active: tab == 1,
+                                nearby: nearby,
+                                onSessionChanged: mapIncidents.clearSession,
+                                onNearbySelected: (value) {
+                                  reportsNearbySelected = value;
+                                  updateNearbyActivity();
+                                },
                               ),
                             ),
                           ],
@@ -238,7 +304,10 @@ class _HomePageState extends State<HomePage> {
             ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
-        onDestinationSelected: (i) => setState(() => tab = i),
+        onDestinationSelected: (i) {
+          setState(() => tab = i);
+          updateNearbyActivity();
+        },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.map_outlined), label: 'Mapa'),
           NavigationDestination(

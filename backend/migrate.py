@@ -12,7 +12,7 @@ def main():
         exists = conn.execute("SELECT to_regclass('trujillo.schema_migrations')").fetchone()[0]
         if not exists:
             conn.execute((ROOT / 'migrations/001_initial.sql').read_text(encoding='utf-8'))
-        elif conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] not in (1, 2, 3, 4, 5, 6):
+        elif conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
             raise RuntimeError('Versión inesperada; no se modificó el esquema')
         role = 'trujillo_api'
         role_exists = conn.execute('SELECT 1 FROM pg_roles WHERE rolname=%s', (role,)).fetchone()
@@ -41,7 +41,17 @@ def main():
             conn.execute((ROOT / 'migrations/005_corroboration.sql').read_text(encoding='utf-8'))
         if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 5:
             conn.execute((ROOT / 'migrations/006_nearby_incidents.sql').read_text(encoding='utf-8'))
-    print('Migración 6 lista. Consulta de incidentes cercanos habilitada.')
+        if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 6:
+            conn.execute((ROOT / 'migrations/007_nearby_identity_fix.sql').read_text(encoding='utf-8'))
+        if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 7:
+            conn.execute((ROOT / 'migrations/008_report_read_permissions.sql').read_text(encoding='utf-8'))
+        if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 8:
+            conn.execute((ROOT / 'migrations/009_map_viewport.sql').read_text(encoding='utf-8'))
+        if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 9:
+            conn.execute((ROOT / 'migrations/010_community_groups.sql').read_text(encoding='utf-8'))
+        if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 10:
+            conn.execute((ROOT / 'migrations/011_community_photos.sql').read_text(encoding='utf-8'))
+    print('Migración 11 lista. Fotos comunitarias corroboradas habilitadas.')
 
 
 if __name__ == '__main__':

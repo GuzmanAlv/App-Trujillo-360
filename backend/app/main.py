@@ -38,7 +38,7 @@ def ready():
         with connect() as conn:
             version = conn.execute(
                 'SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0]
-            if version != 6:
+            if version != 11:
                 raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError):
         # Do not disclose host, credentials or database diagnostics over HTTP.

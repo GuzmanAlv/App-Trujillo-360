@@ -22,16 +22,23 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
   RemoteReportDetails? remote;
   bool loading = false, sending = false;
   String? note;
-  Incident get report =>
-      widget.store.items
-          .where(
-            (item) =>
-                item.id == widget.report.id &&
-                item.ownerUid == widget.report.ownerUid &&
-                item.remoteId == widget.report.remoteId,
-          )
-          .firstOrNull ??
-      widget.report;
+  Incident get report {
+    final local = widget.store.items
+        .where(
+          (item) =>
+              item.id == widget.report.id &&
+              item.ownerUid == widget.report.ownerUid,
+        )
+        .firstOrNull;
+    // An acknowledgement changes remoteId; follow the updated local report.
+    // A server history entry remains authoritative over a pending local copy.
+    if (local == null ||
+        (local.remoteId == null && widget.report.remoteId != null)) {
+      return widget.report;
+    }
+    return local;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -72,7 +79,10 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     setState(() => sending = true);
     final result = await ReportSender.send(report, widget.store);
     if (!mounted) return;
-    setState(() => sending = false);
+    setState(() {
+      sending = false;
+      note = result;
+    });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
     if (report.remoteId != null) await refresh();
   }

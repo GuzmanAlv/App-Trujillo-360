@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from unittest.mock import patch
 import pytest
+import psycopg
 from fastapi.testclient import TestClient
 from app.main import app
 from app.auth import identity
@@ -69,4 +70,46 @@ def test_account_history_failure_is_not_empty_success(client):
     with patch('app.reports.connect', side_effect=RuntimeError('secret')):
         response = client.get('/reports')
     assert response.status_code == 503
+    assert 'secret' not in response.text
+
+
+@pytest.mark.parametrize('query', [
+    'south=-91&north=0&west=0&east=1',
+    'south=0&north=-1&west=0&east=1',
+    'south=0&north=1&west=nan&east=1',
+    'south=0&north=1&west=-181&east=1',
+])
+def test_invalid_map_bounds_never_reach_database(client, query):
+    with patch('app.reports.connect') as connection:
+        assert client.get('/incidents/map?' + query).status_code == 422
+        connection.assert_not_called()
+
+
+def test_map_failure_does_not_return_empty_success(client):
+    with patch('app.reports.connect', side_effect=RuntimeError('secret')):
+        response = client.get('/incidents/map?south=-9&north=-8&west=-80&east=-79')
+    assert response.status_code == 503
+    assert 'secret' not in response.text
+
+
+@pytest.mark.parametrize('error,status', [(psycopg.errors.NoDataFound(),404), (psycopg.errors.InsufficientPrivilege(),403), (RuntimeError('secret'),503)])
+def test_grouped_reports_errors_are_protected(client, error, status):
+    with patch('app.reports.connect', side_effect=error):
+        response = client.get(f'/incidents/{uuid4()}/reports')
+    assert response.status_code == status
+    assert 'secret' not in response.text
+
+
+def test_invalid_group_id_never_reaches_database(client):
+    with patch('app.reports.connect') as connection:
+        assert client.get('/incidents/not-a-uuid/reports').status_code == 422
+        connection.assert_not_called()
+
+
+@pytest.mark.parametrize('suffix', ['photos', 'photos/'+str(uuid4())])
+@pytest.mark.parametrize('error,status', [(psycopg.errors.NoDataFound(),404), (psycopg.errors.InsufficientPrivilege(),403), (RuntimeError('secret'),503)])
+def test_community_photos_errors_are_protected(client, suffix, error, status):
+    with patch('app.reports.connect', side_effect=error):
+        response = client.get(f'/incidents/{uuid4()}/{suffix}')
+    assert response.status_code == status
     assert 'secret' not in response.text

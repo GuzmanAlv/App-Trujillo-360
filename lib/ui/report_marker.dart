@@ -90,3 +90,28 @@ Future<Uint8List> renderReportMarker(String category, String time) async {
     picture.dispose();
   }
 }
+
+/// Centered location dot, independent of map zoom.
+Future<Uint8List> renderLocationDot({
+  Color color = const Color(0xff4285f4),
+}) async {
+  const size = 32.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder)..scale(2);
+  const center = Offset(size / 2, size / 2);
+  canvas.drawCircle(center, 15, Paint()..color = color.withValues(alpha: 0.18));
+  canvas.drawCircle(center, 10, Paint()..color = Colors.white);
+  canvas.drawCircle(center, 7, Paint()..color = color);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(64, 64);
+  try {
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) {
+      throw StateError('No se pudo dibujar la ubicación');
+    }
+    return data.buffer.asUint8List();
+  } finally {
+    image.dispose();
+    picture.dispose();
+  }
+}

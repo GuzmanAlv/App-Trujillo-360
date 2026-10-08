@@ -90,7 +90,7 @@ def report_details(report_id: UUID, response: Response, claims=Depends(identity)
 def nearby_incidents(response: Response,
     latitude: float = Query(ge=-90, le=90, allow_inf_nan=False),
     longitude: float = Query(ge=-180, le=180, allow_inf_nan=False),
-    radius: int = Query(default=3000, ge=100, le=3000),
+    radius: int = Query(default=1000, ge=100, le=3000),
     claims=Depends(identity)):
     try:
         with connect() as conn:
@@ -124,3 +124,76 @@ def my_reports(response: Response, claims=Depends(identity)):
                 return cursor.fetchall()
     except (psycopg.Error, RuntimeError):
         raise HTTPException(503, 'No se pudo consultar tu historial') from None
+
+
+@router.get('/incidents/map')
+def map_incidents(response: Response,
+    south: float = Query(ge=-90, le=90, allow_inf_nan=False),
+    north: float = Query(ge=-90, le=90, allow_inf_nan=False),
+    west: float = Query(ge=-180, le=180, allow_inf_nan=False),
+    east: float = Query(ge=-180, le=180, allow_inf_nan=False),
+    claims=Depends(identity)):
+    if south > north:
+        raise HTTPException(422, 'Área inválida')
+    try:
+        with connect() as conn:
+            conn.execute("SELECT set_config('app.firebase_uid', %s, true)", (claims['sub'],))
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute('SELECT * FROM trujillo.map_incidents(%s,%s,%s,%s)', (south,north,west,east))
+                response.headers['Cache-Control'] = 'private, no-store'
+                return cursor.fetchall()
+    except psycopg.errors.InsufficientPrivilege:
+        raise HTTPException(403, 'Cuenta no disponible') from None
+    except (psycopg.Error, RuntimeError):
+        raise HTTPException(503, 'No se pudieron consultar los incidentes del mapa') from None
+
+
+@router.get('/incidents/{incident_id}/reports')
+def grouped_reports(incident_id: UUID, response: Response, claims=Depends(identity)):
+    """Community summaries of contributions to a corroborated incident."""
+    try:
+        with connect() as conn:
+            conn.execute("SELECT set_config('app.firebase_uid', %s, true)", (claims['sub'],))
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute('SELECT * FROM trujillo.incident_reports(%s)', (incident_id,))
+                response.headers['Cache-Control'] = 'private, no-store'
+                return cursor.fetchall()
+    except psycopg.errors.InsufficientPrivilege:
+        raise HTTPException(403, 'Cuenta no disponible') from None
+    except psycopg.errors.NoDataFound:
+        raise HTTPException(404, 'Incidente no disponible') from None
+    except (psycopg.Error, RuntimeError):
+        raise HTTPException(503, 'No se pudieron consultar los aportes del incidente') from None
+
+
+@router.get('/incidents/{incident_id}/photos')
+def community_photos(incident_id: UUID, response: Response, claims=Depends(identity)):
+    try:
+        with connect() as conn:
+            conn.execute("SELECT set_config('app.firebase_uid', %s, true)", (claims['sub'],))
+            with conn.cursor(row_factory=dict_row) as cursor:
+                cursor.execute('SELECT * FROM trujillo.community_photos(%s)', (incident_id,))
+                response.headers['Cache-Control'] = 'private, no-store'
+                return cursor.fetchall()
+    except psycopg.errors.InsufficientPrivilege:
+        raise HTTPException(403, 'Cuenta no disponible') from None
+    except psycopg.errors.NoDataFound:
+        raise HTTPException(404, 'Incidente no disponible') from None
+    except (psycopg.Error, RuntimeError):
+        raise HTTPException(503, 'No se pudieron consultar las fotos') from None
+
+
+@router.get('/incidents/{incident_id}/photos/{photo_id}')
+def community_photo(incident_id: UUID, photo_id: UUID, claims=Depends(identity)):
+    try:
+        with connect() as conn:
+            conn.execute("SELECT set_config('app.firebase_uid', %s, true)", (claims['sub'],))
+            content = bytes(conn.execute('SELECT trujillo.community_photo(%s,%s)', (incident_id,photo_id)).fetchone()[0])
+            media = 'image/png' if content.startswith(b'\x89PNG') else 'image/jpeg'
+            return Response(content=content, media_type=media, headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
+    except psycopg.errors.InsufficientPrivilege:
+        raise HTTPException(403, 'Cuenta no disponible') from None
+    except psycopg.errors.NoDataFound:
+        raise HTTPException(404, 'Foto no disponible') from None
+    except (psycopg.Error, RuntimeError):
+        raise HTTPException(503, 'No se pudo consultar la foto') from None

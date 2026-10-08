@@ -90,4 +90,35 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     store.dispose();
   });
+  testWidgets(
+    'El detalle abandona pendiente cuando el servidor confirma el mismo reporte',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = IncidentStore(await SharedPreferences.getInstance())
+        ..load();
+      final pending = Incident(
+        id: 'ack',
+        ownerUid: 'account',
+        type: 'Robo',
+        place: 'Prueba',
+        description: '',
+        latitude: 0,
+        longitude: 0,
+        createdAt: DateTime(2026),
+      );
+      await store.add(pending);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReportDetailsPage(report: pending, store: store),
+        ),
+      );
+      expect(find.text('Pendiente de envío'), findsOneWidget);
+      await store.add(pending.delivered('server-ack', count: 1));
+      await tester.pump();
+      expect(find.text('Pendiente de envío'), findsNothing);
+      expect(find.text('Enviado · 1 de 3 cuentas'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      store.dispose();
+    },
+  );
 }

@@ -19,8 +19,20 @@ class MapPanel extends StatefulWidget {
     this.selected,
     this.onPick,
     this.onIncident,
+    this.currentLocation,
+    this.onLocate,
+    this.onViewportChanged,
+    this.locating = false,
+    this.locationRadius = 0,
+    this.active = true,
   });
   final List<Incident> incidents;
+  final LatLng? currentLocation;
+  final VoidCallback? onLocate;
+  final ValueChanged<LatLngBounds>? onViewportChanged;
+
+  final bool locating, active;
+  final double locationRadius;
   final LatLng? selected;
   final ValueChanged<LatLng>? onPick;
   final ValueChanged<Incident>? onIncident;
@@ -34,6 +46,29 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   final service = LocationService();
   final Map<String, BitmapDescriptor> reportIcons = {};
   int iconGeneration = 0;
+  BitmapDescriptor? locationIcon;
+  BitmapDescriptor? explorationIcon;
+  Future<void> prepareLocationIcon() async {
+    final bytes = await renderLocationDot();
+    final explorationBytes = await renderLocationDot(
+      color: const Color(0xffe67e22),
+    );
+    if (!mounted) return;
+    setState(() {
+      locationIcon = BitmapDescriptor.bytes(
+        bytes,
+        imagePixelRatio: 2,
+        width: 32,
+        height: 32,
+      );
+      explorationIcon = BitmapDescriptor.bytes(
+        explorationBytes,
+        imagePixelRatio: 2,
+        width: 32,
+        height: 32,
+      );
+    });
+  }
 
   String iconKey(Incident incident) =>
       '${incident.type}|${reportTime(incident.createdAt)}';
@@ -64,27 +99,81 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
     }
     if (!mounted || generation != iconGeneration) return;
     setState(() {
-      reportIcons
-        ..clear()
-        ..addAll(next);
+      reportIcons.addAll(next);
+      while (reportIcons.length > 512) {
+        final unused = reportIcons.keys.where((key) => !next.containsKey(key));
+        if (unused.isEmpty) break;
+        reportIcons.remove(unused.first);
+      }
     });
   }
 
   @override
   void didUpdateWidget(covariant MapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.onLocate != null && widget.active) {
+      centerIfRequested();
+    }
+    if (!oldWidget.active && widget.active) {
+      reportViewport();
+    }
     if (!listEquals(oldWidget.incidents, widget.incidents)) {
       prepareReportIcons();
     }
   }
 
+  bool centerRequested = true;
+  int viewportGeneration = 0;
+  Future<void> reportViewport() async {
+    final c = controller;
+    if (c == null || !widget.active || widget.onViewportChanged == null) return;
+    final ticket = ++viewportGeneration;
+    try {
+      final bounds = await c.getVisibleRegion();
+      if (mounted && widget.active && ticket == viewportGeneration) {
+        widget.onViewportChanged!(bounds);
+      }
+    } catch (_) {
+      /* A disposed map has no viewport to report. */
+    }
+  }
+
+  void centerIfRequested() {
+    final value = displayedLocation;
+    if (!centerRequested || controller == null || value == null) return;
+    centerRequested = false;
+    controller!.animateCamera(CameraUpdate.newLatLng(value));
+  }
+
+  void locate() {
+    setState(() => exploredLocation = null);
+    centerRequested = true;
+    centerIfRequested();
+    widget.onLocate!();
+  }
+
+  LatLng? exploredLocation;
+
+  void selectMapLocation(LatLng point) {
+    if (widget.onPick != null) {
+      widget.onPick!(point);
+    } else if (widget.locationRadius > 0) {
+      setState(() {
+        exploredLocation = point;
+        centerRequested = false;
+      });
+    }
+  }
+
   LatLng? location;
+  LatLng? get displayedLocation => widget.currentLocation ?? location;
   bool following = false, busy = false, foreground = true;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     prepareReportIcons();
+    prepareLocationIcon();
   }
 
   @override
@@ -101,6 +190,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     subscription?.cancel();
+    viewportGeneration++;
     controller?.dispose();
     super.dispose();
   }
@@ -176,11 +266,22 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           }
                         : const <Factory<OneSequenceGestureRecognizer>>{},
                     initialCameraPosition: CameraPosition(
-                      target: widget.selected ?? trujillo,
-                      zoom: 14,
+                      target: widget.selected ?? displayedLocation ?? trujillo,
+                      zoom: displayedLocation == null ? 14 : 13,
                     ),
-                    onMapCreated: (c) => controller = c,
-                    onTap: widget.onPick,
+                    onMapCreated: (c) {
+                      controller = c;
+                      if (widget.active) {
+                        centerIfRequested();
+                        reportViewport();
+                      }
+                    },
+                    onCameraIdle: reportViewport,
+                    circles: locationHighlight(
+                      exploredLocation ?? displayedLocation,
+                      widget.locationRadius,
+                    ),
+                    onTap: selectMapLocation,
                     myLocationButtonEnabled: false,
                     zoomControlsEnabled: false,
                     markers: {
@@ -209,14 +310,25 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           ),
                           onTap: () => widget.onIncident?.call(i),
                         ),
-                      if (location != null)
+                      if (displayedLocation != null && locationIcon != null)
                         Marker(
                           markerId: const MarkerId('my_location'),
-                          position: location!,
-                          icon: BitmapDescriptor.defaultMarkerWithHue(
-                            BitmapDescriptor.hueAzure,
-                          ),
+                          position: displayedLocation!,
+                          icon: locationIcon!,
+                          anchor: const Offset(0.5, 0.5),
+                          zIndexInt: 2,
                           infoWindow: const InfoWindow(title: 'Mi ubicación'),
+                        ),
+                      if (exploredLocation != null && explorationIcon != null)
+                        Marker(
+                          markerId: const MarkerId('exploration_center'),
+                          position: exploredLocation!,
+                          icon: explorationIcon!,
+                          anchor: const Offset(0.5, 0.5),
+                          zIndexInt: 3,
+                          infoWindow: const InfoWindow(
+                            title: 'Zona seleccionada',
+                          ),
                         ),
                       if (widget.selected != null)
                         Marker(
@@ -270,11 +382,17 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
               bottom: 38,
               child: FloatingActionButton.small(
                 heroTag: null,
-                tooltip: following
+                tooltip: widget.onLocate != null
+                    ? 'Volver a mi ubicación'
+                    : following
                     ? 'Detener seguimiento'
                     : 'Seguir mi ubicación',
-                onPressed: busy ? null : follow,
-                child: busy
+                onPressed: busy || widget.locating
+                    ? null
+                    : widget.onLocate == null
+                    ? follow
+                    : locate,
+                child: busy || widget.locating
                     ? const SizedBox(
                         width: 20,
                         height: 20,
@@ -287,4 +405,21 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+Set<Circle> locationHighlight(LatLng? center, double radius) {
+  if (center == null || radius <= 0) {
+    return {};
+  }
+  return {
+    Circle(
+      circleId: const CircleId('near_me'),
+      center: center,
+      radius: radius,
+      fillColor: const Color(0xff087f68).withValues(alpha: 0.10),
+      strokeColor: const Color(0xff087f68).withValues(alpha: 0.65),
+      strokeWidth: 2,
+      zIndex: 0,
+    ),
+  };
 }
