@@ -1,3 +1,4 @@
+import '../core/config.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -63,9 +64,12 @@ class ReportSender {
             'occurred_at': report.createdAt.toUtc().toIso8601String(),
             'photos': photos,
           });
-        final response = await (() async => http.Response.fromStream(
-          await client.send(request),
-        ))().timeout(const Duration(seconds: 60));
+        final response =
+            await (() async => http.Response.fromStream(
+              await client.send(request),
+            ))().timeout(
+              AppConfig.backendRequestTimeout(const Duration(seconds: 60)),
+            );
         if (response.statusCode == 401 && attempt == 0) continue;
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body) as Map<String, dynamic>;

@@ -9,3 +9,8 @@ Variables del servicio: FIREBASE_PROJECT_ID del proyecto Android; PGHOST, PGPORT
 Después de desplegar, abrir https://NOMBRE.onrender.com/ready. Compilar la app con --dart-define=BACKEND_URL=https://NOMBRE.onrender.com y --dart-define=MAPS_ENABLED=true. Un APK distribuible necesita además firma de release y configuración de Google Sign-In para esa firma.
 
 Verificación final desde Android: iniciar sesión, comprobar perfil conectado, enviar un reporte y confirmar Enviado, actualizar Mis reportes desde otra instalación con la misma cuenta, comprobar aislamiento de otra cuenta, activar ubicación para Cerca de mí. Un resultado de /ready o una prueba transaccional de base de datos por sí solos no verifican el token y la conexión del teléfono.
+
+Servicio configurado: https://trujillo-360-api.onrender.com (región Ohio).
+APK de pruebas conectado a Render:
+flutter build apk --debug --dart-define=BACKEND_URL=https://trujillo-360-api.onrender.com --dart-define=MAPS_ENABLED=true
+El plan gratuito puede tardar al reactivarse; las consultas a Render esperan hasta 90 segundos. No requieren adb reverse ni servidor local.

@@ -51,7 +51,10 @@ def main():
             conn.execute((ROOT / 'migrations/010_community_groups.sql').read_text(encoding='utf-8'))
         if conn.execute('SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0] == 10:
             conn.execute((ROOT / 'migrations/011_community_photos.sql').read_text(encoding='utf-8'))
-    print('Migración 11 lista. Fotos comunitarias corroboradas habilitadas.')
+        result_type = conn.execute("SELECT pg_get_function_result('trujillo.incident_reports(uuid)'::regprocedure)").fetchone()[0]
+        if 'place text' not in result_type:
+            conn.execute((ROOT / 'migrations/011_report_places_patch.sql').read_text(encoding='utf-8'))
+    print('Migración 11 lista. Fotos y referencias comunitarias habilitadas.')
 
 
 if __name__ == '__main__':

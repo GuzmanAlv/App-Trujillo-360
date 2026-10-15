@@ -15,6 +15,11 @@ import 'ui/report_style.dart';
 import 'ui/account_panel.dart';
 import 'data/ai_detection_store.dart';
 import 'ui/ai_detection_panel.dart';
+import 'services/proximity_alerts.dart';
+import 'services/nearby_reports_client.dart';
+import 'ui/nearby_incident_page.dart';
+import 'ui/proximity_alert_card.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TrujilloApp extends StatelessWidget {
   const TrujilloApp({super.key, required this.store});
@@ -61,15 +66,94 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       widget.mapIncidents ?? MapIncidentsStore();
   bool reportsNearbySelected = true;
   bool foreground = true;
+  bool alertsEnabled = false;
+  final notifications = ProximityNotifications();
+  ProximityAlertPolicy alertPolicy = ProximityAlertPolicy();
+  String? alertOwner;
+
+  void openAlert(Incident incident) {
+    if (!mounted || currentReportOwner == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => NearbyIncidentPage(
+          incident: incident,
+          distance: nearby.distance(incident),
+        ),
+      ),
+    );
+  }
+
+  Future<void> restoreAlerts() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    notifications.listen(openAlert);
+    final pending = await notifications.takePending();
+    if (!mounted) return;
+    if (pending != null) openAlert(pending);
+    if (prefs.getBool('proximity_alerts_enabled') ?? false) {
+      alertOwner = currentReportOwner;
+      setState(() => alertsEnabled = true);
+      nearby.pollContinuously = true;
+      updateNearbyActivity();
+      await nearby.start();
+    }
+  }
+
+  void checkAlerts() {
+    final owner = currentReportOwner;
+    if (owner != alertOwner) {
+      alertOwner = owner;
+      alertPolicy = ProximityAlertPolicy();
+    }
+    if (!alertsEnabled || !foreground || owner == null) return;
+    for (final incident in alertPolicy.collect(
+      nearby.filtered('Todos'),
+      nearby.distance,
+      DateTime.now(),
+    )) {
+      final meters = nearby.distance(incident).round();
+      notifications.show(incident, meters).catchError((Object _) {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.white,
+          elevation: 10,
+          padding: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xffdbe8e1)),
+          ),
+          duration: const Duration(seconds: 12),
+          content: ProximityAlertCard(
+            incident: incident,
+            meters: meters,
+            onDismiss: () =>
+                ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            onOpen: () {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              openAlert(incident);
+            },
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    nearby.addListener(checkAlerts);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      restoreAlerts().catchError((Object _) {});
+    });
   }
 
   void updateNearbyActivity() {
     nearby.setActive(
-      foreground && (tab == 0 || (tab == 1 && reportsNearbySelected)),
+      foreground &&
+          (alertsEnabled || tab == 0 || (tab == 1 && reportsNearbySelected)),
     );
     mapIncidents.setActive(foreground && tab == 0);
   }
@@ -78,6 +162,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
     updateNearbyActivity();
+    if (foreground) {
+      notifications
+          .takePending()
+          .then((i) {
+            if (i != null) openAlert(i);
+          })
+          .catchError((Object _) {});
+    }
   }
 
   void communityDetails(Incident incident) => Navigator.push(
@@ -90,6 +182,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    notifications.dispose();
+    nearby.removeListener(checkAlerts);
     nearby.dispose();
     mapIncidents.dispose();
     aiStore.dispose();
@@ -116,6 +210,41 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       const SizedBox(height: 20),
       const AccountPanel(),
+      SwitchListTile(
+        title: const Text('Alertas a 500 metros'),
+        subtitle: const Text(
+          'Incidencias nuevas, incluso pendientes de corroboración. Se consultan cada 15 segundos mientras la app está abierta. Requiere sesión y ubicación.',
+        ),
+        value: alertsEnabled,
+        onChanged: (value) async {
+          if (value) {
+            try {
+              final allowed = await notifications.enable();
+              if (!mounted) return;
+              if (!allowed && notifications.supported) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Permite las notificaciones en los ajustes de Android. Los avisos también se mostrarán dentro de la app.',
+                    ),
+                  ),
+                );
+              }
+            } catch (_) {
+              /* In-app alerts remain available. */
+            }
+          }
+          if (!mounted) return;
+          setState(() => alertsEnabled = value);
+          alertPolicy = ProximityAlertPolicy();
+          alertOwner = currentReportOwner;
+          nearby.pollContinuously = value;
+          updateNearbyActivity();
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('proximity_alerts_enabled', value);
+          if (value && mounted) await nearby.start();
+        },
+      ),
       ListTile(
         leading: const Icon(Icons.map_outlined),
         title: const Text('Google Maps'),

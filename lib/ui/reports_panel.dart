@@ -9,6 +9,7 @@ import '../data/incident_store.dart';
 import '../models/incident.dart';
 import '../services/nearby_reports_client.dart';
 import 'report_style.dart';
+import 'nearby_incident_page.dart';
 
 class ReportsPanel extends StatefulWidget {
   const ReportsPanel({
@@ -293,34 +294,12 @@ class _ReportsPanelState extends State<ReportsPanel> {
                           if (mine) {
                             widget.onReport(i);
                           } else {
-                            showModalBottomSheet<void>(
-                              context: context,
-                              builder: (_) => SafeArea(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        i.type,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.headlineSmall,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        '${distanceLabel(i)} de tu ubicación · ${i.deliveryLabel}',
-                                      ),
-                                      Text(
-                                        'Reportado ${reportTime(i.createdAt)}',
-                                      ),
-                                      Text(
-                                        '${i.latitude.toStringAsFixed(6)}, ${i.longitude.toStringAsFixed(6)}',
-                                      ),
-                                    ],
-                                  ),
+                            Navigator.push<void>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NearbyIncidentPage(
+                                  incident: i,
+                                  distance: distance(i),
                                 ),
                               ),
                             );

@@ -25,7 +25,7 @@ def main():
                 incident = None
                 for account in range(4):
                     selected['uid'] = prefix+str(account)
-                    response = client.post('/reports', json=dict(request_id=str(uuid4()), category='Robo', place='Prueba', description='Privado', latitude=-30.123, longitude=-60.123, occurred_at=(timestamp+timedelta(seconds=account)).isoformat()))
+                    response = client.post('/reports', json=dict(request_id=str(uuid4()), category='Robo', place=f'Referencia {account}', description='Privado', latitude=-30.123, longitude=-60.123, occurred_at=(timestamp+timedelta(seconds=account)).isoformat()))
                     assert response.status_code == 200, f'Submit {response.status_code}'
                     data = response.json()
                     incident = incident or data['incident_id']
@@ -48,6 +48,7 @@ def main():
                 assert contributions.status_code == 200
                 rows = contributions.json()
                 assert {r['id'] for r in rows} == set(ids) and len(rows) == 4
+                assert [r['place'] for r in rows] == [f'Referencia {account}' for account in range(4)]
                 assert all(not ({'description', 'photos', 'user_id', 'auth_subject', 'display_name'} & set(r)) for r in rows)
                 try:
                     with conn.transaction():

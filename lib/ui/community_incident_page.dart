@@ -111,14 +111,6 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
           'Incidente corroborado por la comunidad',
           style: Theme.of(context).textTheme.titleLarge,
         ),
-        const SizedBox(height: 12),
-        const Text(
-          'Mismo tipo, hasta 100 m y dentro de 15 minutos desde el primer reporte. Cada cuenta aporta una vez.',
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'La corroboración comunitaria no equivale a una verificación por un operador.',
-        ),
         const SizedBox(height: 20),
         if (loading) const Center(child: CircularProgressIndicator()),
         if (error != null) ...[
@@ -141,7 +133,7 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
                       'Reporte ${index + 1} · ${reports![index].type}',
                     ),
                     subtitle: Text(
-                      'Reportado ${reportTime(reports![index].createdAt)}\n${reports![index].latitude.toStringAsFixed(5)}, ${reports![index].longitude.toStringAsFixed(5)}',
+                      'Reportado ${reportTime(reports![index].createdAt)}\n${reports![index].place.trim().isEmpty ? 'Sin referencia' : reports![index].place}',
                     ),
                   ),
                   if (photos.any((p) => p.reportId == reports![index].id))

@@ -1,3 +1,4 @@
+import '../core/config.dart';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -49,7 +50,7 @@ Future<http.Response> authenticatedCommunityGet(
           ..headers['Authorization'] = 'Bearer $token';
     final response = await (() async => http.Response.fromStream(
       await _communityClient.send(request),
-    ))().timeout(const Duration(seconds: 20));
+    ))().timeout(AppConfig.backendRequestTimeout(const Duration(seconds: 20)));
     if (response.statusCode == 401 && attempt == 0) continue;
     if (response.statusCode != 200) {
       throw StateError(
@@ -74,7 +75,7 @@ Future<List<Incident>> fetchCommunityReports(
     return Incident.fromJson({
       'id': j['id'],
       'type': j['category'],
-      'place': 'Incidente de la comunidad',
+      'place': j['place'] as String? ?? 'Incidente de la comunidad',
       'description': '',
       'latitude': j['latitude'],
       'longitude': j['longitude'],

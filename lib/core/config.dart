@@ -1,4 +1,11 @@
 class AppConfig {
+  static Duration backendRequestTimeout(Duration normal) =>
+      Uri.tryParse(
+            const String.fromEnvironment('BACKEND_URL'),
+          )?.host.endsWith('.onrender.com') ==
+          true
+      ? const Duration(seconds: 90)
+      : normal;
   static const mapsEnabled = bool.fromEnvironment('MAPS_ENABLED');
   static const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
   static const firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');

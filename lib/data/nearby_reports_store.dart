@@ -23,6 +23,7 @@ class NearbyReportsStore extends ChangeNotifier {
   DateTime? _lastFetch;
   int _locationGeneration = 0, _fetchGeneration = 0;
   static const searchRadius = 1000.0;
+  bool pollContinuously = false;
 
   List<Incident> filtered(String category) {
     final p = position;
@@ -167,6 +168,10 @@ class NearbyReportsStore extends ChangeNotifier {
       if (!_disposed && ticket == _fetchGeneration) {
         loading = false;
         notifyListeners();
+        if (pollContinuously && active) {
+          _timer?.cancel();
+          _timer = Timer(const Duration(seconds: 15), refresh);
+        }
       }
     }
   }

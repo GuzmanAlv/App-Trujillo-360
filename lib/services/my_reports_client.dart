@@ -1,3 +1,4 @@
+import '../core/config.dart';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -31,9 +32,12 @@ Future<List<Incident>> fetchMyReports() async {
       final request = http.Request('GET', base.resolve('/reports'))
         ..followRedirects = false
         ..headers['Authorization'] = 'Bearer $token';
-      final response = await (() async => http.Response.fromStream(
-        await client.send(request),
-      ))().timeout(const Duration(seconds: 30));
+      final response =
+          await (() async => http.Response.fromStream(
+            await client.send(request),
+          ))().timeout(
+            AppConfig.backendRequestTimeout(const Duration(seconds: 30)),
+          );
       if (response.statusCode == 401 && attempt == 0) {
         continue;
       }
