@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'backend_profile.dart';
+import '../services/push_service.dart';
 
 /// Firebase persists the session; no tokens are stored in local preferences.
 class AccountPanel extends StatefulWidget {
@@ -26,6 +27,7 @@ class _AccountPanelState extends State<AccountPanel> {
     });
     try {
       if (signOut) {
+        await PushService.instance.beforeSignOut();
         await FirebaseAuth.instance.signOut();
         if (googleInitialization != null) {
           await GoogleSignIn.instance.signOut();
@@ -63,6 +65,8 @@ class _AccountPanelState extends State<AccountPanel> {
           'Esta cuenta ya utiliza otro método de acceso.',
         _ => 'No se pudo completar el acceso. Intenta nuevamente.',
       };
+    } on StateError catch (e) {
+      error = e.message.toString();
     } catch (_) {
       error =
           'No se pudo completar la operación. Revisa la configuración de Google e intenta nuevamente.';

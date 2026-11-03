@@ -1,4 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'data/density_store.dart';
+import 'services/workflow_client.dart';
+import 'ui/workflow_panel.dart';
 import 'data/incident_store.dart';
 import 'data/nearby_reports_store.dart';
 import 'data/map_incidents_store.dart';
@@ -6,6 +14,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'models/incident.dart';
 import 'core/config.dart';
 import 'services/push_service.dart';
+import 'ui/notification_settings.dart';
+import 'ui/push_destination.dart';
 import 'ui/report_details_page.dart';
 import 'ui/community_incident_page.dart';
 import 'ui/reports_panel.dart';
@@ -13,13 +23,7 @@ import 'ui/map_panel.dart';
 import 'ui/report_form.dart';
 import 'ui/report_style.dart';
 import 'ui/account_panel.dart';
-import 'data/ai_detection_store.dart';
-import 'ui/ai_detection_panel.dart';
-import 'services/proximity_alerts.dart';
 import 'services/nearby_reports_client.dart';
-import 'ui/nearby_incident_page.dart';
-import 'ui/proximity_alert_card.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class TrujilloApp extends StatelessWidget {
   const TrujilloApp({super.key, required this.store});
@@ -60,113 +64,112 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
-  final aiStore = AiDetectionStore();
+  final density = DensityStore();
+  bool historical = false;
+  StreamSubscription<User?>? roleSession;
+  int roleGeneration = 0;
+  String? operatorOpenedFor;
+  Timer? expiryTimer;
+
+  Future<void> checkRole(User? user) async {
+    final ticket = ++roleGeneration;
+    density.clear();
+    density.schedule();
+    if (user == null) {
+      operatorOpenedFor = null;
+      return;
+    }
+    try {
+      final profile = await WorkflowClient.profile();
+      if (mounted &&
+          ticket == roleGeneration &&
+          currentReportOwner == user.uid &&
+          operatorOpenedFor != user.uid &&
+          openedPush.isEmpty &&
+          profile['status'] == 'active' &&
+          ['operator', 'admin'].contains(profile['role'])) {
+        operatorOpenedFor = user.uid;
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const OperatorPortal()),
+        );
+        mapIncidents.clearSession();
+      }
+    } catch (_) {
+      /* The account panel exposes connection errors and a retry. */
+    }
+  }
+
+  Future<void> dial() async {
+    try {
+      await const MethodChannel(
+        'trujillo360/proximity',
+      ).invokeMethod<void>('dial');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo abrir el teléfono.')),
+        );
+      }
+    }
+  }
+
   late final NearbyReportsStore nearby = widget.nearby ?? NearbyReportsStore();
   late final MapIncidentsStore mapIncidents =
       widget.mapIncidents ?? MapIncidentsStore();
   bool reportsNearbySelected = true;
   bool foreground = true;
-  bool alertsEnabled = false;
-  final notifications = ProximityNotifications();
-  ProximityAlertPolicy alertPolicy = ProximityAlertPolicy();
-  String? alertOwner;
-
-  void openAlert(Incident incident) {
-    if (!mounted || currentReportOwner == null) return;
-    Navigator.push(
+  StreamSubscription<Map<String, dynamic>>? pushOpens;
+  final Set<String> openedPush = {};
+  void openPush(Map<String, dynamic> data) {
+    if (!mounted || !PushService.instance.valid(data)) return;
+    final key = '${data['event_id']}';
+    if (!openedPush.add(key)) return;
+    PushService.instance.pending = null;
+    Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(
-        builder: (_) => NearbyIncidentPage(
-          incident: incident,
-          distance: nearby.distance(incident),
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => PushDestination(data: data)),
     );
-  }
-
-  Future<void> restoreAlerts() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    notifications.listen(openAlert);
-    final pending = await notifications.takePending();
-    if (!mounted) return;
-    if (pending != null) openAlert(pending);
-    if (prefs.getBool('proximity_alerts_enabled') ?? false) {
-      alertOwner = currentReportOwner;
-      setState(() => alertsEnabled = true);
-      nearby.pollContinuously = true;
-      updateNearbyActivity();
-      await nearby.start();
-    }
-  }
-
-  void checkAlerts() {
-    final owner = currentReportOwner;
-    if (owner != alertOwner) {
-      alertOwner = owner;
-      alertPolicy = ProximityAlertPolicy();
-    }
-    if (!alertsEnabled || !foreground || owner == null) return;
-    for (final incident in alertPolicy.collect(
-      nearby.filtered('Todos'),
-      nearby.distance,
-      DateTime.now(),
-    )) {
-      final meters = nearby.distance(incident).round();
-      notifications.show(incident, meters).catchError((Object _) {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.white,
-          elevation: 10,
-          padding: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: Color(0xffdbe8e1)),
-          ),
-          duration: const Duration(seconds: 12),
-          content: ProximityAlertCard(
-            incident: incident,
-            meters: meters,
-            onDismiss: () =>
-                ScaffoldMessenger.of(context).hideCurrentSnackBar(),
-            onOpen: () {
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              openAlert(incident);
-            },
-          ),
-        ),
-      );
-    }
   }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    nearby.addListener(checkAlerts);
+    if (Firebase.apps.isNotEmpty) {
+      roleSession = FirebaseAuth.instance.authStateChanges().listen(checkRole);
+    }
+    expiryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && foreground) setState(() {});
+    });
+    pushOpens = PushService.instance.opened.stream.listen(openPush);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      restoreAlerts().catchError((Object _) {});
+      final pending = PushService.instance.pending;
+      if (pending != null) openPush(pending);
     });
   }
 
   void updateNearbyActivity() {
     nearby.setActive(
-      foreground &&
-          (alertsEnabled || tab == 0 || (tab == 1 && reportsNearbySelected)),
+      foreground && (tab == 0 || (tab == 1 && reportsNearbySelected)),
     );
     mapIncidents.setActive(foreground && tab == 0);
+    density.configure(enabled: foreground && tab == 0 && historical);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
     updateNearbyActivity();
-    if (foreground) {
-      notifications
-          .takePending()
-          .then((i) {
-            if (i != null) openAlert(i);
+    if (foreground && PushService.instance.supported) {
+      PushService.channel
+          .invokeMethod<String>('takePush')
+          .then((raw) {
+            if (raw != null) {
+              PushService.instance.accept(
+                Map<String, dynamic>.from(jsonDecode(raw) as Map),
+              );
+            }
           })
           .catchError((Object _) {});
     }
@@ -182,19 +185,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    notifications.dispose();
-    nearby.removeListener(checkAlerts);
+    pushOpens?.cancel();
     nearby.dispose();
     mapIncidents.dispose();
-    aiStore.dispose();
+    roleGeneration++;
+    roleSession?.cancel();
+    expiryTimer?.cancel();
+    density.dispose();
     super.dispose();
   }
 
   int tab = 0;
   String filter = 'Todos';
-  String pushStatus = 'Sin activar';
-  bool requestingPush = false;
-  List<Incident> get visible => mapIncidents.filtered(filter);
+  List<Incident> get visible => mapIncidents
+      .filtered(filter)
+      .where((i) => i.recentAt(DateTime.now()))
+      .toList();
   void details(Incident incident) => Navigator.push(
     context,
     MaterialPageRoute<void>(
@@ -210,40 +216,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       const SizedBox(height: 20),
       const AccountPanel(),
-      SwitchListTile(
-        title: const Text('Alertas a 500 metros'),
+      ListTile(
+        leading: const Icon(Icons.support_agent),
+        title: const Text('Panel de seguridad ciudadana'),
         subtitle: const Text(
-          'Incidencias nuevas, incluso pendientes de corroboración. Se consultan cada 15 segundos mientras la app está abierta. Requiere sesión y ubicación.',
+          'Solo para cuentas Google autorizadas por un administrador.',
         ),
-        value: alertsEnabled,
-        onChanged: (value) async {
-          if (value) {
-            try {
-              final allowed = await notifications.enable();
-              if (!mounted) return;
-              if (!allowed && notifications.supported) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Permite las notificaciones en los ajustes de Android. Los avisos también se mostrarán dentro de la app.',
-                    ),
-                  ),
-                );
-              }
-            } catch (_) {
-              /* In-app alerts remain available. */
-            }
-          }
-          if (!mounted) return;
-          setState(() => alertsEnabled = value);
-          alertPolicy = ProximityAlertPolicy();
-          alertOwner = currentReportOwner;
-          nearby.pollContinuously = value;
-          updateNearbyActivity();
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('proximity_alerts_enabled', value);
-          if (value && mounted) await nearby.start();
-        },
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const OperatorPortal()),
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.sos),
+        title: const Text('Mis solicitudes de ayuda'),
+        onTap: () => Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('Mis solicitudes de ayuda')),
+              body: const WorkflowPanel(),
+            ),
+          ),
+        ),
       ),
       ListTile(
         leading: const Icon(Icons.map_outlined),
@@ -271,23 +267,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ListTile(
         leading: const Icon(Icons.notifications_outlined),
         title: const Text('Notificaciones'),
-        subtitle: Text(pushStatus),
-      ),
-      FilledButton.tonal(
-        onPressed: requestingPush
-            ? null
-            : () async {
-                setState(() => requestingPush = true);
-                final status = await PushService().enable();
-                if (mounted) {
-                  setState(() {
-                    pushStatus = status;
-                    requestingPush = false;
-                  });
-                }
-              },
-        child: Text(
-          requestingPush ? 'Configurando…' : 'Activar notificaciones',
+        subtitle: const Text('Permisos, mi zona y avisos fuera de la app.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const NotificationSettings()),
         ),
       ),
       const SizedBox(height: 20),
@@ -295,19 +279,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         leading: Icon(Icons.videocam_outlined),
         title: Text('Cámaras e IA'),
         subtitle: Text(
-          'Bandeja de detecciones preparada en la pestaña IA. Ninguna cámara está conectada.',
+          'Bandeja de detecciones disponible en el panel del operador. Ninguna cámara está conectada.',
         ),
       ),
       const ListTile(
         leading: Icon(Icons.person_outline),
         title: Text('Cuentas y panel de operadores'),
-        subtitle: Text('Panel de operadores pendiente de conexión al backend.'),
+        subtitle: Text(
+          'El servidor verifica el rol de la cuenta en cada operación. Solicitar ayuda no confirma atención institucional.',
+        ),
       ),
     ],
   );
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([widget.store, nearby, mapIncidents]),
+    listenable: Listenable.merge([widget.store, nearby, mapIncidents, density]),
     builder: (context, _) => Scaffold(
       appBar: AppBar(
         centerTitle: false,
@@ -323,9 +309,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             alignment: Alignment.centerLeft,
           ),
         ),
-        actions: const [
-          Chip(label: Text('PILOTO')),
-          SizedBox(width: 12),
+        actions: [
+          IconButton(
+            onPressed: dial,
+            tooltip: 'Seguridad ciudadana · (044) 298734',
+            icon: const Icon(Icons.phone_outlined),
+          ),
+          const Chip(label: Text('PILOTO')),
+          const SizedBox(width: 12),
         ],
       ),
       body: SafeArea(
@@ -354,10 +345,74 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Incidentes corroborados. Toca el mapa para explorar 500 m.',
+                              'Incidentes corroborados o revisados · últimos 7 días.',
                             ),
                             const SizedBox(height: 12),
-                            filters(),
+                            if (!historical) filters(),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Recientes · 7 días'),
+                                  selected: !historical,
+                                  onSelected: (_) => setState(() {
+                                    historical = false;
+                                    density.configure(enabled: false);
+                                  }),
+                                ),
+                                ChoiceChip(
+                                  label: const Text('Historial · 90 días'),
+                                  selected: historical,
+                                  onSelected: (_) => setState(() {
+                                    historical = true;
+                                    density.configure(enabled: true);
+                                  }),
+                                ),
+                              ],
+                            ),
+                            if (historical) ...[
+                              DropdownButton<int>(
+                                isExpanded: true,
+                                value: density.hourBand,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: -1,
+                                    child: Text('Todas las horas'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 0,
+                                    child: Text('Madrugada · 00–06 h'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 1,
+                                    child: Text('Mañana · 06–12 h'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 2,
+                                    child: Text('Tarde · 12–18 h'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 3,
+                                    child: Text('Noche · 18–24 h'),
+                                  ),
+                                ],
+                                onChanged: (v) => setState(
+                                  () =>
+                                      density.configure(enabled: true, band: v),
+                                ),
+                              ),
+                              const Text(
+                                'Todas las categorías · zonas aproximadas: amarillo 1–2; rojo 3 o más. Sin color no significa seguro.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              if (density.loading)
+                                const LinearProgressIndicator(),
+                              if (density.error != null)
+                                Text(
+                                  density.error!,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                            ],
                             const SizedBox(height: 12),
                             if (mapIncidents.loading)
                               const LinearProgressIndicator(),
@@ -368,7 +423,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               ),
                             Expanded(
                               child: MapPanel(
-                                incidents: visible,
+                                incidents: historical ? const [] : visible,
+                                overlays: historical
+                                    ? density.overlays
+                                    : const {},
                                 onIncident: communityDetails,
                                 currentLocation: nearby.position == null
                                     ? null
@@ -379,7 +437,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 onLocate: nearby.start,
                                 locating: nearby.locating,
                                 locationRadius: 500,
-                                onViewportChanged: mapIncidents.setBounds,
+                                onViewportChanged: (bounds) {
+                                  mapIncidents.setBounds(bounds);
+                                  density.setBounds(bounds);
+                                },
                                 active: tab == 0,
                               ),
                             ),
@@ -410,7 +471,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         ),
                       ),
                       settings(),
-                      AiDetectionPanel(store: aiStore),
                     ],
                   ),
                 ),
@@ -419,6 +479,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: tab >= 2
           ? null
           : FloatingActionButton.extended(
@@ -446,10 +507,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             label: 'Configuración',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.videocam_outlined),
-            label: 'IA',
           ),
         ],
       ),

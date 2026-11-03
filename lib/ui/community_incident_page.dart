@@ -167,7 +167,7 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
           ],
           const SizedBox(height: 12),
           const Text(
-            'Las fotos se comparten cuando el incidente está corroborado. Los nombres y las descripciones privadas permanecen en Mis reportes.',
+            'Las fotos se comparten cuando el incidente está corroborado o verificado. Los nombres y las descripciones privadas permanecen en Mis reportes.',
           ),
           TextButton.icon(
             onPressed: load,

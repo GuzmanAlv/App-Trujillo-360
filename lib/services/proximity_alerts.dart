@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../models/incident.dart';
 
-/// A new incident is eligible for 15 minutes, independently of corroboration.
+/// Only public incidents in the rolling seven-day window can alert once/session.
 class ProximityAlertPolicy {
   ProximityAlertPolicy({DateTime? startedAt})
     : startedAt = startedAt ?? DateTime.now();
@@ -16,10 +16,9 @@ class ProximityAlertPolicy {
     DateTime now,
   ) => items.where((i) {
     final age = now.difference(i.createdAt);
-    if (i.createdAt.isBefore(startedAt) ||
-        age.isNegative ||
-        age > const Duration(minutes: 15) ||
-        !['pending', 'corroborated', 'verified'].contains(i.remoteStatus) ||
+    if (age.isNegative ||
+        age >= const Duration(days: 7) ||
+        !i.isCommunityVisible ||
         distance(i) > 500 ||
         seen.contains(i.id)) {
       return false;

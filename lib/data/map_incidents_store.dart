@@ -39,11 +39,7 @@ class MapIncidentsStore extends ChangeNotifier {
   List<Incident> filtered(String category) => items
       .where(
         (i) =>
-            (i.remoteStatus == 'corroborated' ||
-                i.remoteStatus == 'verified') &&
-            i.corroborationCount >= 3 &&
-            !i.needsReview &&
-            (category == 'Todos' || i.type == category),
+            i.isCommunityVisible && (category == 'Todos' || i.type == category),
       )
       .toList();
   void setBounds(LatLngBounds value) {

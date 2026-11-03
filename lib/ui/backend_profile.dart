@@ -29,7 +29,7 @@ class _BackendProfileState extends State<BackendProfile> {
     try {
       final base = Uri.parse(endpoint);
       final localDebug =
-          kDebugMode &&
+          (kDebugMode || AppConfig.usbBackend) &&
           base.scheme == 'http' &&
           ['127.0.0.1', 'localhost'].contains(base.host);
       if ((!localDebug && base.scheme != 'https') ||
@@ -55,7 +55,8 @@ class _BackendProfileState extends State<BackendProfile> {
           if (data['id'] is! String || data['status'] != 'active') {
             throw const FormatException();
           }
-          status = 'Cuenta conectada a Supabase.';
+          status =
+              'Cuenta conectada a Supabase.\nRol: ${['operator', 'admin'].contains(data['role']) ? 'Operador autorizado' : 'Ciudadano'}';
         } else {
           status = switch (response.statusCode) {
             401 =>

@@ -1,4 +1,6 @@
 class AppConfig {
+  static const localPilot = bool.fromEnvironment('LOCAL_PILOT');
+  static const usbBackend = bool.fromEnvironment('USB_BACKEND');
   static Duration backendRequestTimeout(Duration normal) =>
       Uri.tryParse(
             const String.fromEnvironment('BACKEND_URL'),

@@ -25,8 +25,10 @@ class MapPanel extends StatefulWidget {
     this.locating = false,
     this.locationRadius = 0,
     this.active = true,
+    this.overlays = const {},
   });
   final List<Incident> incidents;
+  final Set<Circle> overlays;
   final LatLng? currentLocation;
   final VoidCallback? onLocate;
   final ValueChanged<LatLngBounds>? onViewportChanged;
@@ -111,6 +113,9 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant MapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.selected != null && widget.selected != oldWidget.selected) {
+      controller?.animateCamera(CameraUpdate.newLatLng(widget.selected!));
+    }
     if (widget.onLocate != null && widget.active) {
       centerIfRequested();
     }
@@ -277,10 +282,13 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                       }
                     },
                     onCameraIdle: reportViewport,
-                    circles: locationHighlight(
-                      exploredLocation ?? displayedLocation,
-                      widget.locationRadius,
-                    ),
+                    circles: {
+                      ...widget.overlays,
+                      ...locationHighlight(
+                        displayedLocation,
+                        widget.locationRadius,
+                      ),
+                    },
                     onTap: selectMapLocation,
                     myLocationButtonEnabled: false,
                     zoomControlsEnabled: false,
@@ -334,6 +342,8 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                         Marker(
                           markerId: const MarkerId('selected'),
                           position: widget.selected!,
+                          draggable: widget.onPick != null,
+                          onDragEnd: widget.onPick,
                         ),
                     },
                   )
@@ -342,8 +352,8 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(22),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                        child: ListView(
+                          shrinkWrap: true,
                           children: [
                             const Icon(
                               Icons.map_outlined,

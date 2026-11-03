@@ -31,7 +31,7 @@ class ReportSender {
     try {
       final base = Uri.parse(endpoint);
       final local =
-          kDebugMode &&
+          (kDebugMode || AppConfig.usbBackend) &&
           base.scheme == 'http' &&
           ['localhost', '127.0.0.1'].contains(base.host);
       if (base.host.isEmpty ||
@@ -63,6 +63,7 @@ class ReportSender {
             'longitude': report.longitude,
             'occurred_at': report.createdAt.toUtc().toIso8601String(),
             'photos': photos,
+            if (report.priority != null) 'priority': report.priority,
           });
         final response =
             await (() async => http.Response.fromStream(
@@ -75,6 +76,7 @@ class ReportSender {
           final data = jsonDecode(response.body) as Map<String, dynamic>;
           if (data['request_id'] != report.id ||
               data['id'] is! String ||
+              (report.priority != null && data['help_request_id'] is! String) ||
               (report.photos.isNotEmpty &&
                   data['photo_count'] != report.photos.length)) {
             throw const FormatException();
@@ -89,11 +91,14 @@ class ReportSender {
           )) {
             return 'Recibido por el servidor. No se pudo actualizar la copia local; reintenta para sincronizarla.';
           }
-          return data['status'] == 'corroborated'
+          final publication = data['status'] == 'corroborated'
               ? 'Reporte enviado. Incidente corroborado por tres o más cuentas.'
               : data['needs_review'] == true
               ? 'Reporte enviado. Hay varias coincidencias y requiere revisión.'
               : 'Reporte enviado: ${data['corroboration_count'] ?? 1} de 3 cuentas para corroborar.';
+          return report.priority == null
+              ? publication
+              : '$publication En la bandeja del operador · urgencia ${report.priority}. Consulta Mis solicitudes de ayuda; no confirma atención inmediata.';
         }
         return switch (response.statusCode) {
           401 => 'Sesión vencida. Inicia sesión nuevamente.',

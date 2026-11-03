@@ -1,6 +1,42 @@
-# Trujillo 360 — primera base Flutter
+# Trujillo 360
 
-## Abrir en Visual Studio Code
+## Continuar el proyecto desde otra laptop
+
+La versión actual es la app integrada de ciudadanos y operadores, conectada al
+backend público https://trujillo-360-api.onrender.com. La app instalada puede
+usarse con internet sin USB ni laptop. El código compartido está en `main`.
+
+**Leer primero [la guía para continuar en otra laptop y su texto para ChatGPT](docs/continuar-en-otra-laptop.md).**
+Incluye el estado real, instalación, permisos de Google, configuración de Render
+y pruebas. Los avisos FCM siguen pendientes de habilitar una credencial: Google
+aplica `iam.disableServiceAccountKeyCreation`. No se ha generado ninguna clave.
+
+Inicio Android con el backend público:
+
+```powershell
+flutter pub get
+flutter run --dart-define=MAPS_ENABLED=true --dart-define=BACKEND_URL=https://trujillo-360-api.onrender.com
+```
+
+La clave restringida de Maps y la huella de la firma de Android se configuran por
+equipo; revisar la guía. No hacen falta credenciales de Supabase para usar el API
+público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
+
+## Flujo integrado de ciudadano y operador
+
+La aplicación conserva cuenta Google, reportes, fotos, filtros y configuración.
+Agrega solicitudes privadas, revisión por operadores autorizados y concentración
+histórica por horario. Consulta [las reglas y pasos de prueba](docs/integrated-workflows.md).
+El prototipo aislado LOCAL_PILOT ya no se usa como pantalla de inicio. El resto de este
+README describe la base original y contiene información histórica.
+
+## Referencia histórica de la primera base
+
+Las secciones siguientes describen entregas iniciales y contienen funciones que
+ya fueron completadas o sustituidas. Para el estado actual usar las guías enlazadas
+arriba; no seguir estas instrucciones antiguas para configurar notificaciones.
+
+### Abrir en Visual Studio Code
 Abre esta carpeta con VS Code e instala las extensiones Flutter y Dart. En este equipo el SDK está en `C:/Users/PC/Documents/Flutter/flutter`: si VS Code pregunta por el SDK, selecciona esa carpeta. Android Studio se utiliza para administrar Android SDK y el emulador.
 
 En la terminal del proyecto:

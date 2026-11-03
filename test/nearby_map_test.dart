@@ -42,7 +42,7 @@ Incident incident(String id, double lat) => Incident(
   description: '',
   latitude: lat,
   longitude: -79.02,
-  createdAt: DateTime(2026),
+  createdAt: DateTime.now(),
   remoteStatus: 'corroborated',
   corroborationCount: 3,
 );
@@ -143,7 +143,7 @@ void main() {
       await nearby.start();
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
-      expect(find.text('Robo · pendiente'), findsOneWidget);
+      expect(find.text('Robo · pendiente'), findsNothing);
       expect(find.text('Robo · confirmado'), findsOneWidget);
       expect(find.text('Auxilio · auxilio'), findsOneWidget);
       expect(find.text('Robo · lejano'), findsNothing);
@@ -164,10 +164,10 @@ void main() {
             ),
       );
       await tester.tap(
-        find.descendant(of: statusFilter, matching: find.text('Todos')),
+        find.descendant(of: statusFilter, matching: find.text('Publicados')),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Robo · pendiente'), findsOneWidget);
+      expect(find.text('Robo · pendiente'), findsNothing);
       await tester.tap(find.text('Mis reportes'));
       await tester.pumpAndSettle();
       expect(find.text('Corroborados'), findsNothing);
@@ -178,70 +178,72 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     },
   );
-  testWidgets('Tocar el mapa mueve solo el círculo y volver restaura el GPS', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    var locateCalls = 0;
-    const gps = LatLng(-8.11, -79.02);
-    const chosen = LatLng(-8.15, -79.05);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MapPanel(
-          currentLocation: gps,
-          locationRadius: 500,
-          onLocate: () => locateCalls++,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final dynamic state = tester.state(find.byType(MapPanel));
-    await tester.runAsync(() async {
-      await state.prepareLocationIcon();
-    });
-    await tester.pumpAndSettle();
-    GoogleMap renderedMap() {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      final root =
-          state.build(tester.element(find.byType(MapPanel))) as ClipRRect;
+  testWidgets(
+    'Explorar mueve el punto amarillo sin círculo y conserva el GPS',
+    (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      return ((root.child as Stack).children.first as Positioned).child
-          as GoogleMap;
-    }
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      var locateCalls = 0;
+      const gps = LatLng(-8.11, -79.02);
+      const chosen = LatLng(-8.15, -79.05);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MapPanel(
+            currentLocation: gps,
+            locationRadius: 500,
+            onLocate: () => locateCalls++,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final dynamic state = tester.state(find.byType(MapPanel));
+      await tester.runAsync(() async {
+        await state.prepareLocationIcon();
+      });
+      await tester.pumpAndSettle();
+      GoogleMap renderedMap() {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final root =
+            state.build(tester.element(find.byType(MapPanel))) as ClipRRect;
+        debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+        return ((root.child as Stack).children.first as Positioned).child
+            as GoogleMap;
+      }
 
-    var map = renderedMap();
-    expect(map.circles.single.radius, 500);
-    expect(map.circles.single.center, gps);
-    map.onTap!(chosen);
-    await tester.pumpAndSettle();
-    map = renderedMap();
-    expect(map.circles.single.center, chosen);
-    expect(
-      map.markers
-          .singleWhere((m) => m.markerId.value == 'exploration_center')
-          .position,
-      chosen,
-    );
-    expect(
-      map.markers
-          .singleWhere((m) => m.markerId.value == 'my_location')
-          .position,
-      gps,
-    );
-    state.locate();
-    await tester.pumpAndSettle();
-    expect(renderedMap().circles.single.center, gps);
-    expect(
-      renderedMap().markers.where(
-        (m) => m.markerId.value == 'exploration_center',
-      ),
-      isEmpty,
-    );
-    expect(locateCalls, 1);
-    await tester.pumpWidget(const SizedBox.shrink());
-    debugDefaultTargetPlatformOverride = null;
-  }, skip: !AppConfig.mapsEnabled);
+      var map = renderedMap();
+      expect(map.circles.single.radius, 500);
+      expect(map.circles.single.center, gps);
+      map.onTap!(chosen);
+      await tester.pumpAndSettle();
+      map = renderedMap();
+      expect(map.circles.single.center, gps);
+      expect(
+        map.markers
+            .singleWhere((m) => m.markerId.value == 'exploration_center')
+            .position,
+        chosen,
+      );
+      expect(
+        map.markers
+            .singleWhere((m) => m.markerId.value == 'my_location')
+            .position,
+        gps,
+      );
+      state.locate();
+      await tester.pumpAndSettle();
+      expect(renderedMap().circles.single.center, gps);
+      expect(
+        renderedMap().markers.where(
+          (m) => m.markerId.value == 'exploration_center',
+        ),
+        isEmpty,
+      );
+      expect(locateCalls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    },
+    skip: !AppConfig.mapsEnabled,
+  );
   test(
     'Una respuesta anterior no repuebla incidentes tras cambiar de cuenta',
     () async {

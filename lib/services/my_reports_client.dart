@@ -14,7 +14,7 @@ Future<List<Incident>> fetchMyReports() async {
   final user = FirebaseAuth.instance.currentUser!;
   final base = Uri.parse(ReportSender.endpoint);
   final local =
-      kDebugMode &&
+      (kDebugMode || AppConfig.usbBackend) &&
       base.scheme == 'http' &&
       ['localhost', '127.0.0.1'].contains(base.host);
   if (base.host.isEmpty ||

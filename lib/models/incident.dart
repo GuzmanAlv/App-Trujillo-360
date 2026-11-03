@@ -15,6 +15,7 @@ class Incident {
     this.corroborationCount = 0,
     this.needsReview = false,
     this.photos = const [],
+    this.priority,
   });
   final String id, type, place, description;
   final double latitude, longitude;
@@ -24,6 +25,14 @@ class Incident {
   final int corroborationCount;
   final bool needsReview;
   final List<ReportPhoto> photos;
+  final String? priority;
+  bool get isCommunityVisible =>
+      !needsReview &&
+      (remoteStatus == 'verified' ||
+          (remoteStatus == 'corroborated' && corroborationCount >= 3));
+  bool recentAt(DateTime now) =>
+      !createdAt.isAfter(now) &&
+      now.difference(createdAt) < const Duration(days: 7);
   String get deliveryLabel => remoteId != null
       ? (remoteStatus == 'corroborated'
             ? 'Corroborado por la comunidad'
@@ -58,6 +67,7 @@ class Incident {
     corroborationCount: count,
     needsReview: review,
     photos: photos,
+    priority: priority,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -73,6 +83,7 @@ class Incident {
     'corroborationCount': corroborationCount,
     'needsReview': needsReview,
     'photos': photos.map((photo) => photo.toJson()).toList(),
+    'priority': priority,
   };
   factory Incident.fromJson(Map<String, dynamic> j) {
     final lat = (j['latitude'] as num).toDouble();
@@ -94,6 +105,7 @@ class Incident {
       corroborationCount:
           j['corroborationCount'] as int? ?? (j['remoteId'] == null ? 0 : 1),
       needsReview: j['needsReview'] as bool? ?? false,
+      priority: j['priority'] as String?,
       photos: ((j['photos'] as List?) ?? const [])
           .map(
             (photo) =>

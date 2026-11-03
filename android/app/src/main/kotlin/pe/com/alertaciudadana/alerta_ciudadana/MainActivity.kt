@@ -7,8 +7,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -22,9 +24,31 @@ class MainActivity : FlutterActivity() {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(
             alertChannel, "Incidencias a 500 metros", NotificationManager.IMPORTANCE_HIGH))
+        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(
+            "trujillo_push", "Avisos de Trujillo 360", NotificationManager.IMPORTANCE_HIGH))
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "openNotificationSettings" -> {
+                    val target = if (Build.VERSION.SDK_INT >= 26)
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                    startActivity(target)
+                    result.success(null)
+                }
+                "clearPush" -> { manager.cancelAll(); result.success(null) }
+                "takePush" -> {
+                    result.success(intent.getStringExtra("push_payload"))
+                    intent.removeExtra("push_payload")
+                }
+                "dial" -> {
+                    try {
+                        startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:044298734")))
+                        result.success(null)
+                    } catch (error: Exception) {
+                        result.error("dial_unavailable", "No se pudo abrir el teléfono", null)
+                    }
+                }
                 "enable" -> {
                     if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                         if (permissionResult != null) result.success(false)
@@ -34,17 +58,18 @@ class MainActivity : FlutterActivity() {
                         }
                     } else result.success(manager.areNotificationsEnabled())
                 }
-                "show" -> {
+                "show", "showPush" -> {
+                    val isPush = call.method == "showPush"
                     val id = call.argument<String>("id") ?: ""
                     val payload = call.argument<String>("payload") ?: ""
                     if (manager.areNotificationsEnabled()) {
                         val target = Intent(this, MainActivity::class.java)
                             .setAction("trujillo360.alert.$id")
                             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            .putExtra("nearby_payload", payload)
+                            .putExtra(if (isPush) "push_payload" else "nearby_payload", payload)
                         val pending = PendingIntent.getActivity(this, id.hashCode(), target,
                             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, alertChannel) else Notification.Builder(this)
+                        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (isPush) "trujillo_push" else alertChannel) else Notification.Builder(this)
                         val notification = builder
                             .setSmallIcon(R.drawable.ic_notification)
                             .setContentTitle(call.argument<String>("title"))
@@ -69,6 +94,10 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        intent.getStringExtra("push_payload")?.let {
+            channel?.invokeMethod("openPush", it)
+            intent.removeExtra("push_payload")
+        }
         intent.getStringExtra("nearby_payload")?.let {
             channel?.invokeMethod("open", it)
             intent.removeExtra("nearby_payload")

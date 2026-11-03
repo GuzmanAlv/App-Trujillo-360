@@ -33,6 +33,8 @@ class NearbyReportsStore extends ChangeNotifier {
     return _items
         .where(
           (i) =>
+              i.isCommunityVisible &&
+              i.recentAt(DateTime.now()) &&
               (category == 'Todos' || i.type == category) &&
               distance(i) <= searchRadius,
         )

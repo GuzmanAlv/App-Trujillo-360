@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../services/report_sender.dart';
@@ -18,8 +19,17 @@ import 'report_style.dart';
 const categories = ['Todos', 'Robo', 'Auxilio', 'Agresión', 'Riesgo'];
 
 class ReportForm extends StatefulWidget {
-  const ReportForm({super.key, required this.store});
+  const ReportForm({
+    super.key,
+    required this.store,
+    this.onLocalSubmit,
+    this.requestHelp = false,
+    this.serverHelp = false,
+  });
   final IncidentStore store;
+  final Future<bool> Function(Incident, String)? onLocalSubmit;
+  final bool requestHelp;
+  final bool serverHelp;
   @override
   State<ReportForm> createState() => _ReportFormState();
 }
@@ -34,11 +44,56 @@ class _ReportFormState extends State<ReportForm> {
   bool pickingPhotos = false, photosPersisted = false;
   final List<ReportPhoto> photos = [];
   final picker = ImagePicker();
+  DateTime occurredAt = DateTime.now();
+  String priority = 'Media';
+  String? gpsAccuracy;
+  late final draftId = ReportSender.requestId();
+  bool get unifiedReport => !widget.requestHelp && widget.onLocalSubmit == null;
+
+  Future<void> dialSecurity() async {
+    try {
+      await const MethodChannel(
+        'trujillo360/proximity',
+      ).invokeMethod<void>('dial');
+    } catch (_) {
+      message('No se pudo abrir el teléfono. Número: (044) 298734.');
+    }
+  }
+
+  Future<void> pickOccurredAt() async {
+    final now = DateTime.now();
+    final day = await showDatePicker(
+      context: context,
+      initialDate: occurredAt,
+      firstDate: now.subtract(const Duration(days: 6)),
+      lastDate: now,
+    );
+    if (day == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(occurredAt),
+    );
+    if (time == null || !mounted) return;
+    final value = DateTime(
+      day.year,
+      day.month,
+      day.day,
+      time.hour,
+      time.minute,
+    );
+    if (value.isAfter(DateTime.now())) {
+      message('La hora del hecho no puede estar en el futuro.');
+      return;
+    }
+    setState(() => occurredAt = value);
+  }
 
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    if (!widget.serverHelp &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android) {
       recoverPhotos();
     }
   }
@@ -146,6 +201,7 @@ class _ReportFormState extends State<ReportForm> {
       selected = p;
       lat.text = p.latitude.toStringAsFixed(6);
       lng.text = p.longitude.toStringAsFixed(6);
+      gpsAccuracy = null;
     });
   }
 
@@ -159,7 +215,13 @@ class _ReportFormState extends State<ReportForm> {
     setState(() => locating = true);
     try {
       final p = await LocationService().current();
-      if (mounted) select(LatLng(p.latitude, p.longitude));
+      if (mounted) {
+        select(LatLng(p.latitude, p.longitude));
+        setState(
+          () => gpsAccuracy =
+              'Precisión GPS aproximada: ±${p.accuracy.round()} m. Ajusta el punto si el hecho ocurrió en otro lugar.',
+        );
+      }
     } on LocationFailure catch (e) {
       message(e.message);
     } catch (_) {
@@ -183,7 +245,7 @@ class _ReportFormState extends State<ReportForm> {
     final user = Firebase.apps.isEmpty
         ? null
         : FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    if (user == null && (widget.onLocalSubmit == null || widget.serverHelp)) {
       message(
         'Inicia sesión con Google en Configuración para enviar reportes.',
       );
@@ -192,19 +254,45 @@ class _ReportFormState extends State<ReportForm> {
     setState(() => saving = true);
     final now = DateTime.now();
     final report = Incident(
-      id: ReportSender.requestId(),
-      ownerUid: user.uid,
+      id: draftId,
+      ownerUid: widget.onLocalSubmit != null && !widget.serverHelp
+          ? 'local-pilot'
+          : user!.uid,
       type: category,
       place: place.text.trim(),
       description: description.text.trim(),
       latitude: double.parse(lat.text.replaceAll(',', '.')),
       longitude: double.parse(lng.text.replaceAll(',', '.')),
-      createdAt: now,
+      createdAt: !widget.requestHelp ? occurredAt : now,
       photos: List.unmodifiable(photos),
+      priority: unifiedReport ? priority : null,
     );
-    final ok = await widget.store.add(report);
+    bool ok;
+    try {
+      ok = widget.onLocalSubmit != null
+          ? await widget.onLocalSubmit!(report, priority)
+          : await widget.store.add(report);
+    } catch (e) {
+      if (mounted) {
+        setState(() => saving = false);
+        message(
+          e is StateError
+              ? e.message.toString()
+              : 'No se pudo enviar. Conserva los datos y vuelve a intentar.',
+        );
+      }
+      return;
+    }
     photosPersisted = ok;
-    final result = ok
+    final result = widget.serverHelp
+        ? (ok
+              ? 'Solicitud recibida por la plataforma. Consulta su seguimiento; no confirma atención ni envío de personal.'
+              : 'No se confirmó la recepción de la solicitud. Vuelve a intentar.')
+        : widget.onLocalSubmit != null
+        ? (ok
+              ? 'Guardado en la prueba local. No se avisó a ninguna institución.'
+              : 'No se pudo guardar. Intenta nuevamente.')
+        : ok
         ? await ReportSender.send(report, widget.store)
         : 'No se pudo guardar la copia local. Intenta nuevamente.';
     if (!mounted) return;
@@ -224,7 +312,15 @@ class _ReportFormState extends State<ReportForm> {
   Widget build(BuildContext context) => PopScope(
     canPop: !saving && !pickingPhotos,
     child: Scaffold(
-      appBar: AppBar(title: const Text('Nuevo reporte')),
+      appBar: AppBar(
+        title: Text(
+          widget.requestHelp
+              ? (widget.serverHelp
+                    ? 'Solicitar ayuda'
+                    : 'Solicitar ayuda · Prueba')
+              : 'Nuevo reporte',
+        ),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
@@ -235,9 +331,52 @@ class _ReportFormState extends State<ReportForm> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Se enviará a Trujillo 360 como pendiente de verificación. No contacta a emergencias.',
+                  Text(
+                    widget.serverHelp
+                        ? 'Solicitud para revisión de un operador del proyecto. No contacta automáticamente a emergencias ni confirma envío de personal.'
+                        : widget.onLocalSubmit != null
+                        ? 'PRUEBA LOCAL: este caso solo se guarda en tu celular. Ninguna institución recibirá el aviso.'
+                        : 'Se enviará al operador con el nivel de urgencia indicado. Solo será público al corroborarse o verificarse. No confirma atención inmediata.',
                   ),
+                  if (widget.requestHelp || unifiedReport) ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: priority,
+                      decoration: const InputDecoration(
+                        labelText: 'Nivel de urgencia',
+                      ),
+                      items: ['Baja', 'Media', 'Alta']
+                          .map(
+                            (p) => DropdownMenuItem(value: p, child: Text(p)),
+                          )
+                          .toList(),
+                      onChanged: saving
+                          ? null
+                          : (value) => setState(() => priority = value!),
+                    ),
+                    const Text(
+                      'El operador debe revisar la prioridad. No depende del número de reportes.',
+                    ),
+                    if (unifiedReport && priority == 'Alta') ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: saving ? null : dialSecurity,
+                        icon: const Icon(Icons.phone_outlined),
+                        label: const Text('Llamar a Seguridad Ciudadana'),
+                      ),
+                      const Text(
+                        '(044) 298734 · Abre el marcador. El reporte se envía al pulsar Enviar reporte, aunque no llames.',
+                      ),
+                    ],
+                  ],
+                  if (!widget.requestHelp)
+                    TextButton.icon(
+                      onPressed: pickOccurredAt,
+                      icon: const Icon(Icons.schedule),
+                      label: Text(
+                        'Hora del hecho: ${occurredAt.day}/${occurredAt.month} ${occurredAt.hour.toString().padLeft(2, '0')}:${occurredAt.minute.toString().padLeft(2, '0')} · Cambiar',
+                      ),
+                    ),
                   const SizedBox(height: 20),
                   DropdownButtonFormField<String>(
                     initialValue: category,
@@ -277,7 +416,7 @@ class _ReportFormState extends State<ReportForm> {
                     controller: place,
                     maxLength: 100,
                     decoration: const InputDecoration(
-                      labelText: 'Lugar o referencia',
+                      labelText: 'Lugar o referencia (puerta, calle, esquina)',
                     ),
                     validator: (v) => (v ?? '').trim().length < 3
                         ? 'Escribe una referencia de al menos 3 caracteres.'
@@ -292,73 +431,79 @@ class _ReportFormState extends State<ReportForm> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    'Fotos del reporte (opcional)',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Hasta 3 fotos, de 2 MB cada una. Puedes ampliar una foto antes de enviar.',
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final photo in photos)
-                        SizedBox(
-                          width: 100,
-                          height: 110,
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: ReportPhotoView(photo: photo),
-                              ),
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                child: IconButton.filled(
-                                  tooltip: 'Quitar foto',
-                                  onPressed: saving || pickingPhotos
-                                      ? null
-                                      : () {
-                                          setState(() => photos.remove(photo));
-                                          unawaited(discard(photo));
-                                        },
-                                  icon: const Icon(Icons.close, size: 18),
+                  if (!widget.serverHelp) ...[
+                    Text(
+                      'Fotos del reporte (opcional)',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.onLocalSubmit != null
+                          ? 'Hasta 3 fotos de 2 MB. En esta prueba permanecen privadas, incluso si el caso se publica en el mapa.'
+                          : 'Hasta 3 fotos de 2 MB. Se compartirán al corroborarse o verificarse el incidente. Puedes ampliarlas antes de enviar.',
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final photo in photos)
+                          SizedBox(
+                            width: 100,
+                            height: 110,
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: ReportPhotoView(photo: photo),
                                 ),
-                              ),
-                            ],
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: IconButton.filled(
+                                    tooltip: 'Quitar foto',
+                                    onPressed: saving || pickingPhotos
+                                        ? null
+                                        : () {
+                                            setState(
+                                              () => photos.remove(photo),
+                                            );
+                                            unawaited(discard(photo));
+                                          },
+                                    icon: const Icon(Icons.close, size: 18),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 12,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed:
+                              saving ||
+                                  pickingPhotos ||
+                                  photos.length >= PhotoStore.maxPhotos
+                              ? null
+                              : () => pickPhotos(camera: false),
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Galería'),
                         ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 12,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed:
-                            saving ||
-                                pickingPhotos ||
-                                photos.length >= PhotoStore.maxPhotos
-                            ? null
-                            : () => pickPhotos(camera: false),
-                        icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('Galería'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed:
-                            saving ||
-                                pickingPhotos ||
-                                photos.length >= PhotoStore.maxPhotos
-                            ? null
-                            : () => pickPhotos(camera: true),
-                        icon: const Icon(Icons.camera_alt_outlined),
-                        label: const Text('Tomar foto'),
-                      ),
-                    ],
-                  ),
-                  if (pickingPhotos) const LinearProgressIndicator(),
+                        OutlinedButton.icon(
+                          onPressed:
+                              saving ||
+                                  pickingPhotos ||
+                                  photos.length >= PhotoStore.maxPhotos
+                              ? null
+                              : () => pickPhotos(camera: true),
+                          icon: const Icon(Icons.camera_alt_outlined),
+                          label: const Text('Tomar foto'),
+                        ),
+                      ],
+                    ),
+                    if (pickingPhotos) const LinearProgressIndicator(),
+                  ],
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 240,
@@ -371,6 +516,7 @@ class _ReportFormState extends State<ReportForm> {
                       locating ? 'Buscando ubicación…' : 'Usar mi ubicación',
                     ),
                   ),
+                  if (gpsAccuracy != null) Text(gpsAccuracy!),
                   Row(
                     children: [
                       Expanded(
@@ -416,7 +562,15 @@ class _ReportFormState extends State<ReportForm> {
                         ? null
                         : save,
                     icon: const Icon(Icons.save_outlined),
-                    label: Text(saving ? 'Enviando…' : 'Enviar reporte'),
+                    label: Text(
+                      saving
+                          ? 'Guardando…'
+                          : widget.requestHelp
+                          ? (widget.serverHelp
+                                ? 'Enviar solicitud de ayuda'
+                                : 'Guardar solicitud de prueba')
+                          : 'Enviar reporte',
+                    ),
                   ),
                 ],
               ),

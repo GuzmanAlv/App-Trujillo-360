@@ -10,6 +10,7 @@ import '../models/incident.dart';
 import '../services/nearby_reports_client.dart';
 import 'report_style.dart';
 import 'nearby_incident_page.dart';
+import 'workflow_panel.dart';
 
 class ReportsPanel extends StatefulWidget {
   const ReportsPanel({
@@ -134,11 +135,9 @@ class _ReportsPanelState extends State<ReportsPanel> {
         .where(
           (i) =>
               mine ||
-              !corroboratedOnly ||
-              ((i.remoteStatus == 'corroborated' ||
-                      i.remoteStatus == 'verified') &&
-                  i.corroborationCount >= 3 &&
-                  !i.needsReview),
+              (i.isCommunityVisible &&
+                  i.recentAt(DateTime.now()) &&
+                  (!corroboratedOnly || i.remoteStatus == 'corroborated')),
         )
         .toList();
     if (!mine && position != null) {
@@ -155,6 +154,19 @@ class _ReportsPanelState extends State<ReportsPanel> {
     final reports = items;
     return Column(
       children: [
+        TextButton.icon(
+          onPressed: () => Navigator.push<void>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => Scaffold(
+                appBar: AppBar(title: const Text('Mis solicitudes de ayuda')),
+                body: const WorkflowPanel(),
+              ),
+            ),
+          ),
+          icon: const Icon(Icons.sos),
+          label: const Text('Mis solicitudes de ayuda'),
+        ),
         SegmentedButton<bool>(
           segments: const [
             ButtonSegment(
@@ -181,7 +193,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
         if (!mine) ...[
           SegmentedButton<bool>(
             segments: const [
-              ButtonSegment(value: false, label: Text('Todos')),
+              ButtonSegment(value: false, label: Text('Publicados')),
               ButtonSegment(
                 value: true,
                 label: Text('Corroborados'),
@@ -197,7 +209,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
         Text(
           mine
               ? 'Tus reportes, estés donde estés.'
-              : 'Reportes de la comunidad a menos de 1 km.',
+              : 'Publicados a menos de 1 km · últimos 7 días.',
         ),
         if (mine) ...[
           TextButton.icon(

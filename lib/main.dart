@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'data/incident_store.dart';
+import 'services/push_service.dart';
+import 'dart:async';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +30,7 @@ class _StartupAppState extends State<StartupApp> {
     setState(() => failed = false);
     try {
       await Firebase.initializeApp();
+      unawaited(PushService.instance.start().catchError((Object _) {}));
       final loaded = IncidentStore(await SharedPreferences.getInstance())
         ..load();
       if (mounted) setState(() => store = loaded);

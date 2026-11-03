@@ -1,5 +1,14 @@
 # Notificaciones por Firebase Cloud Messaging
 
+Estado al 3 de noviembre de 2026: backend ad57a66 desplegado en Render desde
+codex/notificaciones-fcm, deploy dep-dbl0sfvf3r2c73850340. /ready confirma base 11,
+workflows 1 y push 1. El emisor permanece deshabilitado: la organización aplica
+iam.disableServiceAccountKeyCreation y la cuenta actual no tiene permisos
+orgpolicy.policies.create/delete/update. No se generó ni descargó ninguna clave.
+La cuenta trujillo-notificaciones está creada con roles/firebasecloudmessaging.admin.
+El propietario/administrador debe resolver la política antes de probar envíos reales.
+No se cambió la política de la organización ni se contrató un plan de pago.
+
 La app Android usa la configuración Firebase existente. Configuración →
 Notificaciones reemplaza las antiguas alertas por consulta en primer plano.
 Cada instalación/cuenta puede activar una zona fija (100–3000 m) y los operadores
@@ -43,9 +52,8 @@ transacción que siempre revierte. No envía mensajes a Firebase.
 
 ## Servidor público y prueba real
 
-El APK USB todavía requiere laptop y servidor local para generar y despachar
-avisos. Para operar sin laptop, desplegar este backend en el servicio público
-existente, con la credencial como Secret File (GOOGLE_APPLICATION_CREDENTIALS)
+Un APK USB requiere laptop y servidor local para generar y despachar avisos.
+El backend público ya está desplegado; aún falta habilitar la credencial como Secret File (GOOGLE_APPLICATION_CREDENTIALS)
 o variable secreta FIREBASE_SERVICE_ACCOUNT_JSON, y PUSH_ENABLED=true. Recompilar
 el APK con BACKEND_URL=https://trujillo-360-api.onrender.com, sin USB_BACKEND.
 El proceso del servidor debe permanecer disponible: un alojamiento suspendido

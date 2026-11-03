@@ -8,7 +8,7 @@ import 'package:geolocator/geolocator.dart';
 
 void main() {
   final start = DateTime.utc(2026, 10, 15, 10);
-  Incident entry(String id, {int seconds = 10, String status = 'pending'}) =>
+  Incident entry(String id, {int seconds = 10, String status = 'verified'}) =>
       Incident(
         id: id,
         type: 'Robo',
@@ -21,14 +21,14 @@ void main() {
       );
 
   test(
-    'Alerta pendientes hasta 500 m una vez; ignora antiguos, futuros y cerrados',
+    'Alerta publicados hasta 500 m una vez; ignora siete días, futuros y cerrados',
     () {
       final policy = ProximityAlertPolicy(startedAt: start);
       final items = [
         entry('inside'),
         entry('boundary'),
         entry('outside'),
-        entry('old', seconds: -1),
+        entry('old', seconds: -604800),
         entry('future', seconds: 100),
         entry('closed', status: 'closed'),
         entry('discarded', status: 'discarded'),
@@ -60,9 +60,11 @@ void main() {
       expect(policy.collect([item], (_) => 600, now), isEmpty);
       expect(policy.collect([item], (_) => 400, now), [item]);
       expect(
-        ProximityAlertPolicy(
-          startedAt: start,
-        ).collect([item], (_) => 100, start.add(const Duration(minutes: 16))),
+        ProximityAlertPolicy(startedAt: start).collect(
+          [item],
+          (_) => 100,
+          start.add(const Duration(days: 7, seconds: 10)),
+        ),
         isEmpty,
       );
     },
