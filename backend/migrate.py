@@ -54,7 +54,26 @@ def main():
         result_type = conn.execute("SELECT pg_get_function_result('trujillo.incident_reports(uuid)'::regprocedure)").fetchone()[0]
         if 'place text' not in result_type:
             conn.execute((ROOT / 'migrations/011_report_places_patch.sql').read_text(encoding='utf-8'))
-    print('Migración 11 lista. Fotos y referencias comunitarias habilitadas.')
+        if not conn.execute("SELECT to_regclass('trujillo.workflow_migrations')").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/012_workflows.sql').read_text(encoding='utf-8'))
+        conn.execute('GRANT SELECT ON trujillo.workflow_migrations TO trujillo_api')
+        conn.execute('DROP POLICY IF EXISTS workflow_version_read ON trujillo.workflow_migrations')
+        conn.execute('CREATE POLICY workflow_version_read ON trujillo.workflow_migrations FOR SELECT TO trujillo_api USING(true)')
+        if not conn.execute("SELECT to_regclass('trujillo.push_migrations')").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/013_push.sql').read_text(encoding='utf-8'))
+        # Refresh compatible public readers using the shared publication rule.
+        for filename in ('007_nearby_identity_fix.sql','010_community_groups.sql','011_report_places_patch.sql'):
+            source = (ROOT / 'migrations' / filename).read_text(encoding='utf-8')
+            if filename == '010_community_groups.sql':
+                source = source.split('-- Shared summaries')[0]
+            source = source.replace('CREATE FUNCTION trujillo.nearby_incidents', 'CREATE OR REPLACE FUNCTION trujillo.nearby_incidents')
+            source = source.replace("i.status IN ('pending','corroborated','verified')", 'trujillo.is_public_incident(i.status,i.corroboration_count,i.needs_review)')
+            source = source.replace("i.status IN ('corroborated','verified') AND i.corroboration_count >= 3 AND NOT i.needs_review", 'trujillo.is_public_incident(i.status,i.corroboration_count,i.needs_review)')
+            source = source.replace("i.status IN ('corroborated','verified') AND i.corroboration_count>=3\n AND NOT i.needs_review", 'trujillo.is_public_incident(i.status,i.corroboration_count,i.needs_review)')
+            source = source.replace("i.occurred_at >= now()-interval '7 days'", "i.occurred_at > now()-interval '7 days' AND i.occurred_at<=now()")
+            source = '\n'.join(line for line in source.splitlines() if 'INSERT INTO trujillo.schema_migrations' not in line)
+            conn.execute(source)
+    print('Base 11 compatible; solicitudes, operadores e historial habilitados.')
 
 
 if __name__ == '__main__':

@@ -41,10 +41,21 @@ def test_project_is_pinned(monkeypatch):
 def test_certificate_transport_accepts_positional_url(monkeypatch):
     monkeypatch.setenv('FIREBASE_PROJECT_ID', 'test-project')
     with patch('app.auth.Request') as request, patch('app.auth.id_token.verify_firebase_token') as verifier:
-        def fetch(token, transport, audience):
+        def fetch(token, transport, audience, clock_skew_in_seconds):
+            assert clock_skew_in_seconds == 60
             transport('https://example.com/certs', method='GET')
             raise ValueError('stop after transport')
         verifier.side_effect = fetch
         with pytest.raises(ValueError):
             verify_token('test')
         request.return_value.assert_called_once_with('https://example.com/certs', method='GET', timeout=10)
+
+def test_small_clock_difference_is_tolerated_but_bounded(monkeypatch):
+    monkeypatch.setenv('FIREBASE_PROJECT_ID','test-project')
+    with patch('app.auth.time.time',return_value=1000), patch('app.auth.id_token.verify_firebase_token') as verifier:
+        claims=dict(iss='https://securetoken.google.com/test-project',sub='uid',email_verified=True,firebase={'sign_in_provider':'google.com'},auth_time=1008)
+        verifier.return_value=claims
+        assert verify_token('signed-token')['sub']=='uid'
+        assert verifier.call_args.kwargs['clock_skew_in_seconds']==60
+        verifier.return_value={**claims,'auth_time':1061}
+        with pytest.raises(ValueError):verify_token('signed-token')

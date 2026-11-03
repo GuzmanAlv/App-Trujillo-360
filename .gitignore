@@ -40,6 +40,7 @@ migrate_working_dir/
 /backend/.env.*
 !/backend/.env.example
 !/backend/.env.auth.example
+!/backend/.env.push.example
 /backend/.venv/
 /backend/logs/
 __pycache__/
@@ -55,3 +56,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .pytest_cache/
+/backend/.secrets/

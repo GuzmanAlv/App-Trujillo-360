@@ -19,7 +19,7 @@ def payload():
 
 @pytest.mark.parametrize('change', [
     {'latitude':91}, {'longitude':181}, {'category':'Inventado'}, {'place':'  '},
-    {'description':'x'*501}, {'user_id':'otro'}, {'occurred_at':'2026-01-01T10:00:00'},
+    {'description':'x'*501}, {'user_id':'otro'}, {'priority':'Crítica'}, {'occurred_at':'2026-01-01T10:00:00'},
     {'occurred_at': (datetime.now(timezone.utc)+timedelta(days=1)).isoformat()},
 ])
 def test_invalid_reports_never_reach_database(client, change):

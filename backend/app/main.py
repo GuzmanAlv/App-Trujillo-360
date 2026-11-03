@@ -1,10 +1,14 @@
 import logging
+from contextlib import asynccontextmanager
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException
 from psycopg.rows import dict_row
 from app.auth import identity
 from app.db import connect
 from app.reports import router as reports_router
+from app.workflows import router as workflows_router
+from app.push import router as push_router
+from app.push_worker import PushWorker
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -33,14 +37,23 @@ def readiness_failure_reason(error):
     return 'error_base_de_datos'
 
 
-app = FastAPI(title='Trujillo 360 API', version='0.1.0',
+@asynccontextmanager
+async def lifespan(app):
+    worker = PushWorker()
+    worker.start()
+    yield
+    worker.close()
+
+app = FastAPI(title='Trujillo 360 API', version='0.1.0', lifespan=lifespan,
               description='Piloto: identidad Firebase y perfil en Supabase.')
 app.include_router(reports_router)
+app.include_router(workflows_router)
+app.include_router(push_router)
 
 
 @app.middleware('http')
 async def limit_report_body(request: Request, call_next):
-    if request.method == 'POST' and request.url.path == '/reports':
+    if request.method in ('POST','PUT') and (request.url.path in ('/reports','/help-requests') or request.url.path.startswith(('/operator/','/push/'))):
         # Three 2-MB images expand to about 8 MB when encoded in JSON.
         chunks = []
         size = 0
@@ -66,11 +79,17 @@ def ready():
                 'SELECT max(version) FROM trujillo.schema_migrations').fetchone()[0]
             if version != 11:
                 raise RuntimeError('Migración pendiente')
+            workflow_version=conn.execute('SELECT max(version) FROM trujillo.workflow_migrations').fetchone()[0]
+            if workflow_version != 1:
+                raise RuntimeError('Migración pendiente')
+            push_version=conn.execute('SELECT max(version) FROM trujillo.push_migrations').fetchone()[0]
+            if push_version != 1:
+                raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError) as error:
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version}
 
 
 @app.get('/me')
@@ -82,6 +101,8 @@ def me(claims=Depends(identity)):
             conn.execute('''INSERT INTO trujillo.users(auth_provider, auth_subject, display_name)
                             VALUES ('firebase', %s, %s)
                             ON CONFLICT (auth_provider, auth_subject) DO NOTHING''', (claims['sub'], name))
+            if claims.get('email') and claims.get('email_verified') is True:
+                conn.execute('SELECT trujillo.sync_identity_email(%s)', (claims['email'],))
             with conn.cursor(row_factory=dict_row) as cursor:
                 cursor.execute('''SELECT id, display_name, role, status, created_at
                                   FROM trujillo.users WHERE auth_provider='firebase' AND auth_subject=%s''', (claims['sub'],))

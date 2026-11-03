@@ -11,6 +11,7 @@ from google.oauth2 import id_token
 from app.db import ROOT
 
 bearer = HTTPBearer(auto_error=False)
+CLOCK_SKEW_SECONDS = 60
 
 
 def verify_token(token):
@@ -21,7 +22,8 @@ def verify_token(token):
     with requests.Session() as session:
         request = Request(session=session)
         claims = id_token.verify_firebase_token(
-            token, partial(request, timeout=10), audience=project)
+            token, partial(request, timeout=10), audience=project,
+            clock_skew_in_seconds=CLOCK_SKEW_SECONDS)
     if (claims.get('iss') != f'https://securetoken.google.com/{project}'
             or not isinstance(claims.get('sub'), str)
             or not 1 <= len(claims['sub']) <= 128
@@ -29,7 +31,7 @@ def verify_token(token):
             or claims.get('firebase', {}).get('sign_in_provider') != 'google.com'
             or claims.get('email_verified') is not True
             or not isinstance(claims.get('auth_time'), (int, float))
-            or claims['auth_time'] > time.time()):
+            or claims['auth_time'] > time.time() + CLOCK_SKEW_SECONDS):
         raise ValueError('Invalid identity')
     return claims
 

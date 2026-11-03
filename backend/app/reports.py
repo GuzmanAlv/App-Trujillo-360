@@ -23,6 +23,7 @@ class ReportInput(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     occurred_at: AwareDatetime
     photos: list[PhotoInput] = Field(default_factory=list, max_length=3)
+    priority: Literal['Baja', 'Media', 'Alta'] | None = None
 
     @field_validator('occurred_at')
     @classmethod
@@ -45,9 +46,16 @@ def submit_report(report: ReportInput, claims=Depends(identity)):
             name = str(claims.get('name') or 'Usuario').strip()[:100] or 'Usuario'
             conn.execute("""INSERT INTO trujillo.users(auth_provider,auth_subject,display_name)
                 VALUES ('firebase',%s,%s) ON CONFLICT(auth_provider,auth_subject) DO NOTHING""", (claims['sub'],name))
-            return conn.execute('SELECT trujillo.submit_report_with_photos(%s,%s,%s,%s,%s,%s,%s,%s)',
+            result = conn.execute('SELECT trujillo.submit_report_with_photos(%s,%s,%s,%s,%s,%s,%s,%s)',
                 (report.request_id, report.category, report.place, report.description,
                  report.latitude, report.longitude, report.occurred_at, Jsonb(photos))).fetchone()[0]
+            if report.priority is not None:
+                # One transaction: report/photos and operator follow-up are committed together.
+                help_request = conn.execute('SELECT trujillo.submit_help(%s,%s,%s,%s,%s,%s,%s)',
+                    (report.request_id, report.category, report.place, report.description,
+                     report.latitude, report.longitude, report.priority)).fetchone()[0]
+                result['help_request_id'] = help_request['id']
+            return result
     except psycopg.errors.InsufficientPrivilege:
         raise HTTPException(403, 'Cuenta no disponible para reportar') from None
     except psycopg.errors.NoDataFound:
