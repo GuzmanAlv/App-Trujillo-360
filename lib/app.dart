@@ -334,10 +334,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               style: Theme.of(context).textTheme.headlineSmall,
                             ),
                             const SizedBox(height: 6),
-                            const Text(
-                              'Incidentes corroborados o revisados · últimos 7 días.',
-                            ),
-                            const SizedBox(height: 12),
                             if (!historical) filters(),
                             Wrap(
                               spacing: 8,
