@@ -12,7 +12,6 @@ import 'data/nearby_reports_store.dart';
 import 'data/map_incidents_store.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'models/incident.dart';
-import 'core/config.dart';
 import 'services/push_service.dart';
 import 'ui/notification_settings.dart';
 import 'ui/push_destination.dart';
@@ -239,15 +238,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               body: const WorkflowPanel(),
             ),
           ),
-        ),
-      ),
-      ListTile(
-        leading: const Icon(Icons.map_outlined),
-        title: const Text('Google Maps'),
-        subtitle: Text(
-          AppConfig.mapsEnabled
-              ? 'Activado por configuración. Requiere una clave válida.'
-              : 'Pendiente de clave. Modo local disponible.',
         ),
       ),
       const ListTile(

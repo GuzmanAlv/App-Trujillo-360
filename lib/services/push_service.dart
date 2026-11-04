@@ -226,6 +226,7 @@ class PushService extends ChangeNotifier {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     busy = true;
     error = null;
+    var step = 'preparar el celular';
     notifyListeners();
     try {
       owner = uid;
@@ -239,6 +240,7 @@ class PushService extends ChangeNotifier {
         await channel.invokeMethod<void>('clearPush');
         return;
       }
+      step = 'pedir el permiso de notificaciones';
       final settings = await FirebaseMessaging.instance.requestPermission();
       permission =
           settings.authorizationStatus == AuthorizationStatus.authorized ||
@@ -248,7 +250,9 @@ class PushService extends ChangeNotifier {
           'Permiso bloqueado. Habilita las notificaciones en los ajustes del celular.',
         );
       }
+      step = 'activar Firebase en el celular';
       await FirebaseMessaging.instance.setAutoInitEnabled(true);
+      step = 'registrar el celular en Firebase';
       final token = await FirebaseMessaging.instance.getToken();
       if (FirebaseAuth.instance.currentUser?.uid != uid) {
         throw StateError('La sesión cambió.');
@@ -258,6 +262,7 @@ class PushService extends ChangeNotifier {
           'No se pudo registrar este celular. Reintenta con conexión a Internet.',
         );
       }
+      step = 'guardar los avisos en el servidor';
       await register(token, {
         'citizen_enabled': citizen,
         'operator_enabled': operator,
@@ -266,8 +271,12 @@ class PushService extends ChangeNotifier {
         'radius': radius,
       });
     } catch (e) {
-      error = readable(e);
-      rethrow;
+      error = e is StateError
+          ? readable(e)
+          : 'No se pudo $step. ${readable(e)}';
+      // Log only the safe explanation, never raw exceptions or FCM tokens.
+      debugPrint('PUSH_REGISTRATION: $error');
+      throw StateError(error!);
     } finally {
       busy = false;
       notifyListeners();
@@ -310,7 +319,22 @@ class PushService extends ChangeNotifier {
     preferences = null;
   }
 
-  static String readable(Object e) => e is StateError
-      ? e.message
-      : 'No se pudo conectar el servicio de notificaciones. Reintenta.';
+  static String readable(Object e) {
+    if (e is StateError) return e.message;
+    if (e is TimeoutException) {
+      return 'La conexión tardó demasiado. Reintenta con Internet.';
+    }
+    if (e is MissingPluginException) {
+      return 'Esta instalación no pudo cargar el servicio de notificaciones. Actualiza la app.';
+    }
+    final code = e is FirebaseException
+        ? e.code
+        : e is PlatformException
+        ? e.code
+        : null;
+    if (code != null && RegExp(r'^[a-zA-Z0-9_/-]{1,80}$').hasMatch(code)) {
+      return 'El servicio de Firebase respondió con el código $code. Reintenta.';
+    }
+    return 'No se pudo conectar el servicio de notificaciones. Reintenta.';
+  }
 }
