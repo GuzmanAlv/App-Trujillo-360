@@ -17,7 +17,8 @@ String workflowTime(dynamic value) {
 }
 
 class OperatorPortal extends StatefulWidget {
-  const OperatorPortal({super.key});
+  const OperatorPortal({super.key, this.embedded = false});
+  final bool embedded;
   @override
   State<OperatorPortal> createState() => _OperatorPortalState();
 }
@@ -85,7 +86,9 @@ class _OperatorPortalState extends State<OperatorPortal> {
     length: 3,
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Seguridad ciudadana'),
+        automaticallyImplyLeading: !widget.embedded,
+        toolbarHeight: widget.embedded ? 0 : null,
+        title: widget.embedded ? null : const Text('Seguridad ciudadana'),
         bottom: allowed
             ? const TabBar(
                 isScrollable: true,
@@ -146,6 +149,7 @@ class WorkflowPanel extends StatefulWidget {
 class _WorkflowPanelState extends State<WorkflowPanel>
     with WidgetsBindingObserver {
   List<Map<String, dynamic>> rows = [];
+  String incidentGroup = 'pending';
   bool busy = false;
   String? error;
   int generation = 0;
@@ -241,88 +245,163 @@ class _WorkflowPanelState extends State<WorkflowPanel>
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          widget.incidents
-              ? 'Revisa antes de publicar. La urgencia no equivale a verificación.'
-              : widget.operator
-              ? 'Solicitudes privadas ordenadas por urgencia. Recibida no significa personal enviado.'
-              : 'Tus solicitudes conservan su seguimiento hasta que un operador las cierre. No avisa automáticamente a servicios oficiales.',
-        ),
-      ),
-      TextButton.icon(
-        onPressed: busy ? null : load,
-        icon: const Icon(Icons.refresh),
-        label: const Text('Actualizar'),
-      ),
-      if (busy) const LinearProgressIndicator(),
-      if (error != null)
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(error!, textAlign: TextAlign.center),
-        ),
-      Expanded(
-        child: rows.isEmpty
-            ? Center(
-                child: Text(
-                  error != null
-                      ? 'Sin datos confirmados.'
-                      : busy
-                      ? 'Consultando…'
-                      : 'No hay casos para mostrar.',
-                ),
-              )
-            : ListView.builder(
-                itemCount: rows.length,
-                itemBuilder: (_, index) {
-                  final r = rows[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    child: ListTile(
-                      leading: Icon(
-                        widget.incidents
-                            ? Icons.fact_check_outlined
-                            : Icons.sos,
-                        color: r['priority'] == 'Alta'
-                            ? Colors.red
-                            : const Color(0xff087f68),
-                      ),
-                      title: Text(
-                        '${r['category']} · ${r['place'] ?? 'Incidente'}',
-                      ),
-                      subtitle: Text(
-                        widget.incidents
-                            ? '${r['status']} · ${r['corroboration_count']} aportes · ${workflowTime(r['occurred_at'])}'
-                            : 'Urgencia ${r['priority']} · ${r['stage']}\n${workflowTime(r['received_at'])}',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () async {
-                        await Navigator.push<void>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => WorkflowDetail(
-                              row: r,
-                              operator: widget.operator,
-                              incident: widget.incidents,
-                            ),
-                          ),
-                        );
-                        load();
-                      },
-                    ),
-                  );
-                },
+  Widget incidentFilter(String value, String label, int count) {
+    final selected = incidentGroup == value;
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '$label, $count incidentes',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() => incidentGroup = value),
+          child: Container(
+            height: 56,
+            decoration: BoxDecoration(
+              color: selected ? const Color(0xffcce9df) : null,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? const Color(0xff087f68) : Colors.black26,
               ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                Text(
+                  '$count',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-    ],
-  );
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleRows = widget.incidents
+        ? rows.where((r) => r['status'] == incidentGroup).toList()
+        : rows;
+    final pendingCount = rows.where((r) => r['status'] == 'pending').length;
+    final communityCount = rows
+        .where((r) => r['status'] == 'corroborated')
+        .length;
+    final reviewedCount = rows.where((r) => r['status'] == 'verified').length;
+    return Column(
+      children: [
+        if (!widget.operator)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Tus solicitudes conservan su seguimiento hasta que un operador las cierre. No avisa automáticamente a servicios oficiales.',
+            ),
+          ),
+        if (widget.incidents)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Row(
+              children: [
+                incidentFilter('pending', 'Pendientes', pendingCount),
+                const SizedBox(width: 4),
+                incidentFilter('corroborated', 'Comunidad', communityCount),
+                const SizedBox(width: 4),
+                incidentFilter('verified', 'Verificados', reviewedCount),
+                IconButton(
+                  tooltip: 'Actualizar reportes',
+                  onPressed: busy ? null : load,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+          )
+        else
+          TextButton.icon(
+            onPressed: busy ? null : load,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Actualizar'),
+          ),
+        if (busy) const LinearProgressIndicator(),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(error!, textAlign: TextAlign.center),
+          ),
+        Expanded(
+          child: visibleRows.isEmpty
+              ? Center(
+                  child: Text(
+                    error != null
+                        ? 'Sin datos confirmados.'
+                        : busy
+                        ? 'Consultando…'
+                        : widget.incidents
+                        ? switch (incidentGroup) {
+                            'corroborated' =>
+                              'No hay incidentes publicados por la comunidad.',
+                            'verified' =>
+                              'No hay incidentes verificados por un operador.',
+                            _ => 'No hay reportes pendientes de revisión.',
+                          }
+                        : 'No hay casos para mostrar.',
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: visibleRows.length,
+                  itemBuilder: (_, index) {
+                    final r = visibleRows[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      child: ListTile(
+                        leading: Icon(
+                          widget.incidents
+                              ? Icons.fact_check_outlined
+                              : Icons.sos,
+                          color: r['priority'] == 'Alta'
+                              ? Colors.red
+                              : const Color(0xff087f68),
+                        ),
+                        title: Text(
+                          r['source'] == 'sos'
+                              ? 'SOS · Ubicación compartida'
+                              : '${r['category']} · ${r['place'] ?? 'Incidente'}',
+                        ),
+                        subtitle: Text(
+                          widget.incidents
+                              ? '${r['status']} · ${r['corroboration_count']} aportes · ${workflowTime(r['occurred_at'])}'
+                              : 'Urgencia ${r['priority']} · ${r['stage']}\n${workflowTime(r['received_at'])}',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () async {
+                          await Navigator.push<void>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => WorkflowDetail(
+                                row: r,
+                                operator: widget.operator,
+                                incident: widget.incidents,
+                              ),
+                            ),
+                          );
+                          load();
+                        },
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
 }
 
 class WorkflowDetail extends StatefulWidget {
@@ -387,7 +466,7 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
     super.dispose();
   }
 
-  Future<void> save() async {
+  Future<void> save([String? incidentDecision]) async {
     if (reason.text.trim().length < 5) {
       setState(() => error = 'Escribe un motivo de al menos 5 caracteres.');
       return;
@@ -399,7 +478,7 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
         'POST',
         '/operator/${widget.incident ? 'incidents' : 'help-requests'}/${r['id']}/decisions',
         body: widget.incident
-            ? {'decision': decision ?? 'verified', 'reason': reason.text.trim()}
+            ? {'decision': incidentDecision, 'reason': reason.text.trim()}
             : {
                 'stage':
                     decision ??
@@ -428,9 +507,7 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
   Widget build(BuildContext context) {
     final r = widget.row;
     final terminal = ['Cerrada', 'Descartada'].contains(r['stage']);
-    final options = widget.incident
-        ? ['verified', 'discarded', 'closed']
-        : r['stage'] == 'Recibida'
+    final options = r['stage'] == 'Recibida'
         ? ['En revisión', 'Descartada']
         : ['Acción registrada', 'Cerrada', 'Descartada'];
     return Scaffold(
@@ -449,7 +526,9 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  '${r['category']} · ${r['place'] ?? 'Incidente'}',
+                  r['source'] == 'sos'
+                      ? 'SOS · Ubicación compartida'
+                      : '${r['category']} · ${r['place'] ?? 'Incidente'}',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 Text(
@@ -516,25 +595,17 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
                 ],
                 if (widget.operator && !terminal) ...[
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: options.first,
-                    decoration: const InputDecoration(labelText: 'Decisión'),
-                    items: options
-                        .map(
-                          (s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(switch (s) {
-                              'verified' => 'Verificar y publicar',
-                              'discarded' => 'Descartar',
-                              'closed' => 'Cerrar',
-                              _ => s,
-                            }),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (s) => decision = s,
-                  ),
                   if (!widget.incident) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: options.first,
+                      decoration: const InputDecoration(labelText: 'Decisión'),
+                      items: options
+                          .map(
+                            (s) => DropdownMenuItem(value: s, child: Text(s)),
+                          )
+                          .toList(),
+                      onChanged: (s) => decision = s,
+                    ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: r['priority'] as String,
@@ -558,15 +629,45 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
                       labelText: 'Motivo o acción realizada',
                     ),
                   ),
-                  const Text(
-                    'Registra únicamente acciones realizadas. No presupone el envío de agentes.',
-                  ),
-                  FilledButton(
-                    onPressed: busy || (widget.incident && evidence == null)
-                        ? null
-                        : save,
-                    child: Text(busy ? 'Guardando…' : 'Guardar decisión'),
-                  ),
+                  if (widget.incident) ...[
+                    const Text(
+                      'Revisa los aportes antes de confirmar o descartar.',
+                    ),
+                    if (r['status'] != 'verified') ...[
+                      FilledButton(
+                        onPressed: busy || evidence == null
+                            ? null
+                            : () => save('verified'),
+                        child: Text(
+                          busy
+                              ? 'Guardando…'
+                              : r['status'] == 'corroborated'
+                              ? 'Confirmar incidente'
+                              : 'Confirmar y publicar',
+                        ),
+                      ),
+                      OutlinedButton(
+                        onPressed: busy || evidence == null
+                            ? null
+                            : () => save('discarded'),
+                        child: const Text('Descartar incidente'),
+                      ),
+                    ] else
+                      OutlinedButton(
+                        onPressed: busy || evidence == null
+                            ? null
+                            : () => save('closed'),
+                        child: const Text('Cerrar incidente'),
+                      ),
+                  ] else ...[
+                    const Text(
+                      'Registra únicamente acciones realizadas. No presupone el envío de agentes.',
+                    ),
+                    FilledButton(
+                      onPressed: busy ? null : save,
+                      child: Text(busy ? 'Guardando…' : 'Guardar decisión'),
+                    ),
+                  ],
                 ],
                 if (error != null) Text(error!),
               ],

@@ -9,6 +9,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.provider.Settings
 import io.flutter.embedding.engine.FlutterEngine
@@ -72,6 +73,7 @@ class MainActivity : FlutterActivity() {
                         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (isPush) "trujillo_push" else alertChannel) else Notification.Builder(this)
                         val notification = builder
                             .setSmallIcon(R.drawable.ic_notification)
+                            .setColor(Color.rgb(211, 47, 47))
                             .setContentTitle(call.argument<String>("title"))
                             .setContentText(call.argument<String>("body"))
                             .setStyle(Notification.BigTextStyle().bigText(call.argument<String>("body")))

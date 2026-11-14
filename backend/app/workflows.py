@@ -19,6 +19,12 @@ class HelpInput(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     priority: Literal['Baja', 'Media', 'Alta']
 
+class SosInput(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    request_id: UUID
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
 class HelpDecision(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     stage: Literal['En revisión', 'Acción registrada', 'Cerrada', 'Descartada']
@@ -56,6 +62,12 @@ def submit(data: HelpInput, response: Response, claims=Depends(identity)):
     response.headers['Cache-Control'] = 'private, no-store'
     return execute(claims, 'SELECT trujillo.submit_help(%s,%s,%s,%s,%s,%s,%s)',
         (data.request_id,data.category,data.place,data.description,data.latitude,data.longitude,data.priority))
+
+@router.post('/sos')
+def submit_sos(data: SosInput, response: Response, claims=Depends(identity)):
+    response.headers['Cache-Control'] = 'private, no-store'
+    return execute(claims, 'SELECT trujillo.submit_sos(%s,%s,%s)',
+        (data.request_id,data.latitude,data.longitude))
 
 @router.get('/help-requests')
 def mine(response: Response, claims=Depends(identity)):

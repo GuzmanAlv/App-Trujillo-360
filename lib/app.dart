@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'data/density_store.dart';
 import 'services/workflow_client.dart';
+import 'services/location_service.dart';
+import 'services/report_sender.dart';
 import 'ui/workflow_panel.dart';
 import 'data/incident_store.dart';
 import 'data/nearby_reports_store.dart';
@@ -67,32 +69,53 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool historical = false;
   StreamSubscription<User?>? roleSession;
   int roleGeneration = 0;
-  String? operatorOpenedFor;
+  bool operatorAllowed = false;
+  bool sosSending = false;
+  String? pendingSosId;
+  String? pendingSosOwner;
+  double? pendingSosLatitude, pendingSosLongitude;
   Timer? expiryTimer;
 
   Future<void> checkRole(User? user) async {
     final ticket = ++roleGeneration;
+    if (user?.uid != pendingSosOwner) {
+      pendingSosId = null;
+      pendingSosOwner = null;
+      pendingSosLatitude = null;
+      pendingSosLongitude = null;
+    }
     density.clear();
     density.schedule();
     if (user == null) {
-      operatorOpenedFor = null;
+      if (mounted) {
+        setState(() {
+          operatorAllowed = false;
+          if (tab >= 2) tab = 0;
+        });
+      }
       return;
     }
     try {
       final profile = await WorkflowClient.profile();
       if (mounted &&
           ticket == roleGeneration &&
-          currentReportOwner == user.uid &&
-          operatorOpenedFor != user.uid &&
-          openedPush.isEmpty &&
-          profile['status'] == 'active' &&
-          ['operator', 'admin'].contains(profile['role'])) {
-        operatorOpenedFor = user.uid;
-        await Navigator.push<void>(
-          context,
-          MaterialPageRoute(builder: (_) => const OperatorPortal()),
-        );
-        mapIncidents.clearSession();
+          currentReportOwner == user.uid) {
+        final allowed =
+            profile['status'] == 'active' &&
+            ['operator', 'admin'].contains(profile['role']);
+        if (operatorAllowed != allowed) {
+          setState(() {
+            if (!operatorAllowed && allowed && tab == 2) {
+              tab = 3;
+            }
+            if (operatorAllowed && !allowed && tab == 3) {
+              tab = 2;
+            } else if (operatorAllowed && !allowed && tab == 2) {
+              tab = 0;
+            }
+            operatorAllowed = allowed;
+          });
+        }
       }
     } catch (_) {
       /* The account panel exposes connection errors and a retry. */
@@ -110,6 +133,78 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           const SnackBar(content: Text('No se pudo abrir el teléfono.')),
         );
       }
+    }
+  }
+
+  Future<void> sendSos() async {
+    if (sosSending) return;
+    if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Inicia sesión con Google antes de enviar un SOS.'),
+        ),
+      );
+      return;
+    }
+    final owner = FirebaseAuth.instance.currentUser!.uid;
+    setState(() => sosSending = true);
+    try {
+      if (pendingSosId == null) {
+        final position = await LocationService().current();
+        if (FirebaseAuth.instance.currentUser?.uid != owner) {
+          throw StateError('La sesión cambió. Vuelve a intentarlo.');
+        }
+        pendingSosId = ReportSender.requestId();
+        pendingSosOwner = owner;
+        pendingSosLatitude = position.latitude;
+        pendingSosLongitude = position.longitude;
+      }
+      if (FirebaseAuth.instance.currentUser?.uid != owner) {
+        throw StateError('La sesión cambió. Vuelve a intentarlo.');
+      }
+      final response = await WorkflowClient.request(
+        'POST',
+        '/sos',
+        body: {
+          'request_id': pendingSosId,
+          'latitude': pendingSosLatitude,
+          'longitude': pendingSosLongitude,
+        },
+      );
+      if (response is! Map ||
+          response['request_id'] != pendingSosId ||
+          response['source'] != 'sos') {
+        throw StateError('No se confirmó el SOS. Vuelve a intentarlo.');
+      }
+      pendingSosId = null;
+      pendingSosOwner = null;
+      pendingSosLatitude = null;
+      pendingSosLongitude = null;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'SOS recibido por la plataforma. No confirma atención inmediata.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is LocationFailure
+                  ? error.message
+                  : error is StateError
+                  ? error.message.toString()
+                  : 'No se confirmó el SOS. Vuelve a intentarlo.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => sosSending = false);
     }
   }
 
@@ -160,6 +255,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
     updateNearbyActivity();
+    if (foreground && Firebase.apps.isNotEmpty) {
+      checkRole(FirebaseAuth.instance.currentUser);
+    }
     if (foreground && PushService.instance.supported) {
       PushService.channel
           .invokeMethod<String>('takePush')
@@ -215,18 +313,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       const SizedBox(height: 20),
       const AccountPanel(),
-      ListTile(
-        leading: const Icon(Icons.support_agent),
-        title: const Text('Panel de seguridad ciudadana'),
-        subtitle: const Text(
-          'Solo para cuentas Google autorizadas por un administrador.',
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.push<void>(
-          context,
-          MaterialPageRoute(builder: (_) => const OperatorPortal()),
-        ),
-      ),
       ListTile(
         leading: const Icon(Icons.sos),
         title: const Text('Mis solicitudes de ayuda'),
@@ -332,10 +418,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             Text(
                               'Tu comunidad, a la vista',
                               style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Incidentes corroborados o revisados · últimos 7 días.',
                             ),
                             const SizedBox(height: 12),
                             if (!historical) filters(),
@@ -460,6 +542,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
+                      if (operatorAllowed) const OperatorPortal(embedded: true),
                       settings(),
                     ],
                   ),
@@ -472,15 +555,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: tab >= 2
           ? null
-          : FloatingActionButton.extended(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => ReportForm(store: widget.store),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'sos',
+                  onPressed: sosSending ? null : sendSos,
+                  backgroundColor: const Color(0xffc62828),
+                  foregroundColor: Colors.white,
+                  label: Text(sosSending ? 'Enviando…' : 'SOS'),
+                  icon: const Icon(Icons.sos),
                 ),
-              ),
-              label: const Text('Reportar'),
-              icon: const Icon(Icons.add),
+                const SizedBox(width: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'report',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => ReportForm(store: widget.store),
+                    ),
+                  ),
+                  label: const Text('Reportar'),
+                  icon: const Icon(Icons.add),
+                ),
+              ],
             ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
@@ -488,12 +586,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           setState(() => tab = i);
           updateNearbyActivity();
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(icon: Icon(Icons.map_outlined), label: 'Mapa'),
           NavigationDestination(
             icon: Icon(Icons.notifications_none),
             label: 'Reportes',
           ),
+          if (operatorAllowed)
+            NavigationDestination(
+              icon: Icon(Icons.support_agent_outlined),
+              label: 'Operador',
+            ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             label: 'Configuración',

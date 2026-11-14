@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../services/report_sender.dart';
@@ -48,17 +47,6 @@ class _ReportFormState extends State<ReportForm> {
   String priority = 'Media';
   String? gpsAccuracy;
   late final draftId = ReportSender.requestId();
-  bool get unifiedReport => !widget.requestHelp && widget.onLocalSubmit == null;
-
-  Future<void> dialSecurity() async {
-    try {
-      await const MethodChannel(
-        'trujillo360/proximity',
-      ).invokeMethod<void>('dial');
-    } catch (_) {
-      message('No se pudo abrir el teléfono. Número: (044) 298734.');
-    }
-  }
 
   Future<void> pickOccurredAt() async {
     final now = DateTime.now();
@@ -265,7 +253,7 @@ class _ReportFormState extends State<ReportForm> {
       longitude: double.parse(lng.text.replaceAll(',', '.')),
       createdAt: !widget.requestHelp ? occurredAt : now,
       photos: List.unmodifiable(photos),
-      priority: unifiedReport ? priority : null,
+      priority: null,
     );
     bool ok;
     try {
@@ -336,9 +324,9 @@ class _ReportFormState extends State<ReportForm> {
                         ? 'Solicitud para revisión de un operador del proyecto. No contacta automáticamente a emergencias ni confirma envío de personal.'
                         : widget.onLocalSubmit != null
                         ? 'PRUEBA LOCAL: este caso solo se guarda en tu celular. Ninguna institución recibirá el aviso.'
-                        : 'Se enviará al operador con el nivel de urgencia indicado. Solo será público al corroborarse o verificarse. No confirma atención inmediata.',
+                        : 'Informa lo que viste. Guarda la hora del hecho y se enviará para revisión. Solo será público al corroborarse o verificarse.',
                   ),
-                  if (widget.requestHelp || unifiedReport) ...[
+                  if (widget.requestHelp) ...[
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: priority,
@@ -357,17 +345,6 @@ class _ReportFormState extends State<ReportForm> {
                     const Text(
                       'El operador debe revisar la prioridad. No depende del número de reportes.',
                     ),
-                    if (unifiedReport && priority == 'Alta') ...[
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: saving ? null : dialSecurity,
-                        icon: const Icon(Icons.phone_outlined),
-                        label: const Text('Llamar a Seguridad Ciudadana'),
-                      ),
-                      const Text(
-                        '(044) 298734 · Abre el marcador. El reporte se envía al pulsar Enviar reporte, aunque no llames.',
-                      ),
-                    ],
                   ],
                   if (!widget.requestHelp)
                     TextButton.icon(

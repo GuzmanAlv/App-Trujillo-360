@@ -41,7 +41,6 @@ class _ReportsPanelState extends State<ReportsPanel> {
   String? historyNote;
   int historyGeneration = 0;
   bool mine = false;
-  bool corroboratedOnly = false;
   bool get locating => widget.nearby.locating;
   bool get loading => widget.nearby.loading;
   String? get note => widget.nearby.note;
@@ -133,11 +132,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
     final result = (mine ? own : widget.nearby.filtered(widget.filter))
         .where((i) => widget.filter == 'Todos' || i.type == widget.filter)
         .where(
-          (i) =>
-              mine ||
-              (i.isCommunityVisible &&
-                  i.recentAt(DateTime.now()) &&
-                  (!corroboratedOnly || i.remoteStatus == 'corroborated')),
+          (i) => mine || (i.isCommunityVisible && i.recentAt(DateTime.now())),
         )
         .toList();
     if (!mine && position != null) {
@@ -190,22 +185,6 @@ class _ReportsPanelState extends State<ReportsPanel> {
           },
         ),
         const SizedBox(height: 12),
-        if (!mine) ...[
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('Publicados')),
-              ButtonSegment(
-                value: true,
-                label: Text('Corroborados'),
-                icon: Icon(Icons.verified_outlined),
-              ),
-            ],
-            selected: {corroboratedOnly},
-            onSelectionChanged: (value) =>
-                setState(() => corroboratedOnly = value.single),
-          ),
-          const SizedBox(height: 12),
-        ],
         Text(
           mine
               ? 'Tus reportes, estés donde estés.'
@@ -261,8 +240,6 @@ class _ReportsPanelState extends State<ReportsPanel> {
                         ? 'Consultando reportes cercanos…'
                         : note != null
                         ? 'La consulta de reportes cercanos no está disponible.'
-                        : corroboratedOnly
-                        ? 'No hay incidentes corroborados en esta categoría a menos de 1 km.'
                         : 'No hay reportes en esta categoría a menos de 1 km.',
                     textAlign: TextAlign.center,
                   ),

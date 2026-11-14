@@ -21,11 +21,11 @@ Se conservan registros más antiguos sin incorporarlos a ese color indefinidamen
 
 ## Accesos y seguimiento
 
-La entrada principal es un solo botón Reportar. El formulario conserva fotos,
-hora y ubicación e incluye Nivel de urgencia (Baja, Media o Alta). Alta muestra
-Llamar a Seguridad Ciudadana, que abre el marcador sin llamar ni enviar el reporte.
-Enviar reporte guarda el reporte y su solicitud privada para el operador en una
-misma transacción, para los tres niveles. La urgencia no publica el incidente.
+La entrada principal tiene Reportar y SOS. Reportar conserva fotos, hora del hecho
+y ubicación, sin pedir urgencia. El backend conserva también la hora de recepción.
+Los reportes normales van a Revisar reportes, sin crear una solicitud nueva en Ayuda.
+SOS envía una ubicación actual como solicitud privada de prioridad Alta a Ayuda;
+no inicia una llamada ni crea un incidente público. Ver [SOS](sos.md).
 El identificador estable evita duplicados al reintentar y la copia local conserva
 la urgencia. Los reportes antiguos sin urgencia conservan su comportamiento.
 El seguimiento continúa en Mis solicitudes de ayuda; no hay un botón SOS separado.

@@ -39,11 +39,16 @@ def message(job):
     data['event_id'] = str(job['job_id'])
     if 'incident' in job:
         data['incident'] = job['incident']
+    title, body = job['title'], job['body']
+    if job['kind'] == 'citizen':
+        category = body.partition('.')[0].strip()
+        title = f'🚨 Alerta: {category} en tu zona' if category else '🚨 Incidente en tu zona'
+        body = 'Se confirmó un reporte cerca de tu zona configurada. Toca para ver los detalles.'
     return {'message': {
-        'token':job['token'], 'notification':{'title':job['title'],'body':job['body']},
+        'token':job['token'], 'notification':{'title':title,'body':body},
         'data': data,
         'android': {'priority':'high', 'ttl':'300s', 'notification':{
-            'channel_id':'trujillo_push', 'icon':'ic_notification',
+            'channel_id':'trujillo_push', 'icon':'ic_notification', 'color':'#D32F2F',
             'tag':str(job['job_id']), 'visibility':'PRIVATE', 'click_action':'FLUTTER_NOTIFICATION_CLICK'}},
     }}
 

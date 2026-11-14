@@ -40,6 +40,12 @@ def test_payload_does_not_include_private_case_details():
     assert 'latitude' not in payload['data'] and 'description' not in payload['data']
     assert payload['android']['notification']['tag']=='event'
 
+def test_citizen_alert_uses_incident_category_without_claiming_live_distance():
+    payload=message(dict(token='test',kind='citizen',target_id='target',account_uid='uid',job_id='event',title='Incidente confirmado en tu zona',body='Robo. Toca para consultar el detalle.'))['message']
+    assert payload['notification']['title']=='🚨 Alerta: Robo en tu zona'
+    assert 'zona configurada' in payload['notification']['body']
+    assert payload['android']['notification']['color']=='#D32F2F'
+
 def test_invalid_token_and_auth_failure_differ():
     from unittest.mock import Mock
     assert outcome(Mock(status_code=403,json=lambda:{}))=='retry'

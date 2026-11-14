@@ -61,6 +61,8 @@ def main():
         conn.execute('CREATE POLICY workflow_version_read ON trujillo.workflow_migrations FOR SELECT TO trujillo_api USING(true)')
         if not conn.execute("SELECT to_regclass('trujillo.push_migrations')").fetchone()[0]:
             conn.execute((ROOT / 'migrations/013_push.sql').read_text(encoding='utf-8'))
+        if not conn.execute("SELECT to_regclass('trujillo.sos_migrations')").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/014_sos.sql').read_text(encoding='utf-8'))
         # Refresh compatible public readers using the shared publication rule.
         for filename in ('007_nearby_identity_fix.sql','010_community_groups.sql','011_report_places_patch.sql'):
             source = (ROOT / 'migrations' / filename).read_text(encoding='utf-8')

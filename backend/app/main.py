@@ -85,11 +85,14 @@ def ready():
             push_version=conn.execute('SELECT max(version) FROM trujillo.push_migrations').fetchone()[0]
             if push_version != 1:
                 raise RuntimeError('Migración pendiente')
+            sos_version=conn.execute('SELECT max(version) FROM trujillo.sos_migrations').fetchone()[0]
+            if sos_version != 1:
+                raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError) as error:
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version}
 
 
 @app.get('/me')

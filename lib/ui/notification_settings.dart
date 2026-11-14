@@ -234,7 +234,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Nuevos reportes para el operador'),
                     subtitle: const Text(
-                      'Recibir avisos con urgencia Baja, Media o Alta.',
+                      'Recibir avisos de nuevos reportes y solicitudes SOS.',
                     ),
                     value: operator,
                     onChanged: push.busy
