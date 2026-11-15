@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'report_sender.dart';
+import 'location_service.dart';
 import 'workflow_client.dart';
 
 @pragma('vm:entry-point')
@@ -26,6 +28,9 @@ class PushService extends ChangeNotifier {
   bool started = false, signingOut = false;
   int generation = 0;
   final Set<String> seen = {};
+  StreamSubscription<Position>? locationUpdates;
+  Timer? locationHeartbeat;
+  bool sendingLocation = false;
   bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
@@ -78,6 +83,7 @@ class PushService extends ChangeNotifier {
       }
     });
     FirebaseAuth.instance.authStateChanges().listen((user) async {
+      await stopTracking();
       generation++;
       owner = user?.uid;
       deviceId = null;
@@ -170,9 +176,22 @@ class PushService extends ChangeNotifier {
               preferences!['operator_enabled'] == true)) {
         final token = await FirebaseMessaging.instance.getToken();
         if (token != null && ticket == generation) {
-          await register(token, Map<String, dynamic>.from(preferences!));
+          final values = Map<String, dynamic>.from(preferences!);
+          if (values['citizen_enabled'] == true &&
+              values['moving_enabled'] != true) {
+            values['citizen_enabled'] = false;
+            values['moving_enabled'] = false;
+            values['latitude'] = null;
+            values['longitude'] = null;
+            await register(token, values);
+            error =
+                'La zona fija anterior se desactivó. Activa “Incidentes cerca de mí” para recibir avisos según tu ubicación actual.';
+          } else {
+            await register(token, values);
+          }
         }
       }
+      if (ticket == generation) await startTracking();
     } catch (e) {
       if (ticket == generation) error = readable(e);
     } finally {
@@ -199,6 +218,7 @@ class PushService extends ChangeNotifier {
           'latitude',
           'longitude',
           'radius',
+          'moving_enabled',
         ])
           key: values[key],
       },
@@ -214,6 +234,7 @@ class PushService extends ChangeNotifier {
     double? latitude,
     double? longitude,
     int radius = 500,
+    bool moving = false,
   }) async {
     if (!supported ||
         Firebase.apps.isEmpty ||
@@ -221,7 +242,14 @@ class PushService extends ChangeNotifier {
       throw StateError('Inicia sesión con Google en Android.');
     }
     if (citizen && (latitude == null || longitude == null)) {
-      throw StateError('Elige tu zona en el mapa.');
+      throw StateError('No se pudo obtener tu ubicación actual.');
+    }
+    if (citizen &&
+        moving &&
+        await Geolocator.checkPermission() != LocationPermission.always) {
+      throw StateError(
+        'Para avisos con la app cerrada, elige “Permitir todo el tiempo” en los ajustes de ubicación.',
+      );
     }
     final uid = FirebaseAuth.instance.currentUser!.uid;
     busy = true;
@@ -236,6 +264,7 @@ class PushService extends ChangeNotifier {
       }
       if (!citizen && !operator) {
         await WorkflowClient.request('DELETE', '/push/devices/$deviceId');
+        await stopTracking();
         preferences = null;
         await channel.invokeMethod<void>('clearPush');
         return;
@@ -269,7 +298,14 @@ class PushService extends ChangeNotifier {
         'latitude': latitude,
         'longitude': longitude,
         'radius': radius,
+        'moving_enabled': moving,
       });
+      if (moving) {
+        await stopTracking();
+        await startTracking();
+      } else {
+        await stopTracking();
+      }
     } catch (e) {
       error = e is StateError
           ? readable(e)
@@ -312,11 +348,103 @@ class PushService extends ChangeNotifier {
         'Conéctate a Internet para desvincular los avisos antes de cerrar sesión.',
       );
     }
+    await stopTracking();
     try {
       await channel.invokeMethod<void>('clearPush');
     } catch (_) {}
     pending = null;
     preferences = null;
+  }
+
+  Future<void> startTracking() async {
+    if (!supported ||
+        owner == null ||
+        deviceId == null ||
+        preferences?['citizen_enabled'] != true ||
+        preferences?['moving_enabled'] != true ||
+        locationUpdates != null) {
+      return;
+    }
+    if (await Geolocator.checkPermission() != LocationPermission.always ||
+        !await Geolocator.isLocationServiceEnabled()) {
+      error =
+          'Activa la ubicación y el permiso “Permitir todo el tiempo” para recibir alertas según dónde estés.';
+      notifyListeners();
+      return;
+    }
+    locationUpdates = LocationService().watchAlerts().listen(
+      (position) {
+        unawaited(syncLocation(position));
+      },
+      onError: (Object _) {
+        unawaited(stopTracking());
+        error =
+            'No se pudo actualizar la ubicación de las alertas. Abre Notificaciones para reintentar.';
+        notifyListeners();
+      },
+    );
+    locationHeartbeat = Timer.periodic(const Duration(minutes: 8), (_) {
+      unawaited(refreshLocation());
+    });
+    unawaited(refreshLocation());
+  }
+
+  Future<void> stopTracking() async {
+    locationHeartbeat?.cancel();
+    locationHeartbeat = null;
+    final updates = locationUpdates;
+    locationUpdates = null;
+    await updates?.cancel();
+  }
+
+  Future<void> refreshLocation() async {
+    if (locationUpdates == null || sendingLocation) return;
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+      await syncLocation(position);
+    } catch (_) {
+      error =
+          'No se pudo renovar la ubicación. Los avisos cercanos se pausarán si pasan 20 minutos sin actualizarla.';
+      notifyListeners();
+    }
+  }
+
+  Future<void> syncLocation(Position position) async {
+    if (sendingLocation ||
+        locationUpdates == null ||
+        FirebaseAuth.instance.currentUser?.uid != owner ||
+        deviceId == null) {
+      return;
+    }
+    sendingLocation = true;
+    final id = deviceId!;
+    try {
+      await WorkflowClient.request(
+        'PUT',
+        '/push/devices/$id/location',
+        body: {'latitude': position.latitude, 'longitude': position.longitude},
+      );
+      if (deviceId == id && preferences != null) {
+        preferences!['latitude'] = position.latitude;
+        preferences!['longitude'] = position.longitude;
+        preferences!['location_updated_at'] = DateTime.now()
+            .toUtc()
+            .toIso8601String();
+        error = null;
+        notifyListeners();
+      }
+    } catch (_) {
+      error =
+          'No se pudo renovar la ubicación. Revisa Internet y abre Notificaciones para reintentar.';
+      notifyListeners();
+    } finally {
+      sendingLocation = false;
+    }
   }
 
   static String readable(Object e) {

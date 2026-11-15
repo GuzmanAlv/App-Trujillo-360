@@ -83,7 +83,7 @@ def ready():
             if workflow_version != 1:
                 raise RuntimeError('Migración pendiente')
             push_version=conn.execute('SELECT max(version) FROM trujillo.push_migrations').fetchone()[0]
-            if push_version != 1:
+            if push_version != 2:
                 raise RuntimeError('Migración pendiente')
             sos_version=conn.execute('SELECT max(version) FROM trujillo.sos_migrations').fetchone()[0]
             if sos_version != 1:

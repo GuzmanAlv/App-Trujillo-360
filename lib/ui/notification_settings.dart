@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import '../services/push_service.dart';
 import '../services/workflow_client.dart';
 import '../services/location_service.dart';
-import 'map_panel.dart';
 
 class NotificationSettings extends StatefulWidget {
   const NotificationSettings({super.key});
@@ -17,13 +16,8 @@ class NotificationSettings extends StatefulWidget {
 class _NotificationSettingsState extends State<NotificationSettings>
     with WidgetsBindingObserver {
   final push = PushService.instance;
-  bool citizen = false,
-      operator = false,
-      allowed = false,
-      loading = true,
-      locating = false;
+  bool citizen = false, operator = false, allowed = false, loading = true;
   int radius = 500;
-  LatLng? zone;
   String? note;
   int generation = 0;
   StreamSubscription<User?>? session;
@@ -40,7 +34,6 @@ class _NotificationSettingsState extends State<NotificationSettings>
             citizen = false;
             operator = false;
             allowed = false;
-            zone = null;
             loading = false;
             note = 'La sesión cambió. Regresa y vuelve a abrir Notificaciones.';
           });
@@ -62,6 +55,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       push.refreshPermission().catchError((Object _) {});
+      push.startTracking().catchError((Object _) {});
     }
   }
 
@@ -83,12 +77,6 @@ class _NotificationSettingsState extends State<NotificationSettings>
         citizen = p?['citizen_enabled'] == true;
         operator = allowed && p?['operator_enabled'] == true;
         radius = p?['radius'] as int? ?? 500;
-        zone = p?['latitude'] == null
-            ? null
-            : LatLng(
-                (p!['latitude'] as num).toDouble(),
-                (p['longitude'] as num).toDouble(),
-              );
         note = push.error;
       });
     } catch (e) {
@@ -100,44 +88,49 @@ class _NotificationSettingsState extends State<NotificationSettings>
     }
   }
 
-  Future<void> locate() async {
-    setState(() => locating = true);
-    try {
-      final p = await LocationService().current();
-      if (mounted) setState(() => zone = LatLng(p.latitude, p.longitude));
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => note =
-              'No se pudo obtener tu ubicación. Puedes elegir un punto en el mapa.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => locating = false);
-    }
-  }
-
   Future<void> save() async {
     setState(() => note = null);
     try {
+      double? latitude, longitude;
+      if (citizen) {
+        final current = await LocationService().current();
+        latitude = current.latitude;
+        longitude = current.longitude;
+        if (await Geolocator.checkPermission() != LocationPermission.always) {
+          if (mounted) {
+            setState(
+              () => note =
+                  'En los ajustes de la app, cambia Ubicación a “Permitir todo el tiempo”. Luego vuelve y guarda las preferencias.',
+            );
+          }
+          await Geolocator.openAppSettings();
+          return;
+        }
+      }
       await push.save(
         citizen: citizen,
         operator: operator,
-        latitude: zone?.latitude,
-        longitude: zone?.longitude,
+        latitude: latitude,
+        longitude: longitude,
         radius: radius,
+        moving: citizen,
       );
       if (mounted) {
         setState(
           () => note = !citizen && !operator
               ? 'Avisos desactivados en este celular.'
               : push.senderConfigured
-              ? 'Preferencias guardadas. Recibirás avisos también fuera de la app.'
+              ? 'Preferencias guardadas. Tu ubicación se actualizará automáticamente para las alertas.'
               : 'Preferencias guardadas. Falta habilitar el envío de Firebase en el servidor; los avisos aún no están operativos.',
         );
       }
     } catch (e) {
-      if (mounted) setState(() => note = PushService.readable(e));
+      if (mounted) {
+        setState(
+          () =>
+              note = e is LocationFailure ? e.message : PushService.readable(e),
+        );
+      }
     }
   }
 
@@ -167,9 +160,9 @@ class _NotificationSettingsState extends State<NotificationSettings>
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Incidentes en mi zona'),
+                  title: const Text('Incidentes cerca de mí'),
                   subtitle: const Text(
-                    'Solo incidentes confirmados. También con la app cerrada.',
+                    'Incidentes confirmados cerca de donde estés, también con la app cerrada.',
                   ),
                   value: citizen,
                   onChanged: push.busy
@@ -178,39 +171,9 @@ class _NotificationSettingsState extends State<NotificationSettings>
                 ),
                 if (citizen) ...[
                   const Text(
-                    'Elige el centro de tu zona. Se mantiene fijo aunque te muevas; no rastreamos tu ubicación en segundo plano.',
+                    'La ubicación se actualiza automáticamente mientras estos avisos estén activos. Android mostrará una notificación permanente. Necesitas el permiso “Permitir todo el tiempo”.',
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 260,
-                    child: MapPanel(
-                      selected: zone,
-                      onPick: (p) => setState(() => zone = p),
-                      overlays: {
-                        if (zone != null)
-                          Circle(
-                            circleId: const CircleId('chosen-zone'),
-                            center: zone!,
-                            radius: radius.toDouble(),
-                            fillColor: Colors.teal.withValues(alpha: .15),
-                            strokeColor: Colors.teal,
-                            strokeWidth: 2,
-                          ),
-                      },
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: locating ? null : locate,
-                    icon: const Icon(Icons.my_location),
-                    label: Text(
-                      locating ? 'Buscando…' : 'Usar mi ubicación como centro',
-                    ),
-                  ),
-                  Text(
-                    zone == null
-                        ? 'Todavía no elegiste una zona.'
-                        : 'Centro: ${zone!.latitude.toStringAsFixed(5)}, ${zone!.longitude.toStringAsFixed(5)}',
-                  ),
                   DropdownButtonFormField<int>(
                     initialValue: radius,
                     decoration: const InputDecoration(

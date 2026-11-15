@@ -19,7 +19,7 @@ class LocationService {
     if (permission != LocationPermission.always &&
         permission != LocationPermission.whileInUse) {
       throw const LocationFailure(
-        'No se concedió el permiso de ubicación. Puedes seleccionar un punto manualmente.',
+        'No se concedió el permiso de ubicación. Actívalo para usar esta función.',
       );
     }
     return Geolocator.getCurrentPosition(
@@ -34,6 +34,21 @@ class LocationService {
     locationSettings: const LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 10,
+    ),
+  );
+
+  Stream<Position> watchAlerts() => Geolocator.getPositionStream(
+    locationSettings: AndroidSettings(
+      accuracy: LocationAccuracy.medium,
+      distanceFilter: 100,
+      intervalDuration: const Duration(minutes: 1),
+      foregroundNotificationConfig: ForegroundNotificationConfig(
+        notificationTitle: 'Alertas por ubicación activas',
+        notificationText:
+            'Trujillo 360 actualiza tu zona para avisarte de incidentes cercanos.',
+        notificationChannelName: 'Ubicación para alertas',
+        setOngoing: true,
+      ),
     ),
   );
 }

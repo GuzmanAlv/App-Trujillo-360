@@ -61,6 +61,8 @@ def main():
         conn.execute('CREATE POLICY workflow_version_read ON trujillo.workflow_migrations FOR SELECT TO trujillo_api USING(true)')
         if not conn.execute("SELECT to_regclass('trujillo.push_migrations')").fetchone()[0]:
             conn.execute((ROOT / 'migrations/013_push.sql').read_text(encoding='utf-8'))
+        if conn.execute('SELECT max(version) FROM trujillo.push_migrations').fetchone()[0] == 1:
+            conn.execute((ROOT / 'migrations/015_moving_alerts.sql').read_text(encoding='utf-8'))
         if not conn.execute("SELECT to_regclass('trujillo.sos_migrations')").fetchone()[0]:
             conn.execute((ROOT / 'migrations/014_sos.sql').read_text(encoding='utf-8'))
         # Refresh compatible public readers using the shared publication rule.

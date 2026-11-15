@@ -42,8 +42,10 @@ def message(job):
     title, body = job['title'], job['body']
     if job['kind'] == 'citizen':
         category = body.partition('.')[0].strip()
-        title = f'🚨 Alerta: {category} en tu zona' if category else '🚨 Incidente en tu zona'
-        body = 'Se confirmó un reporte cerca de tu zona configurada. Toca para ver los detalles.'
+        moving = job.get('moving') is True
+        title = f'🚨 Alerta: {category} cerca de ti' if category and moving else f'🚨 Alerta: {category} en tu zona' if category else '🚨 Incidente cerca de ti' if moving else '🚨 Incidente en tu zona'
+        body = ('Se confirmó un reporte cerca de tu ubicación reciente. ' if moving else
+                'Se confirmó un reporte cerca de tu zona configurada. ') + 'Toca para ver los detalles.'
     return {'message': {
         'token':job['token'], 'notification':{'title':title,'body':body},
         'data': data,
