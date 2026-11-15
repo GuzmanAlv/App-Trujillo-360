@@ -1,11 +1,10 @@
 # Backend en Render
 
-Actualización 3/11/2026: el servicio srv-db41goei0phs73el3ms0 usa la rama
-codex/notificaciones-fcm. Deploy dep-dbl0sfvf3r2c73850340, commit ad57a66,
-confirmado Live. /ready devuelve schema_version 11, workflow_version 1 y
-push_version 1. El envío FCM sigue deshabilitado por falta de credencial;
-Google bloqueó su creación mediante iam.disableServiceAccountKeyCreation.
-Ver docs/push-notifications.md. Continúa el plan Free.
+Actualización 15/11/2026: el servicio usa la rama `codex/notificaciones-fcm`.
+El backend público confirmó `/ready` con `schema_version: 11`,
+`workflow_version: 1`, `push_version: 2` y `sos_version: 1`.
+FCM está configurado y el usuario confirmó recepción. Ver
+docs/push-notifications.md para el flujo de ubicación móvil.
 
 Antes de desplegar: aplicar migrate.py desde la laptop con las credenciales administrativas. /ready debe responder schema_version 11. No ejecutar migraciones durante el arranque de Render.
 

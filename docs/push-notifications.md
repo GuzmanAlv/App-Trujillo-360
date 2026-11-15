@@ -1,75 +1,27 @@
 # Notificaciones por Firebase Cloud Messaging
 
-Estado al 3 de noviembre de 2026: backend ad57a66 desplegado en Render desde
-codex/notificaciones-fcm, deploy dep-dbl0sfvf3r2c73850340. /ready confirma base 11,
-workflows 1 y push 1. El emisor permanece deshabilitado: la organización aplica
-iam.disableServiceAccountKeyCreation y la cuenta actual no tiene permisos
-orgpolicy.policies.create/delete/update. No se generó ni descargó ninguna clave.
-La cuenta trujillo-notificaciones está creada con roles/firebasecloudmessaging.admin.
-El propietario/administrador debe resolver la política antes de probar envíos reales.
-No se cambió la política de la organización ni se contrató un plan de pago.
+Estado al 15 de noviembre de 2026: FCM está configurado en el backend público y el usuario confirmó recepción real. El backend usa `push_migrations` versión 2. Render despliega desde `codex/notificaciones-fcm`; `/ready` debe devolver `push_version: 2`. La credencial privada del emisor se conserva fuera de Git y del APK.
 
-La app Android usa la configuración Firebase existente. Configuración →
-Notificaciones reemplaza las antiguas alertas por consulta en primer plano.
-Cada instalación/cuenta puede activar una zona fija (100–3000 m) y los operadores
-autorizados pueden activar avisos de reportes. Solo se pide permiso al guardar
-una suscripción activa. No se requiere ubicación en segundo plano.
+## Avisos ciudadanos
 
-El backend guarda tokens en tablas privadas con RLS, sin exponerlos por HTTP.
-Una cola transaccional anuncia cada reporte al operador y cada transición a
-incidente público a los ciudadanos suscritos cuya zona coincide. La urgencia no
-publica un reporte. Los avisos públicos requieren menos de siete días de antigüedad.
-No se anuncian incidentes antiguos al habilitar una suscripción.
+En Configuración → Notificaciones se activa “Incidentes cerca de mí” y se elige un radio de 100 a 3000 metros. Android solicita notificaciones y ubicación “Permitir todo el tiempo”. La app inicia un servicio de ubicación con aviso permanente; actualiza el servidor al desplazarse y renueva la posición periódicamente. No es necesario elegir un centro en el mapa. Las suscripciones antiguas de zona fija se desactivan al abrir la versión nueva y deben activarse de nuevo.
 
-La cola usa claves únicas por evento/dispositivo, leases, reintentos con espera y
-caducidad. Antes de enviar se comprueban de nuevo rol, cuenta activa, suscripción,
-zona y estado público. FCM usa un tag estable para reemplazar posibles duplicados
-visuales. Como con cualquier sistema push, no hay garantía de entrega exactamente
-una vez ni de atención inmediata. Los textos no contienen direcciones, identidades
-de denunciantes ni descripciones privadas. Al tocar el aviso se consulta de nuevo
-el caso con autenticación y permisos actuales. Cerrar sesión desvincula el registro
-o invalida el token antes de salir; se borran los avisos visibles del dispositivo.
+El servidor solo encola un aviso cuando el incidente pasa a estado público y está dentro del radio de una ubicación reciente. Para el modo móvil, una posición de más de 20 minutos no se usa ni al crear el aviso ni antes de enviarlo. No se anuncian incidentes antiguos al activar avisos. Un reporte pendiente no genera aviso ciudadano.
 
-## Credencial del servidor
+## Operadores y SOS
 
-La API de Firebase Cloud Messaging V1 ya está habilitada en el proyecto
-project-43edb74d-04c5-4d00-962. Falta una credencial privada autorizada de servidor.
-Crear preferiblemente una cuenta de servicio exclusiva con el rol
-roles/firebasecloudmessaging.admin. Su clave JSON debe guardarse en
-backend/.secrets/fcm-service-account.json (directorio ignorado por Git), o indicar
-GOOGLE_APPLICATION_CREDENTIALS en backend/.env.push. El proyecto de la clave debe
-coincidir con FIREBASE_PROJECT_ID. Nunca imprimir, subir a Git ni incluir en el APK.
+“Nuevos reportes para el operador” solo aparece para cuentas con rol `operator` o `admin` activo. El servidor también verifica el rol al registrar el dispositivo y antes de enviar. Los reportes nuevos y solicitudes SOS generan avisos privados para los operadores suscritos. SOS no crea un incidente público ni promete atención inmediata.
 
-Copiar backend/.env.push.example a backend/.env.push y poner PUSH_ENABLED=true
-solo cuando exista esa credencial. Reiniciar el backend para iniciar el worker.
-Sin credencial o sin habilitación explícita la app permite guardar preferencias
-pero indica que el envío aún no está operativo. No simula una recepción exitosa.
+Los tokens FCM están en tablas privadas. La cola usa claves únicas por dispositivo/evento, reintentos, caducidad y comprobación de permisos antes del envío. El texto del aviso evita direcciones, identidad de denunciantes y descripciones privadas. Tocar el aviso consulta el caso con la sesión y los permisos actuales. Al cerrar sesión se desvincula el dispositivo o se invalida el token.
 
-Aplicar python migrate.py antes de arrancar la versión nueva del servidor.
-La extensión de notificaciones usa push_migrations versión 1 y conserva la base 11.
-La prueba python verify_push.py ejercita permisos, geografía y cola en una sola
-transacción que siempre revierte. No envía mensajes a Firebase.
+La entrega depende de Internet, Firebase y Android. Una detención forzada o permisos revocados impiden mantener la ubicación y recibir avisos hasta volver a abrir/configurar la app. El aviso no sustituye un servicio de emergencias.
 
-## Servidor público y prueba real
+## Prueba
 
-Un APK USB requiere laptop y servidor local para generar y despachar avisos.
-El backend público ya está desplegado; aún falta habilitar la credencial como Secret File (GOOGLE_APPLICATION_CREDENTIALS)
-o variable secreta FIREBASE_SERVICE_ACCOUNT_JSON, y PUSH_ENABLED=true. Recompilar
-el APK con BACKEND_URL=https://trujillo-360-api.onrender.com, sin USB_BACKEND.
-El proceso del servidor debe permanecer disponible: un alojamiento suspendido
-puede retrasar el procesamiento de la cola. No se activa ningún plan de pago
-automáticamente.
+1. Activar los permisos y “Incidentes cerca de mí” en un celular ciudadano.
+2. Activar avisos de operador en una cuenta autorizada, preferiblemente en otro celular.
+3. Enviar un reporte de prueba: debe avisar al operador. Confirmarlo o corroborarlo según las reglas de publicación: debe avisar al ciudadano solo si está cerca de una ubicación reciente.
+4. Probar incidentes fuera del radio, reportes pendientes, app en segundo plano, renovación de token y cambio de sesión.
+5. Medir el retraso de actualización de ubicación y entrega en un dispositivo real. Las pruebas automáticas no garantizan recepción en Android.
 
-Verificación final: activar permisos y zona con una cuenta ciudadana; activar
-avisos con la cuenta de operador autorizada, preferiblemente en otro teléfono.
-Con las apps en segundo plano, crear un reporte y comprobar el aviso al operador;
-verificarlo y comprobar el aviso al ciudadano de la zona. Comprobar que fuera de
-zona, desactivando avisos o usando un reporte pendiente, no llega aviso ciudadano.
-Tocar cada aviso debe abrir el caso correspondiente. Probar también con arranque
-en frío, renovación del token y cierre/cambio de cuenta. Forzar detención desde
-Android impide recibir hasta volver a abrir la app.
-
-Referencias oficiales:
-- https://firebase.google.com/docs/cloud-messaging/send/v1-api
-- https://firebase.google.com/docs/cloud-messaging/flutter/receive-messages
-- https://firebase.google.com/pricing
+Para desarrollar el backend local, configurar la credencial FCM mediante secretos fuera del repositorio y aplicar `backend/migrate.py` antes de iniciar la API. Nunca imprimir, copiar al APK ni subir a Git tokens o credenciales privadas.

@@ -343,7 +343,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ListTile(
         leading: const Icon(Icons.notifications_outlined),
         title: const Text('Notificaciones'),
-        subtitle: const Text('Permisos, mi zona y avisos fuera de la app.'),
+        subtitle: const Text('Permisos y avisos según tu ubicación actual.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.push<void>(
           context,

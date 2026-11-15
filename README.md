@@ -8,8 +8,8 @@ usarse con internet sin USB ni laptop. El código compartido está en `main`.
 
 **Leer primero [la guía para continuar en otra laptop y su texto para ChatGPT](docs/continuar-en-otra-laptop.md).**
 Incluye el estado real, instalación, permisos de Google, configuración de Render
-y pruebas. Los avisos FCM siguen pendientes de habilitar una credencial: Google
-aplica `iam.disableServiceAccountKeyCreation`. No se ha generado ninguna clave.
+y pruebas. Los avisos FCM ya funcionan; los avisos ciudadanos requieren permiso
+de ubicación permanente y una ubicación reciente del dispositivo.
 
 Inicio Android con el backend público:
 
@@ -71,7 +71,7 @@ Para mostrar Google Maps en web, se necesita una clave distinta restringida por 
 
 `BackendClient` es un adaptador inicial para HTTP y WebSocket; todavía no está conectado a las pantallas. Su contrato propuesto es GET /incidents con token y una lista JSON de incidentes. Requiere HTTPS/WSS. Falta implementar FastAPI, autenticación, permisos, reconexión WebSocket y sincronización antes de publicar reportes entre dispositivos.
 
-La IA de cámaras se ejecutará en el servidor/equipo con RTX 4060. Esta entrega no incorpora análisis de video, cuentas ni panel de validación del operador. El proyecto generado contiene Android y web; iOS se preparará en un Mac con Xcode.
+La IA de cámaras está pendiente. Se plantea un celular dedicado como cámara y un equipo de análisis aún por definir; la laptop actual no tiene RTX 4060. Esta entrega no incorpora análisis de video ni cámaras conectadas. El proyecto generado contiene Android y web; iOS se preparará en un Mac con Xcode.
 
 ## Código
 La preparación de IA incorpora una pestaña de candidatos pendientes de revisión,

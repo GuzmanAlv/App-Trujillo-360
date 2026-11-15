@@ -222,7 +222,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
                 ),
                 TextButton(
                   onPressed: push.busy ? null : load,
-                  child: const Text('Actualizar estado'),
+                  child: const Text('Comprobar notificaciones'),
                 ),
               ],
             ),
