@@ -156,6 +156,19 @@ class _SosShortcutSettingsState extends State<SosShortcutSettings>
               ? 'Permiso de accesibilidad: activado'
               : 'Permiso de accesibilidad: pendiente',
         ),
+        const SizedBox(height: 12),
+        const Text(
+          'Cómo activarlo en este celular',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          '1. Toca “Abrir ajustes de accesibilidad”.\n'
+          '2. Entra en “Apps descargadas”.\n'
+          '3. Abre “SOS con botón de volumen”.\n'
+          '4. Activa “Usar SOS con botón de volumen”.\n'
+          '5. Regresa aquí y comprueba que el permiso diga “activado”.',
+        ),
         TextButton.icon(
           onPressed: busy
               ? null
@@ -163,9 +176,7 @@ class _SosShortcutSettingsState extends State<SosShortcutSettings>
           icon: const Icon(Icons.settings_accessibility),
           label: const Text('Abrir ajustes de accesibilidad'),
         ),
-        const Text(
-          'En Accesibilidad, activa “SOS con botón de volumen”. El permiso se configura en este celular. Puedes desactivarlo allí en cualquier momento.',
-        ),
+        const Text('No necesitas activar “Combinación para SOS”.'),
         if (message != null)
           Padding(
             padding: const EdgeInsets.only(top: 16),
