@@ -103,12 +103,14 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.incident.type)),
+    appBar: AppBar(title: Text('Incidente: ${widget.incident.type}')),
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [
         Text(
-          'Incidente corroborado por la comunidad',
+          widget.incident.remoteStatus == 'verified'
+              ? 'Confirmado por un operador'
+              : 'Corroborado por la comunidad',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 20),
@@ -119,7 +121,7 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
         ],
         if (reports != null) ...[
           Text(
-            '${reports!.length} reportes de cuentas diferentes',
+            '${reports!.length} ${reports!.length == 1 ? 'aporte' : 'aportes'} de la comunidad',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
@@ -129,9 +131,7 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.how_to_reg_outlined),
-                    title: Text(
-                      'Reporte ${index + 1} · ${reports![index].type}',
-                    ),
+                    title: Text('Aporte ${index + 1}'),
                     subtitle: Text(
                       'Reportado ${reportTime(reports![index].createdAt)}\n${reports![index].place.trim().isEmpty ? 'Sin referencia' : reports![index].place}',
                     ),
