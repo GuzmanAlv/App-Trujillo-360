@@ -25,6 +25,7 @@ class MapPanel extends StatefulWidget {
     this.locating = false,
     this.locationRadius = 0,
     this.active = true,
+    this.zoomControls = false,
     this.overlays = const {},
   });
   final List<Incident> incidents;
@@ -33,7 +34,7 @@ class MapPanel extends StatefulWidget {
   final VoidCallback? onLocate;
   final ValueChanged<LatLngBounds>? onViewportChanged;
 
-  final bool locating, active;
+  final bool locating, active, zoomControls;
   final double locationRadius;
   final LatLng? selected;
   final ValueChanged<LatLng>? onPick;
@@ -263,7 +264,8 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                 ? GoogleMap(
                     // The form scrolls vertically. Gestures starting inside its
                     // location picker belong to the map, including pan and pinch.
-                    gestureRecognizers: widget.onPick != null
+                    gestureRecognizers:
+                        widget.onPick != null || widget.zoomControls
                         ? {
                             Factory<OneSequenceGestureRecognizer>(
                               () => EagerGestureRecognizer(),
@@ -272,7 +274,11 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                         : const <Factory<OneSequenceGestureRecognizer>>{},
                     initialCameraPosition: CameraPosition(
                       target: widget.selected ?? displayedLocation ?? trujillo,
-                      zoom: displayedLocation == null ? 14 : 13,
+                      zoom: widget.zoomControls
+                          ? 16
+                          : displayedLocation == null
+                          ? 14
+                          : 13,
                     ),
                     onMapCreated: (c) {
                       controller = c;
@@ -291,7 +297,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     },
                     onTap: selectMapLocation,
                     myLocationButtonEnabled: false,
-                    zoomControlsEnabled: false,
+                    zoomControlsEnabled: widget.zoomControls,
                     markers: {
                       for (final i in widget.incidents)
                         Marker(
@@ -386,7 +392,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     ),
                   ),
           ),
-          if (enabled)
+          if (enabled && !widget.zoomControls)
             Positioned(
               right: 12,
               bottom: 38,

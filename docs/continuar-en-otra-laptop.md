@@ -1,6 +1,6 @@
 # Continuar Trujillo 360 en otra laptop
 
-Estado comprobado el 15 de noviembre de 2026. Esta guía sustituye las notas del 3 de noviembre sobre Firebase y la supuesta RTX 4060.
+Estado actualizado el 16 de noviembre de 2026. Esta guía sustituye las notas del 3 de noviembre sobre Firebase y la supuesta RTX 4060.
 
 ## Obtener el proyecto
 
@@ -18,7 +18,7 @@ Si ya tienes una copia, revisa `git status` antes de `git pull --ff-only origin 
 ## Estado funcional
 
 - La app Flutter Android usa Google/Firebase y el backend `https://trujillo-360-api.onrender.com`. La app instalada no necesita cable ni laptop para reportar, recibir SOS o consultar información.
-- `/ready` devuelve `schema_version: 11`, `workflow_version: 1`, `push_version: 2` y `sos_version: 1`.
+- `/ready` debe devolver `schema_version: 11`, `workflow_version: 1`, `push_version: 3` y `sos_version: 1`.
 - Reportar guarda tipo, descripción, fotos, ubicación y hora del hecho. Ya no pide prioridad. El operador revisa el incidente; también puede quedar público por corroboración comunitaria según las reglas del servidor.
 - SOS envía la ubicación como solicitud privada en Ayuda y avisa a operadores con notificaciones habilitadas. No hace una llamada ni confirma que se haya enviado personal.
 - Las cuentas de operador ven Ayuda, Revisar reportes y Cámaras / IA. El servidor comprueba el rol en cada operación. Las cuentas ciudadanas no ven esa opción de avisos del operador.

@@ -1,8 +1,8 @@
 # Backend en Render
 
-Actualización 15/11/2026: el servicio usa la rama `codex/notificaciones-fcm`.
-El backend público confirmó `/ready` con `schema_version: 11`,
-`workflow_version: 1`, `push_version: 2` y `sos_version: 1`.
+Actualización 16/11/2026: el servicio usa la rama `codex/notificaciones-fcm`.
+Después de aplicar la migración, `/ready` debe confirmar `schema_version: 11`,
+`workflow_version: 1`, `push_version: 3` y `sos_version: 1`.
 FCM está configurado y el usuario confirmó recepción. Ver
 docs/push-notifications.md para el flujo de ubicación móvil.
 

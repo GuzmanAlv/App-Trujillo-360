@@ -1,6 +1,6 @@
 # Notificaciones por Firebase Cloud Messaging
 
-Estado al 15 de noviembre de 2026: FCM está configurado en el backend público y el usuario confirmó recepción real. El backend usa `push_migrations` versión 2. Render despliega desde `codex/notificaciones-fcm`; `/ready` debe devolver `push_version: 2`. La credencial privada del emisor se conserva fuera de Git y del APK.
+Estado al 16 de noviembre de 2026: FCM está configurado en el backend público. El backend usa `push_migrations` versión 3 para conservar el envío de SOS junto con el seguimiento de ubicación. Render despliega desde `codex/notificaciones-fcm`; `/ready` debe devolver `push_version: 3`. La credencial privada del emisor se conserva fuera de Git y del APK.
 
 ## Avisos ciudadanos
 

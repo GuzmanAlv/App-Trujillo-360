@@ -10,6 +10,8 @@ def main():
         try:
             if not conn.execute("SELECT to_regclass('trujillo.sos_migrations')").fetchone()[0]:
                 conn.execute((ROOT / 'migrations/014_sos.sql').read_text(encoding='utf-8'))
+            if conn.execute('SELECT max(version) FROM trujillo.push_migrations').fetchone()[0] == 2:
+                conn.execute((ROOT / 'migrations/016_restore_sos_push.sql').read_text(encoding='utf-8'))
             admin = conn.execute('SELECT current_user').fetchone()[0]
             conn.execute(sql.SQL('GRANT trujillo_api TO {}').format(sql.Identifier(admin)))
             prefix = 'sos-check-' + str(uuid4())
@@ -58,6 +60,11 @@ def main():
                                 (users[0], report_request)).fetchone()[0] == 0
             assert conn.execute('SELECT count(*) FROM trujillo.push_outbox WHERE device_id=%s AND target_id=%s',
                                 (device, report['id'])).fetchone()[0] == 1
+            conn.execute('UPDATE trujillo.push_outbox SET created_at=make_date(2000,1,1) WHERE device_id=%s AND target_id=%s',
+                         (device, report['id']))
+            as_user(1)
+            report_job = conn.execute('SELECT trujillo.push_claim()').fetchone()[0]
+            assert report_job['kind'] == 'operator' and report_job['title'] == 'Nuevo reporte'
             as_user(0)
             try:
                 with conn.transaction():

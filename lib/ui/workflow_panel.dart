@@ -543,8 +543,9 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
                   ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 240,
+                  height: 300,
                   child: MapPanel(
+                    zoomControls: true,
                     selected: LatLng(
                       (r['latitude'] as num).toDouble(),
                       (r['longitude'] as num).toDouble(),
