@@ -2,11 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/incident.dart';
 import '../services/nearby_reports_client.dart';
 import 'report_style.dart';
 import '../services/community_photos_client.dart';
 import 'community_photo_view.dart';
+import 'map_panel.dart';
 
 class CommunityIncidentPage extends StatefulWidget {
   const CommunityIncidentPage({
@@ -113,6 +115,24 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
               : 'Corroborado por la comunidad',
           style: Theme.of(context).textTheme.titleLarge,
         ),
+        const SizedBox(height: 16),
+        Text(
+          'Ubicación del incidente',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 300,
+          child: MapPanel(
+            selected: LatLng(
+              widget.incident.latitude,
+              widget.incident.longitude,
+            ),
+            zoomControls: true,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text('Ocurrió ${reportTime(widget.incident.createdAt)}'),
         const SizedBox(height: 20),
         if (loading) const Center(child: CircularProgressIndicator()),
         if (error != null) ...[
