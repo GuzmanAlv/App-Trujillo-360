@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:geolocator/geolocator.dart';
+
 import '../services/push_service.dart';
 import '../services/workflow_client.dart';
 import '../services/location_service.dart';
@@ -17,6 +20,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
     with WidgetsBindingObserver {
   final push = PushService.instance;
   bool citizen = false, operator = false, allowed = false, loading = true;
+  bool batterySaver = false;
   int radius = 500;
   String? note;
   int generation = 0;
@@ -77,6 +81,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
         citizen = p?['citizen_enabled'] == true;
         operator = allowed && p?['operator_enabled'] == true;
         radius = p?['radius'] as int? ?? 500;
+        batterySaver = push.batterySaver;
         note = push.error;
       });
     } catch (e) {
@@ -99,8 +104,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
         if (await Geolocator.checkPermission() != LocationPermission.always) {
           if (mounted) {
             setState(
-              () => note =
-                  'En los ajustes de la app, cambia Ubicación a “Permitir todo el tiempo”. Luego vuelve y guarda las preferencias.',
+              () => note = 'En los ajustes de la app, cambia Ubicación a “Permitir todo el tiempo”. Luego vuelve y guarda las preferencias.',
             );
           }
           await Geolocator.openAppSettings();
@@ -114,6 +118,7 @@ class _NotificationSettingsState extends State<NotificationSettings>
         longitude: longitude,
         radius: radius,
         moving: citizen,
+        batterySaver: batterySaver,
       );
       if (mounted) {
         setState(
@@ -190,6 +195,17 @@ class _NotificationSettingsState extends State<NotificationSettings>
                     onChanged: push.busy
                         ? null
                         : (r) => setState(() => radius = r!),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Ahorrar batería'),
+                    subtitle: const Text(
+                      'Actualiza tu zona aproximadamente cada 12 a 15 minutos en lugar de 5. Los avisos al cambiar de zona pueden demorarse más; el SOS usa tu ubicación al enviarse.',
+                    ),
+                    value: batterySaver,
+                    onChanged: push.busy
+                        ? null
+                        : (value) => setState(() => batterySaver = value),
                   ),
                 ],
                 if (allowed)

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -7,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'report_sender.dart';
 import 'location_service.dart';
 import 'workflow_client.dart';
@@ -25,6 +27,7 @@ class PushService extends ChangeNotifier {
   Map<String, dynamic>? preferences;
   String? owner, deviceId, error;
   bool senderConfigured = false, permission = false, busy = false;
+  bool batterySaver = false;
   bool started = false, signingOut = false;
   int generation = 0;
   final Set<String> seen = {};
@@ -77,8 +80,7 @@ class PushService extends ChangeNotifier {
       try {
         await register(token, Map<String, dynamic>.from(preferences!));
       } catch (_) {
-        error =
-            'No se pudo renovar el registro. Abre Notificaciones para reintentar.';
+        error = 'No se pudo renovar el registro. Abre Notificaciones para reintentar.';
         notifyListeners();
       }
     });
@@ -153,6 +155,11 @@ class PushService extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      batterySaver =
+          (await SharedPreferences.getInstance()).getBool(
+            'push.battery_saver.$uid',
+          ) ??
+          false;
       final id = await installation(uid);
       final data = await WorkflowClient.request('GET', '/push/devices/$id');
       final settings = await FirebaseMessaging.instance
@@ -184,8 +191,7 @@ class PushService extends ChangeNotifier {
             values['latitude'] = null;
             values['longitude'] = null;
             await register(token, values);
-            error =
-                'La zona fija anterior se desactivó. Activa “Incidentes cerca de mí” para recibir avisos según tu ubicación actual.';
+            error = 'La zona fija anterior se desactivó. Activa “Incidentes cerca de mí” para recibir avisos según tu ubicación actual.';
           } else {
             await register(token, values);
           }
@@ -235,6 +241,7 @@ class PushService extends ChangeNotifier {
     double? longitude,
     int radius = 500,
     bool moving = false,
+    bool batterySaver = false,
   }) async {
     if (!supported ||
         Firebase.apps.isEmpty ||
@@ -300,6 +307,14 @@ class PushService extends ChangeNotifier {
         'radius': radius,
         'moving_enabled': moving,
       });
+      final savedMode = await (await SharedPreferences.getInstance()).setBool(
+        'push.battery_saver.$uid',
+        batterySaver,
+      );
+      if (!savedMode) {
+        throw StateError('No se pudo guardar el modo de ahorro de batería.');
+      }
+      this.batterySaver = batterySaver;
       if (moving) {
         await stopTracking();
         await startTracking();
@@ -367,25 +382,28 @@ class PushService extends ChangeNotifier {
     }
     if (await Geolocator.checkPermission() != LocationPermission.always ||
         !await Geolocator.isLocationServiceEnabled()) {
-      error =
-          'Activa la ubicación y el permiso “Permitir todo el tiempo” para recibir alertas según dónde estés.';
+      error = 'Activa la ubicación y el permiso “Permitir todo el tiempo” para recibir alertas según dónde estés.';
       notifyListeners();
       return;
     }
-    locationUpdates = LocationService().watchAlerts().listen(
-      (position) {
-        unawaited(syncLocation(position));
-      },
-      onError: (Object _) {
-        unawaited(stopTracking());
-        error =
-            'No se pudo actualizar la ubicación de las alertas. Abre Notificaciones para reintentar.';
-        notifyListeners();
+    locationUpdates = LocationService()
+        .watchAlerts(batterySaver: batterySaver)
+        .listen(
+          (position) {
+            unawaited(syncLocation(position));
+          },
+          onError: (Object _) {
+            unawaited(stopTracking());
+            error = 'No se pudo actualizar la ubicación de las alertas. Abre Notificaciones para reintentar.';
+            notifyListeners();
+          },
+        );
+    locationHeartbeat = Timer.periodic(
+      Duration(minutes: batterySaver ? 12 : 8),
+      (_) {
+        unawaited(refreshLocation());
       },
     );
-    locationHeartbeat = Timer.periodic(const Duration(minutes: 8), (_) {
-      unawaited(refreshLocation());
-    });
     unawaited(refreshLocation());
   }
 
@@ -408,8 +426,7 @@ class PushService extends ChangeNotifier {
       );
       await syncLocation(position);
     } catch (_) {
-      error =
-          'No se pudo renovar la ubicación. Los avisos cercanos se pausarán si pasan 20 minutos sin actualizarla.';
+      error = 'No se pudo renovar la ubicación. Los avisos cercanos se pausarán si pasan 20 minutos sin actualizarla.';
       notifyListeners();
     }
   }
@@ -439,8 +456,7 @@ class PushService extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {
-      error =
-          'No se pudo renovar la ubicación. Revisa Internet y abre Notificaciones para reintentar.';
+      error = 'No se pudo renovar la ubicación. Revisa Internet y abre Notificaciones para reintentar.';
       notifyListeners();
     } finally {
       sendingLocation = false;

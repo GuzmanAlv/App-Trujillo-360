@@ -37,20 +37,20 @@ class LocationService {
     ),
   );
 
-  Stream<Position> watchAlerts() => Geolocator.getPositionStream(
-    locationSettings: AndroidSettings(
-      accuracy: LocationAccuracy.medium,
-      distanceFilter: 100,
-      intervalDuration: const Duration(minutes: 1),
-      foregroundNotificationConfig: ForegroundNotificationConfig(
-        notificationTitle: 'Alertas por ubicación activas',
-        notificationText:
-            'Trujillo 360 actualiza tu zona para avisarte de incidentes cercanos.',
-        notificationChannelName: 'Ubicación para alertas',
-        setOngoing: true,
-      ),
-    ),
-  );
+  Stream<Position> watchAlerts({bool batterySaver = false}) =>
+      Geolocator.getPositionStream(
+        locationSettings: AndroidSettings(
+          accuracy: LocationAccuracy.medium,
+          distanceFilter: batterySaver ? 500 : 250,
+          intervalDuration: Duration(minutes: batterySaver ? 15 : 5),
+          foregroundNotificationConfig: ForegroundNotificationConfig(
+            notificationTitle: 'Alertas por ubicación activas',
+            notificationText: 'Trujillo 360 actualiza tu zona para avisarte de incidentes cercanos.',
+            notificationChannelName: 'Ubicación para alertas',
+            setOngoing: true,
+          ),
+        ),
+      );
 }
 
 class LocationFailure implements Exception {
