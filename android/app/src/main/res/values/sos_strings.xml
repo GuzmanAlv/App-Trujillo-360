@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sos_accessibility_description">Detecta tres pulsaciones rápidas de volumen abajo para abrir SOS. Solo actívalo si quieres probar este acceso; puedes desactivarlo desde los ajustes de accesibilidad.</string>
+</resources>

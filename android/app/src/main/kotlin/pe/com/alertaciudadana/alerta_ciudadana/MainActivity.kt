@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -19,6 +20,7 @@ class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var permissionResult: MethodChannel.Result? = null
     private val alertChannel = "nearby_incidents"
+
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -30,6 +32,32 @@ class MainActivity : FlutterActivity() {
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "sosVolumeStatus" -> {
+                    val (enabled, testOnly) = SosVolumeConfig.read(this)
+                    val accessibility = getSystemService(AccessibilityManager::class.java)
+                    val active = accessibility.getEnabledAccessibilityServiceList(
+                        android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
+                    ).any { it.resolveInfo.serviceInfo.name == SosVolumeService::class.java.name }
+                    result.success(mapOf(
+                        "enabled" to enabled,
+                        "test_only" to testOnly,
+                        "permission" to active
+                    ))
+                }
+                "setSosVolume" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    val testOnly = call.argument<Boolean>("test_only") ?: true
+                    SosVolumeConfig.write(this, enabled, testOnly)
+                    result.success(null)
+                }
+                "openSosAccessibility" -> {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    result.success(null)
+                }
+                "takeSosSettingsRoute" -> {
+                    result.success(intent.getBooleanExtra("open_sos_settings", false))
+                    intent.removeExtra("open_sos_settings")
+                }
                 "openNotificationSettings" -> {
                     val target = if (Build.VERSION.SDK_INT >= 26)
                         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
@@ -96,6 +124,10 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra("open_sos_settings", false)) {
+            channel?.invokeMethod("openSosSettings", null)
+            intent.removeExtra("open_sos_settings")
+        }
         intent.getStringExtra("push_payload")?.let {
             channel?.invokeMethod("openPush", it)
             intent.removeExtra("push_payload")

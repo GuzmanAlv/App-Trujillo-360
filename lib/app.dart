@@ -16,6 +16,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'models/incident.dart';
 import 'services/push_service.dart';
 import 'ui/notification_settings.dart';
+import 'ui/sos_shortcut_settings.dart';
 import 'ui/push_destination.dart';
 import 'ui/report_details_page.dart';
 import 'ui/community_incident_page.dart';
@@ -214,6 +215,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool reportsNearbySelected = true;
   bool foreground = true;
   StreamSubscription<Map<String, dynamic>>? pushOpens;
+  StreamSubscription<void>? sosSettingsRoutes;
+  void openSosSettingsRoute() {
+    if (!mounted || !PushService.instance.pendingSosSettingsRoute) return;
+    PushService.instance.pendingSosSettingsRoute = false;
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => const SosShortcutSettings()),
+    );
+  }
+
   final Set<String> openedPush = {};
   void openPush(Map<String, dynamic> data) {
     if (!mounted || !PushService.instance.valid(data)) return;
@@ -237,9 +248,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted && foreground) setState(() {});
     });
     pushOpens = PushService.instance.opened.stream.listen(openPush);
+    sosSettingsRoutes = PushService.instance.sosSettingsRoutes.stream.listen(
+      (_) => openSosSettingsRoute(),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final pending = PushService.instance.pending;
       if (pending != null) openPush(pending);
+      PushService.channel
+          .invokeMethod<bool>('takeSosSettingsRoute')
+          .then((open) {
+            if (open == true) {
+              PushService.instance.pendingSosSettingsRoute = true;
+              openSosSettingsRoute();
+            }
+          })
+          .catchError((Object _) {});
+      openSosSettingsRoute();
     });
   }
 
@@ -283,6 +307,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     pushOpens?.cancel();
+    sosSettingsRoutes?.cancel();
     nearby.dispose();
     mapIncidents.dispose();
     roleGeneration++;
@@ -348,6 +373,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onTap: () => Navigator.push<void>(
           context,
           MaterialPageRoute(builder: (_) => const NotificationSettings()),
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.sos_outlined),
+        title: const Text('SOS con botón de volumen · prueba'),
+        subtitle: const Text('Tres pulsaciones de volumen abajo.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const SosShortcutSettings()),
         ),
       ),
       const SizedBox(height: 20),

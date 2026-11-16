@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -8,7 +7,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'report_sender.dart';
 import 'location_service.dart';
 import 'workflow_client.dart';
@@ -23,6 +21,8 @@ class PushService extends ChangeNotifier {
   PushService._();
   static const channel = MethodChannel('trujillo360/proximity');
   final opened = StreamController<Map<String, dynamic>>.broadcast();
+  final sosSettingsRoutes = StreamController<void>.broadcast();
+  bool pendingSosSettingsRoute = false;
   Map<String, dynamic>? pending;
   Map<String, dynamic>? preferences;
   String? owner, deviceId, error;
@@ -47,6 +47,10 @@ class PushService extends ChangeNotifier {
             jsonDecode(call.arguments as String) as Map,
           ),
         );
+      }
+      if (call.method == 'openSosSettings') {
+        pendingSosSettingsRoute = true;
+        sosSettingsRoutes.add(null);
       }
     });
     FirebaseMessaging.onBackgroundMessage(backgroundMessage);
@@ -80,7 +84,8 @@ class PushService extends ChangeNotifier {
       try {
         await register(token, Map<String, dynamic>.from(preferences!));
       } catch (_) {
-        error = 'No se pudo renovar el registro. Abre Notificaciones para reintentar.';
+        error =
+            'No se pudo renovar el registro. Abre Notificaciones para reintentar.';
         notifyListeners();
       }
     });
@@ -191,7 +196,8 @@ class PushService extends ChangeNotifier {
             values['latitude'] = null;
             values['longitude'] = null;
             await register(token, values);
-            error = 'La zona fija anterior se desactivó. Activa “Incidentes cerca de mí” para recibir avisos según tu ubicación actual.';
+            error =
+                'La zona fija anterior se desactivó. Activa “Incidentes cerca de mí” para recibir avisos según tu ubicación actual.';
           } else {
             await register(token, values);
           }
@@ -382,7 +388,8 @@ class PushService extends ChangeNotifier {
     }
     if (await Geolocator.checkPermission() != LocationPermission.always ||
         !await Geolocator.isLocationServiceEnabled()) {
-      error = 'Activa la ubicación y el permiso “Permitir todo el tiempo” para recibir alertas según dónde estés.';
+      error =
+          'Activa la ubicación y el permiso “Permitir todo el tiempo” para recibir alertas según dónde estés.';
       notifyListeners();
       return;
     }
@@ -394,7 +401,8 @@ class PushService extends ChangeNotifier {
           },
           onError: (Object _) {
             unawaited(stopTracking());
-            error = 'No se pudo actualizar la ubicación de las alertas. Abre Notificaciones para reintentar.';
+            error =
+                'No se pudo actualizar la ubicación de las alertas. Abre Notificaciones para reintentar.';
             notifyListeners();
           },
         );
@@ -426,7 +434,8 @@ class PushService extends ChangeNotifier {
       );
       await syncLocation(position);
     } catch (_) {
-      error = 'No se pudo renovar la ubicación. Los avisos cercanos se pausarán si pasan 20 minutos sin actualizarla.';
+      error =
+          'No se pudo renovar la ubicación. Los avisos cercanos se pausarán si pasan 20 minutos sin actualizarla.';
       notifyListeners();
     }
   }
@@ -456,7 +465,8 @@ class PushService extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {
-      error = 'No se pudo renovar la ubicación. Revisa Internet y abre Notificaciones para reintentar.';
+      error =
+          'No se pudo renovar la ubicación. Revisa Internet y abre Notificaciones para reintentar.';
       notifyListeners();
     } finally {
       sendingLocation = false;
