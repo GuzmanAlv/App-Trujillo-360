@@ -185,10 +185,6 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
               child: const Text('Reintentar fotos'),
             ),
           ],
-          const SizedBox(height: 12),
-          const Text(
-            'Las fotos se comparten cuando el incidente está corroborado o verificado. Los nombres y las descripciones privadas permanecen en Mis reportes.',
-          ),
           TextButton.icon(
             onPressed: load,
             icon: const Icon(Icons.refresh),
