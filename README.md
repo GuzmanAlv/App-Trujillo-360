@@ -95,7 +95,7 @@ flutter analyze
 flutter test
 flutter build web
 ```
-Los archivos locales de configuración quedan excluidos de Git. El identificador interno del paquete se mantiene como alerta_ciudadana por compatibilidad; el nombre visible es Trujillo 360. Antes de publicar Android se necesita una firma de producción.
+Los archivos locales de configuración quedan excluidos de Git. El identificador interno del paquete se mantiene como alerta_ciudadana por compatibilidad; el nombre visible es Trujillo 360. Antes de publicar Android se necesita una firma de producción. JASKJKASJKSJ
 
 ## Estado de la verificación en este equipo
 Flutter 3.44.4 y Dart 3.12.2 detectados. El análisis estático terminó sin observaciones y pasaron las tres pruebas iniciales. Chrome está disponible. `flutter doctor` no encuentra cmdline-tools en la ruta Android SDK configurada: para ejecutar en celular, abre Android Studio > SDK Manager y confirma la ruta del SDK; instala Android SDK Command-line Tools (latest), Platform-Tools y una plataforma Android compatible. Después configura Flutter con `flutter config --android-sdk RUTA_DEL_SDK` si la ruta es diferente, y ejecuta `flutter doctor --android-licenses`. No se ha verificado una compilación Android. La advertencia de Visual Studio corresponde a escritorio Windows y no impide desarrollar Android o web con Visual Studio Code.
