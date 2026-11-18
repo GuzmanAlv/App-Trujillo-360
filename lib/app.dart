@@ -1,3 +1,4 @@
+import 'ui/incoming_call_overlay.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -35,11 +36,14 @@ class TrujilloApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Trujillo 360',
+    navigatorKey: appNavigatorKey,
     debugShowCheckedModeBanner: false,
     // Reserva el espacio de navegación de Android para todas las rutas.
     // SafeArea elimina ese margen del MediaQuery de los hijos para no duplicarlo.
-    builder: (context, child) =>
-        SafeArea(top: false, child: child ?? const SizedBox.shrink()),
+    builder: (context, child) => SafeArea(
+      top: false,
+      child: IncomingCallOverlay(child: child ?? const SizedBox.shrink()),
+    ),
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff087f68)),
@@ -255,7 +259,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       roleSession = FirebaseAuth.instance.authStateChanges().listen(checkRole);
     }
     expiryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && foreground) setState(() {});
+      if (mounted && foreground) {
+        setState(() {});
+        if (tab == 0 && !historical && !mapIncidents.loading) {
+          unawaited(mapIncidents.refresh());
+        }
+      }
     });
     pushOpens = PushService.instance.opened.stream.listen(openPush);
     sosSettingsRoutes = PushService.instance.sosSettingsRoutes.stream.listen(

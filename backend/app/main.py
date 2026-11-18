@@ -1,3 +1,4 @@
+from app.sos_cases import router as sos_cases_router
 import logging
 from contextlib import asynccontextmanager
 import psycopg
@@ -51,6 +52,7 @@ app.include_router(reports_router)
 app.include_router(workflows_router)
 app.include_router(push_router)
 app.include_router(calls_router)
+app.include_router(sos_cases_router)
 
 
 @app.middleware('http')
@@ -92,11 +94,13 @@ def ready():
                 raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.call_action(uuid,text)') IS NOT NULL").fetchone()[0]:
                 raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_case_update(uuid,uuid,integer,jsonb)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError) as error:
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1, 'sos_cases_version':1}
 
 
 @app.get('/me')

@@ -20,6 +20,7 @@ class MapPanel extends StatefulWidget {
     this.onPick,
     this.onIncident,
     this.currentLocation,
+    this.currentLocationLabel = 'Mi ubicación',
     this.onLocate,
     this.onViewportChanged,
     this.locating = false,
@@ -31,6 +32,7 @@ class MapPanel extends StatefulWidget {
   final List<Incident> incidents;
   final Set<Circle> overlays;
   final LatLng? currentLocation;
+  final String currentLocationLabel;
   final VoidCallback? onLocate;
   final ValueChanged<LatLngBounds>? onViewportChanged;
 
@@ -74,7 +76,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   }
 
   String iconKey(Incident incident) =>
-      '${incident.type}|${reportTime(incident.createdAt)}';
+      '${incident.type}|${reportTime(incident.createdAt)}|${incident.attention}';
 
   Future<void> prepareReportIcons() async {
     final generation = ++iconGeneration;
@@ -90,6 +92,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
               await renderReportMarker(
                 incident.type,
                 reportTime(incident.createdAt),
+                onScene: incident.attention == 'on_scene',
               ),
               imagePixelRatio: 2,
               width: 174,
@@ -320,7 +323,9 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           infoWindow: InfoWindow(
                             title:
                                 '${i.type} · Reportado ${reportTime(i.createdAt)}',
-                            snippet: i.place,
+                            snippet: i.attention == 'on_scene'
+                                ? 'Personal en el lugar · ${i.place}'
+                                : i.place,
                           ),
                           onTap: () => widget.onIncident?.call(i),
                         ),
@@ -331,7 +336,9 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           icon: locationIcon!,
                           anchor: const Offset(0.5, 0.5),
                           zIndexInt: 2,
-                          infoWindow: const InfoWindow(title: 'Mi ubicación'),
+                          infoWindow: InfoWindow(
+                            title: widget.currentLocationLabel,
+                          ),
                         ),
                       if (exploredLocation != null && explorationIcon != null)
                         Marker(

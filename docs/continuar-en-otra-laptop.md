@@ -1,5 +1,7 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización de código del 18 de noviembre: [casos SOS y atención por operadores](sos-cases.md). Incluye migración 018, aviso flotante dentro de la app, evaluación durante/después de la llamada y presencia en el mapa. Consultar esa guía para activar y probar; su existencia no confirma un despliegue en Render.
+
 Estado actualizado el 16 de noviembre de 2026. Esta guía sustituye las notas del 3 de noviembre sobre Firebase y la supuesta RTX 4060.
 
 Actualización de implementación del 17 de noviembre: consultar [el piloto de llamadas SOS](audio-calls.md) antes de desplegar. Incluye migración 017 y configuración LiveKit; el estado histórico de abajo describe el SOS anterior al despliegue de llamadas.

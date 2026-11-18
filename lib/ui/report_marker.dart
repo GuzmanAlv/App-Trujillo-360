@@ -5,7 +5,11 @@ import 'report_style.dart';
 
 /// A label attached to the exact coordinate by its bottom tip.
 /// Render at 2x for sharp text; Maps receives the logical display dimensions.
-Future<Uint8List> renderReportMarker(String category, String time) async {
+Future<Uint8List> renderReportMarker(
+  String category,
+  String time, {
+  bool onScene = false,
+}) async {
   const width = 174.0;
   const height = 82.0;
   const scale = 2.0;
@@ -47,23 +51,47 @@ Future<Uint8List> renderReportMarker(String category, String time) async {
     painter.dispose();
   }
 
-  final iconPainter = TextPainter(
-    text: TextSpan(
-      text: String.fromCharCode(style.icon.codePoint),
-      style: TextStyle(
-        fontFamily: style.icon.fontFamily,
-        package: style.icon.fontPackage,
-        fontSize: 23,
-        color: Colors.white,
+  if (onScene) {
+    // Beacon silhouette: dome, base and light rays, instead of the category icon.
+    final paint = Paint()..color = Colors.white;
+    canvas.drawRRect(
+      RRect.fromRectAndCorners(
+        const Rect.fromLTWH(24, 29, 18, 16),
+        topLeft: const Radius.circular(9),
+        topRight: const Radius.circular(9),
       ),
-    ),
-    textDirection: TextDirection.ltr,
-  )..layout();
-  iconPainter.paint(
-    canvas,
-    Offset(33 - iconPainter.width / 2, 35 - iconPainter.height / 2),
-  );
-  iconPainter.dispose();
+      paint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(21, 45, 24, 4),
+        const Radius.circular(2),
+      ),
+      paint,
+    );
+    paint.strokeWidth = 2.5;
+    canvas.drawLine(const Offset(33, 20), const Offset(33, 25), paint);
+    canvas.drawLine(const Offset(19, 25), const Offset(23, 28), paint);
+    canvas.drawLine(const Offset(43, 28), const Offset(47, 25), paint);
+  } else {
+    final iconPainter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(style.icon.codePoint),
+        style: TextStyle(
+          fontFamily: style.icon.fontFamily,
+          package: style.icon.fontPackage,
+          fontSize: 23,
+          color: Colors.white,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    iconPainter.paint(
+      canvas,
+      Offset(33 - iconPainter.width / 2, 35 - iconPainter.height / 2),
+    );
+    iconPainter.dispose();
+  }
   text(
     category,
     TextStyle(color: style.color, fontWeight: FontWeight.w700, fontSize: 15),
@@ -71,8 +99,8 @@ Future<Uint8List> renderReportMarker(String category, String time) async {
     101,
   );
   text(
-    'Reportado $time',
-    const TextStyle(color: Color(0xff475569), fontSize: 11),
+    onScene ? 'Personal en el lugar' : 'Reportado $time',
+    const TextStyle(color: Color(0xff475569), fontSize: 10),
     const Offset(59, 39),
     101,
   );

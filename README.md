@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Nuevo flujo: [evaluación del SOS, llamada entrante y estados de atención](docs/sos-cases.md). Requiere migración 018 y actualizar backend y app; incluye la prueba de aceptación en dos celulares.
+
 Nuevo piloto: [SOS mantenido tres segundos y llamadas privadas con LiveKit](docs/audio-calls.md). Requiere la migración 017, despliegue del backend y app actualizada; las claves quedan exclusivamente en Render.
 
 La aplicación conserva cuenta Google, reportes, fotos, filtros y configuración.

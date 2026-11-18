@@ -63,7 +63,12 @@ class WorkflowClient {
             403 => 'Tu cuenta no está autorizada para esta operación.',
             404 =>
               'Esta función aún no está disponible en el servidor conectado.',
-            409 => 'El identificador ya fue usado con otros datos.',
+            409 =>
+              path.startsWith('/operator/sos-cases/')
+                  ? 'El caso cambió o la acción no está disponible. Recarga la ficha antes de continuar.'
+                  : path.startsWith('/calls/')
+                  ? 'La llamada terminó, ya fue atendida o tienes otra llamada activa.'
+                  : 'El identificador ya fue usado con otros datos.',
             422 => 'Revisa los datos o el estado del caso.',
             _ =>
               'Servidor no disponible. No se confirmó ningún cambio. Vuelve a intentar.',

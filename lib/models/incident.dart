@@ -12,6 +12,7 @@ class Incident {
     this.ownerUid,
     this.remoteId,
     this.remoteStatus = 'pending',
+    this.attention = 'none',
     this.corroborationCount = 0,
     this.needsReview = false,
     this.photos = const [],
@@ -21,7 +22,7 @@ class Incident {
   final double latitude, longitude;
   final DateTime createdAt;
   final String? ownerUid, remoteId;
-  final String remoteStatus;
+  final String remoteStatus, attention;
   final int corroborationCount;
   final bool needsReview;
   final List<ReportPhoto> photos;
@@ -64,6 +65,7 @@ class Incident {
     ownerUid: ownerUid,
     remoteId: serverId,
     remoteStatus: status,
+    attention: attention,
     corroborationCount: count,
     needsReview: review,
     photos: photos,
@@ -80,6 +82,7 @@ class Incident {
     'ownerUid': ownerUid,
     'remoteId': remoteId,
     'remoteStatus': remoteStatus,
+    'attention': attention,
     'corroborationCount': corroborationCount,
     'needsReview': needsReview,
     'photos': photos.map((photo) => photo.toJson()).toList(),
@@ -102,6 +105,7 @@ class Incident {
       ownerUid: j['ownerUid'] as String?,
       remoteId: j['remoteId'] as String?,
       remoteStatus: j['remoteStatus'] as String? ?? 'pending',
+      attention: j['attention'] as String? ?? 'none',
       corroborationCount:
           j['corroborationCount'] as int? ?? (j['remoteId'] == null ? 0 : 1),
       needsReview: j['needsReview'] as bool? ?? false,

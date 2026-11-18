@@ -1,3 +1,4 @@
+import 'sos_case_panel.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -507,6 +508,36 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
   @override
   Widget build(BuildContext context) {
     final r = widget.row;
+    if (widget.operator && widget.incident && r['sos_case_id'] != null) {
+      return SosCasePage(caseId: r['sos_case_id'] as String);
+    }
+    if (widget.operator && !widget.incident && r['source'] == 'sos') {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Caso SOS')),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              if (!['Cerrada', 'Descartada'].contains(r['stage']))
+                FilledButton.icon(
+                  onPressed: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AudioCallPage(
+                        callId: r['id'] as String,
+                        operator: true,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.call),
+                  label: const Text('Tomar / abrir llamada'),
+                ),
+              SosCasePanel(caseId: r['id'] as String),
+            ],
+          ),
+        ),
+      );
+    }
     final terminal = ['Cerrada', 'Descartada'].contains(r['stage']);
     final options = r['stage'] == 'Recibida'
         ? ['En revisión', 'Descartada']

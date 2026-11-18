@@ -1,3 +1,5 @@
+import 'sos_case_panel.dart';
+import '../services/active_call.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
@@ -17,6 +19,7 @@ class AudioCallPage extends StatefulWidget {
 
 class _AudioCallPageState extends State<AudioCallPage> {
   final room = Room();
+  final caseKey = GlobalKey<SosCasePanelState>();
   Timer? poll;
   StreamSubscription<User?>? auth;
   String message = 'Preparando llamada…';
@@ -28,6 +31,9 @@ class _AudioCallPageState extends State<AudioCallPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ActiveCall.id.value = widget.callId;
+    });
     final uid = FirebaseAuth.instance.currentUser?.uid;
     auth = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user?.uid != uid) {
@@ -155,8 +161,10 @@ class _AudioCallPageState extends State<AudioCallPage> {
     }
   }
 
-  Future<void> finish() async {
+  Future<void> finish({bool exit = false}) async {
     if (closing) return;
+    if (exit && !(await caseKey.currentState?.mayLeave() ?? true)) return;
+    if (!mounted || closing) return;
     setState(() => closing = true);
     finished = true;
     poll?.cancel();
@@ -191,7 +199,14 @@ class _AudioCallPageState extends State<AudioCallPage> {
     } finally {
       if (mounted) {
         setState(() => closing = false);
-        leave();
+        if (!widget.operator || exit) {
+          leave();
+        } else {
+          setState(() {
+            message = 'Llamada finalizada. Continúa con la evaluación.';
+            joined = false;
+          });
+        }
       }
     }
   }
@@ -217,6 +232,9 @@ class _AudioCallPageState extends State<AudioCallPage> {
         },
       ]),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ActiveCall.id.value == widget.callId) ActiveCall.id.value = null;
+    });
     super.dispose();
   }
 
@@ -224,77 +242,101 @@ class _AudioCallPageState extends State<AudioCallPage> {
   Widget build(BuildContext context) => PopScope(
     canPop: allowPop,
     onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) unawaited(finish());
+      if (!didPop) unawaited(finish(exit: true));
     },
     child: Scaffold(
       appBar: AppBar(title: const Text('Llamada SOS')),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.call, size: 64),
-                const SizedBox(height: 24),
-                Text(message, textAlign: TextAlign.center),
-                if (failure != null)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(failure!, textAlign: TextAlign.center),
-                  ),
-                if (failure != null && !started && !finished)
-                  TextButton(
-                    onPressed: begin,
-                    child: const Text('Reintentar conexión'),
-                  ),
-                const SizedBox(height: 24),
-                if (joined && !finished)
-                  Wrap(
-                    spacing: 16,
-                    children: [
-                      IconButton(
-                        tooltip: muted ? 'Activar micrófono' : 'Silenciar',
-                        icon: Icon(muted ? Icons.mic_off : Icons.mic),
-                        onPressed: () async {
-                          try {
-                            await room.localParticipant?.setMicrophoneEnabled(
-                              muted,
-                            );
-                            if (mounted) setState(() => muted = !muted);
-                          } catch (e) {
-                            showFailure(e);
-                          }
-                        },
-                      ),
-                      IconButton(
-                        tooltip: 'Altavoz',
-                        icon: Icon(speaker ? Icons.volume_up : Icons.hearing),
-                        onPressed: () async {
-                          try {
-                            await AudioManager.instance
-                                .setSpeakerOutputPreferred(!speaker);
-                            if (mounted) setState(() => speaker = !speaker);
-                          } catch (e) {
-                            showFailure(e);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                FilledButton.icon(
-                  onPressed: closing ? null : finish,
-                  icon: const Icon(Icons.call_end),
-                  label: Text(closing ? 'Cerrando…' : 'Finalizar y volver'),
+        child: Column(
+          children: [
+            Flexible(
+              flex: widget.operator ? 1 : 3,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'La solicitud permanece registrada. La llamada no confirma envío de personal.',
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.call, size: 28),
+                    const SizedBox(height: 8),
+                    Text(message, textAlign: TextAlign.center),
+                    if (failure != null)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(failure!, textAlign: TextAlign.center),
+                      ),
+                    if (failure != null && !started && !finished)
+                      TextButton(
+                        onPressed: begin,
+                        child: const Text('Reintentar conexión'),
+                      ),
+                    const SizedBox(height: 8),
+                    if (joined && !finished)
+                      Wrap(
+                        spacing: 16,
+                        children: [
+                          IconButton(
+                            tooltip: muted ? 'Activar micrófono' : 'Silenciar',
+                            icon: Icon(muted ? Icons.mic_off : Icons.mic),
+                            onPressed: () async {
+                              try {
+                                await room.localParticipant
+                                    ?.setMicrophoneEnabled(muted);
+                                if (mounted) setState(() => muted = !muted);
+                              } catch (e) {
+                                showFailure(e);
+                              }
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Altavoz',
+                            icon: Icon(
+                              speaker ? Icons.volume_up : Icons.hearing,
+                            ),
+                            onPressed: () async {
+                              try {
+                                await AudioManager.instance
+                                    .setSpeakerOutputPreferred(!speaker);
+                                if (mounted) setState(() => speaker = !speaker);
+                              } catch (e) {
+                                showFailure(e);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    FilledButton.icon(
+                      onPressed: closing || (widget.operator && finished)
+                          ? null
+                          : () => finish(),
+                      icon: const Icon(Icons.call_end),
+                      label: Text(
+                        closing
+                            ? 'Cerrando…'
+                            : widget.operator
+                            ? (finished ? 'Audio cerrado' : 'Finalizar llamada')
+                            : 'Finalizar y volver',
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+            if (widget.operator)
+              Expanded(
+                flex: 3,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: SosCasePanel(
+                    key: caseKey,
+                    caseId: widget.callId,
+                    guardNavigation: false,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     ),
