@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Nuevo piloto: [SOS mantenido tres segundos y llamadas privadas con LiveKit](docs/audio-calls.md). Requiere la migración 017, despliegue del backend y app actualizada; las claves quedan exclusivamente en Render.
+
 La aplicación conserva cuenta Google, reportes, fotos, filtros y configuración.
 Agrega solicitudes privadas, revisión por operadores autorizados y concentración
 histórica por horario. Consulta [las reglas y pasos de prueba](docs/integrated-workflows.md).

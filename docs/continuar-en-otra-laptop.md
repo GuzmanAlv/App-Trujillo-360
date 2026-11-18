@@ -2,6 +2,8 @@
 
 Estado actualizado el 16 de noviembre de 2026. Esta guía sustituye las notas del 3 de noviembre sobre Firebase y la supuesta RTX 4060.
 
+Actualización de implementación del 17 de noviembre: consultar [el piloto de llamadas SOS](audio-calls.md) antes de desplegar. Incluye migración 017 y configuración LiveKit; el estado histórico de abajo describe el SOS anterior al despliegue de llamadas.
+
 ## Obtener el proyecto
 
 Repositorio: https://github.com/GuzmanAlv/App-Trujillo-360, rama compartida `main`.
