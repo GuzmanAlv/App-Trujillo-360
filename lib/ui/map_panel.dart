@@ -16,6 +16,8 @@ class MapPanel extends StatefulWidget {
   const MapPanel({
     super.key,
     this.incidents = const [],
+    this.extraMarkers = const {},
+    this.focusTarget,
     this.selected,
     this.onPick,
     this.onIncident,
@@ -30,6 +32,8 @@ class MapPanel extends StatefulWidget {
     this.overlays = const {},
   });
   final List<Incident> incidents;
+  final Set<Marker> extraMarkers;
+  final LatLng? focusTarget;
   final Set<Circle> overlays;
   final LatLng? currentLocation;
   final String currentLocationLabel;
@@ -117,6 +121,12 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant MapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.focusTarget != null &&
+        widget.focusTarget != oldWidget.focusTarget) {
+      controller?.animateCamera(
+        CameraUpdate.newLatLngZoom(widget.focusTarget!, 16),
+      );
+    }
     if (widget.selected != null && widget.selected != oldWidget.selected) {
       controller?.animateCamera(CameraUpdate.newLatLng(widget.selected!));
     }
@@ -276,7 +286,11 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           }
                         : const <Factory<OneSequenceGestureRecognizer>>{},
                     initialCameraPosition: CameraPosition(
-                      target: widget.selected ?? displayedLocation ?? trujillo,
+                      target:
+                          widget.focusTarget ??
+                          widget.selected ??
+                          displayedLocation ??
+                          trujillo,
                       zoom: widget.zoomControls
                           ? 16
                           : displayedLocation == null
@@ -302,6 +316,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     myLocationButtonEnabled: false,
                     zoomControlsEnabled: widget.zoomControls,
                     markers: {
+                      ...widget.extraMarkers,
                       for (final i in widget.incidents)
                         Marker(
                           markerId: MarkerId(i.id),

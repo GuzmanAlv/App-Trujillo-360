@@ -1,5 +1,20 @@
 # Evaluación y atención del SOS
 
+## Actualización de la ficha del operador
+
+La migración **019_sos_operator_actions.sql** agrega estados visuales en la ficha y Ayuda, referencia/descripcion pública opcionales, solicitud de apoyo con borde rojo animado y devolución de llamada al ciudadano del caso. El operador dispone de botones para centrar el mapa en su posición GPS o en la posición del ciudadano al solicitar el SOS. El pin del hecho sigue siendo editable tocando o arrastrando; las coordenadas ya no se muestran como campos.
+
+Para activar esta extensión en la base existente, desde `backend`:
+
+```powershell
+.\.venv\Scripts\python.exe migrate_sos_operator.py
+.\.venv\Scripts\python.exe migrate_sos_operator.py --apply
+```
+
+Luego desplegar el nuevo backend e instalar el APK nuevo en ambos teléfonos. `/ready` devuelve `sos_cases_version: 2`. La devolución requiere una llamada anterior del mismo caso; el servidor comprueba asignación, disponibilidad de ambos participantes y aceptación del ciudadano. Cada intento nuevo utiliza una sala LiveKit distinta. La ventana entrante de devolución se consulta **con la app abierta**; esta extensión no añade un aviso de llamada del sistema en segundo plano. Mantener la app abierta para probarla.
+
+«Solicitar más patrullas» registra la petición en el caso y la destaca en la bandeja de otros operadores cuando se actualiza (o al pulsar Actualizar); no constituye una asignación automática de unidades. El operador puede marcar «Apoyo atendido» para quitar el resaltado. Confirmar, descartar y resolver conservan sus controles del servidor. Quitar «Guardar ficha» no agrega guardado automático: las acciones de evaluación guardan los datos que acompañan la decisión.
+
 Implementación del 18 de noviembre de 2026. Requiere migración 018, backend y app nuevos. Este documento describe el código; no implica que ya esté desplegado.
 
 ## Flujo

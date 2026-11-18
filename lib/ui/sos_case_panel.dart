@@ -1,3 +1,6 @@
+import 'report_marker.dart';
+import 'sos_status.dart';
+import 'audio_call_page.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -56,8 +59,10 @@ class SosCasePanel extends StatefulWidget {
     required this.caseId,
     this.guardNavigation = true,
     this.request,
+    this.showCallButton = true,
   });
   final String caseId;
+  final bool showCallButton;
   final bool guardNavigation;
   final CaseRequest? request;
   @override
@@ -70,6 +75,54 @@ class SosCasePanelState extends State<SosCasePanel> {
   final internal = TextEditingController(), outcome = TextEditingController();
   final latitude = TextEditingController(), longitude = TextEditingController();
   String category = 'Auxilio';
+  LatLng? operatorPoint, focusPoint;
+  bool locating = false;
+  BitmapDescriptor? citizenIcon, operatorIcon;
+  Future<void> prepareActors() async {
+    final citizen = await renderActorMarker(Icons.person, Colors.red.shade700);
+    final police = await renderActorMarker(
+      Icons.local_police,
+      Colors.blue.shade700,
+    );
+    if (mounted) {
+      setState(() {
+        citizenIcon = BitmapDescriptor.bytes(
+          citizen,
+          imagePixelRatio: 2,
+          width: 48,
+          height: 56,
+        );
+        operatorIcon = BitmapDescriptor.bytes(
+          police,
+          imagePixelRatio: 2,
+          width: 48,
+          height: 56,
+        );
+      });
+    }
+  }
+
+  Future<void> locateOperator() async {
+    setState(() => locating = true);
+    try {
+      final gps = await LocationService().current();
+      if (mounted) {
+        setState(() {
+          operatorPoint = LatLng(gps.latitude, gps.longitude);
+          focusPoint = operatorPoint;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => error = 'No se pudo obtener tu ubicación. Revisa los permisos.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => locating = false);
+    }
+  }
+
   String? error, notice;
   bool busy = false, stale = false, dirty = false;
   Map<String, dynamic>? retryBody;
@@ -128,6 +181,7 @@ class SosCasePanelState extends State<SosCasePanel> {
       });
     }
     unawaited(load());
+    unawaited(prepareActors());
   }
 
   void apply(Map<String, dynamic> result) {
@@ -199,15 +253,6 @@ class SosCasePanelState extends State<SosCasePanel> {
     final selected = point;
     if (selected == null) {
       setState(() => error = 'Revisa las coordenadas del hecho.');
-      return;
-    }
-    final confirmed = data?['decision'] == 'confirmed';
-    if ((action == 'confirm' || confirmed) &&
-        (place.text.trim().length < 3 || publicText.text.trim().length < 5)) {
-      setState(
-        () => error =
-            'Completa referencia (3 caracteres) y descripción pública (5 caracteres).',
-      );
       return;
     }
     if (['pending', 'discard'].contains(action) &&
@@ -342,30 +387,87 @@ class SosCasePanelState extends State<SosCasePanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Divider(height: 32),
-          Text('Caso SOS', style: Theme.of(context).textTheme.headlineSmall),
-          Text(
-            '${switch (d['decision']) {
-              'confirmed' => 'Incidente confirmado',
-              'discarded' => 'Alarma descartada',
-              _ => 'Pendiente · privado',
-            }} · ${attentionLabel('${d['attention']}')}',
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Caso SOS',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ),
+              Flexible(child: SosStatusBadge(data: d)),
+            ],
           ),
-          if (d['can_edit'] != true)
-            const Text('Otro operador está a cargo. Puedes consultar el caso.'),
           const SizedBox(height: 12),
-          const Text(
-            'Azul: ubicación del teléfono al solicitar SOS. Pin: ubicación del hecho.',
-          ),
+          if (widget.showCallButton &&
+              !['resolved'].contains(d['attention']) &&
+              d['decision'] != 'discarded')
+            OutlinedButton.icon(
+              icon: const Icon(Icons.call),
+              label: Text(
+                ['ended', 'unanswered'].contains(d['call_state'])
+                    ? 'Llamar al usuario'
+                    : 'Tomar / abrir llamada',
+              ),
+              onPressed: busy || d['can_edit'] != true
+                  ? null
+                  : () async {
+                      if (!await mayLeave()) return;
+                      if (!context.mounted) return;
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => AudioCallPage(
+                            callId: widget.caseId,
+                            operator: true,
+                            callback:
+                                [
+                                  'ended',
+                                  'unanswered',
+                                ].contains(d['call_state']) ||
+                                d['call_direction'] == 'operator',
+                          ),
+                        ),
+                      );
+                      if (mounted) {
+                        dirty = false;
+                        await load();
+                      }
+                    },
+            ),
           SizedBox(
-            height: 260,
+            height: 300,
             child: MapPanel(
               zoomControls: true,
               selected: point,
-              currentLocation: LatLng(
-                (d['caller_latitude'] as num).toDouble(),
-                (d['caller_longitude'] as num).toDouble(),
-              ),
-              currentLocationLabel: 'Teléfono al enviar SOS',
+              focusTarget: focusPoint,
+              extraMarkers: {
+                Marker(
+                  markerId: const MarkerId('citizen_sos'),
+                  position: LatLng(
+                    (d['caller_latitude'] as num).toDouble(),
+                    (d['caller_longitude'] as num).toDouble(),
+                  ),
+                  icon:
+                      citizenIcon ??
+                      BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueRed,
+                      ),
+                  infoWindow: const InfoWindow(title: 'Ciudadano · SOS'),
+                ),
+                if (operatorPoint != null)
+                  Marker(
+                    markerId: const MarkerId('operator_sos'),
+                    position: operatorPoint!,
+                    icon:
+                        operatorIcon ??
+                        BitmapDescriptor.defaultMarkerWithHue(
+                          BitmapDescriptor.hueAzure,
+                        ),
+                    infoWindow: const InfoWindow(
+                      title: 'Operador · mi ubicación',
+                    ),
+                  ),
+              },
               onPick: editable
                   ? (p) {
                       setState(() {
@@ -377,19 +479,27 @@ class SosCasePanelState extends State<SosCasePanel> {
                   : null,
             ),
           ),
-          Text(
-            'Teléfono: ${d['caller_latitude']}, ${d['caller_longitude']} · ${caseTime(d['received_at'])}',
-          ),
-          const Text(
-            'Toca o arrastra el pin para corregir el lugar del hecho.',
-          ),
-          Row(
+          Wrap(
+            spacing: 8,
             children: [
-              Expanded(child: field(latitude, 'Latitud del hecho', 24)),
-              const SizedBox(width: 8),
-              Expanded(child: field(longitude, 'Longitud del hecho', 24)),
+              OutlinedButton.icon(
+                onPressed: locating ? null : locateOperator,
+                icon: const Icon(Icons.local_police, color: Colors.blue),
+                label: const Text('Mi ubicación'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => setState(
+                  () => focusPoint = LatLng(
+                    (d['caller_latitude'] as num).toDouble(),
+                    (d['caller_longitude'] as num).toDouble(),
+                  ),
+                ),
+                icon: const Icon(Icons.person_pin_circle, color: Colors.red),
+                label: const Text('Ciudadano SOS'),
+              ),
             ],
           ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: category,
             key: ValueKey(category),
@@ -407,13 +517,8 @@ class SosCasePanelState extends State<SosCasePanel> {
                   }
                 : null,
           ),
-          field(place, 'Referencia pública del lugar', 100),
-          field(
-            publicText,
-            'Descripción pública · no incluir datos personales',
-            500,
-            lines: 3,
-          ),
+          field(place, 'Referencia del lugar (opcional)', 100),
+          field(publicText, 'Descripción pública (opcional)', 500, lines: 3),
           field(
             internal,
             'Comentario interno · solo operadores',
@@ -427,8 +532,7 @@ class SosCasePanelState extends State<SosCasePanel> {
               1000,
               lines: 2,
             ),
-          if (dirty)
-            const Text('Hay cambios sin guardar. Guárdalos antes de salir.'),
+          if (dirty) const Text('Hay cambios pendientes de confirmar.'),
           if (busy) const LinearProgressIndicator(),
           if (error != null)
             Text(
@@ -445,24 +549,37 @@ class SosCasePanelState extends State<SosCasePanel> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton(
-                onPressed: editable ? () => save('save') : null,
-                child: const Text('Guardar ficha'),
-              ),
               if (!confirmed && d['decision'] != 'discarded') ...[
                 FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xff52766b),
+                  ),
                   onPressed: editable ? () => save('confirm') : null,
                   child: const Text('Confirmar incidente'),
                 ),
-                OutlinedButton(
-                  onPressed: editable ? () => save('pending') : null,
-                  child: const Text('Dejar pendiente'),
-                ),
-                TextButton(
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: editable ? () => save('discard') : null,
                   child: const Text('Descartar alarma'),
                 ),
               ],
+              if (editable)
+                OutlinedButton.icon(
+                  onPressed: () => save(
+                    d['support_requested'] == true
+                        ? 'support_clear'
+                        : 'support',
+                  ),
+                  icon: const Icon(Icons.campaign, color: Colors.red),
+                  label: Text(
+                    d['support_requested'] == true
+                        ? 'Apoyo atendido'
+                        : 'Solicitar más patrullas',
+                  ),
+                ),
               if (confirmed && d['attention'] != 'resolved') ...[
                 if (d['attention'] == 'none')
                   FilledButton(
@@ -485,9 +602,6 @@ class SosCasePanelState extends State<SosCasePanel> {
                 child: const Text('Recargar ficha'),
               ),
             ],
-          ),
-          const Text(
-            'Una llamada cortada o sin respuesta permanece pendiente; no se descarta automáticamente.',
           ),
           ExpansionTile(
             title: const Text('Historial privado del caso'),

@@ -63,11 +63,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await enter(tester, 'Latitud del hecho', '-8.12');
-      await enter(tester, 'Referencia pública del lugar', 'Plaza de prueba');
+
+      await enter(tester, 'Referencia del lugar (opcional)', 'Plaza de prueba');
       await enter(
         tester,
-        'Descripción pública · no incluir datos personales',
+        'Descripción pública (opcional)',
         'Incidente confirmado',
       );
       await enter(
@@ -80,7 +80,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirmar'));
       await tester.pumpAndSettle();
-      expect(sent.single['latitude'], -8.12);
+      expect(sent.single['latitude'], -8.11);
       expect(sent.single.containsKey('caller_latitude'), isFalse);
       expect(sent.single['public_description'], 'Incidente confirmado');
       expect(sent.single['internal_note'], 'Nota confidencial');
@@ -89,7 +89,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent.length, 2);
       expect(sent[1]['request_id'], sent[0]['request_id']);
-      expect(find.textContaining('Teléfono: -8.11, -79.03'), findsOneWidget);
+      expect(find.textContaining('Teléfono: -8.11, -79.03'), findsNothing);
       expect(find.text('Unidad en camino'), findsOneWidget);
       expect(find.text('Personal en el lugar'), findsOneWidget);
     },

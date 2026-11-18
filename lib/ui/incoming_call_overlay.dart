@@ -55,7 +55,11 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
   }
 
   Future<void> refresh() async {
-    if (busy || !foreground || uid == null || ActiveCall.id.value != null) {
+    if (!mounted ||
+        busy ||
+        !foreground ||
+        uid == null ||
+        ActiveCall.id.value != null) {
       return;
     }
     busy = true;
@@ -70,10 +74,13 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
             ['operator', 'admin'].contains(profile['role']);
         roleChecked = DateTime.now();
       }
+      final returns = await WorkflowClient.list('/calls/incoming/return');
       final result = allowed
           ? await WorkflowClient.list('/operator/calls/incoming')
           : <Map<String, dynamic>>[];
-      if (mounted && uid == owner) setState(() => incoming = result);
+      if (mounted && uid == owner) {
+        setState(() => incoming = [...returns, ...result]);
+      }
     } catch (_) {
       if (mounted) setState(() => incoming = []);
     } finally {
@@ -85,12 +92,16 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
     if (ActiveCall.id.value != null || appNavigatorKey.currentState == null) {
       return;
     }
+    final returning = incoming.any(
+      (r) => r['id'] == id && r['callback'] == true,
+    );
     ActiveCall.id.value = id;
     setState(() => incoming = []);
     try {
       await appNavigatorKey.currentState!.push<void>(
         MaterialPageRoute(
-          builder: (_) => AudioCallPage(callId: id, operator: true),
+          builder: (_) =>
+              AudioCallPage(callId: id, operator: allowed, answer: returning),
         ),
       );
     } finally {
@@ -121,10 +132,37 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     false),
           )
           .toList();
-      return Stack(
+      return IncomingCallView(
+        queue: active == null ? queue : const [],
+        onAccept: accept,
+        onHide: (id) => setState(() => hidden.add(id)),
+        child: widget.child,
+      );
+    },
+  );
+}
+
+/// MaterialApp.builder sits above the Navigator's Overlay. Give both the
+/// navigator and the floating card an outer overlay, so tooltips on the card
+/// have a valid ancestor without losing the current route on queue updates.
+class IncomingCallView extends StatelessWidget {
+  const IncomingCallView({
+    super.key,
+    required this.child,
+    required this.queue,
+    required this.onAccept,
+    required this.onHide,
+  });
+  final Widget child;
+  final List<Map<String, dynamic>> queue;
+  final ValueChanged<String> onAccept, onHide;
+  @override
+  Widget build(BuildContext context) {
+    return Overlay.wrap(
+      child: Stack(
         children: [
-          widget.child,
-          if (active == null && queue.isNotEmpty)
+          child,
+          if (queue.isNotEmpty)
             Positioned(
               top: 0,
               left: 12,
@@ -152,9 +190,11 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                                   color: Colors.red,
                                 ),
                                 const SizedBox(width: 12),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
-                                    'Llamada SOS entrante',
+                                    queue.first['callback'] == true
+                                        ? 'El operador te llama'
+                                        : 'Llamada SOS entrante',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,
@@ -164,20 +204,21 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                                 IconButton(
                                   tooltip:
                                       'Ocultar aviso; el SOS sigue pendiente',
-                                  onPressed: () => setState(
-                                    () => hidden.add('${queue.first['id']}'),
-                                  ),
+                                  onPressed: () =>
+                                      onHide('${queue.first['id']}'),
                                   icon: const Icon(Icons.close),
                                 ),
                               ],
                             ),
-                            const Text(
-                              'Un ciudadano solicita hablar con un operador.',
+                            Text(
+                              queue.first['callback'] == true
+                                  ? 'Devolución de llamada de tu caso SOS.'
+                                  : 'Un ciudadano solicita hablar con un operador.',
                             ),
                             if (queue.length > 1)
                               Text('${queue.length} llamadas esperando'),
                             FilledButton.icon(
-                              onPressed: () => accept('${queue.first['id']}'),
+                              onPressed: () => onAccept('${queue.first['id']}'),
                               icon: const Icon(Icons.call),
                               label: const Text('Tomar llamada'),
                             ),
@@ -190,7 +231,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
               ),
             ),
         ],
-      );
-    },
-  );
+      ),
+    );
+  }
 }

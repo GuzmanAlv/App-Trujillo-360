@@ -1,3 +1,4 @@
+import 'call_page_layout.dart';
 import 'sos_case_panel.dart';
 import '../services/active_call.dart';
 import 'dart:async';
@@ -10,9 +11,15 @@ import '../services/call_cleanup.dart';
 
 /// Foreground pilot: notifications lead operators to the SOS case, where they accept.
 class AudioCallPage extends StatefulWidget {
-  const AudioCallPage({super.key, required this.callId, this.operator = false});
+  const AudioCallPage({
+    super.key,
+    required this.callId,
+    this.operator = false,
+    this.callback = false,
+    this.answer = false,
+  });
   final String callId;
-  final bool operator;
+  final bool operator, callback, answer;
   @override
   State<AudioCallPage> createState() => _AudioCallPageState();
 }
@@ -73,7 +80,13 @@ class _AudioCallPageState extends State<AudioCallPage> {
       if (!mounted || finished) return;
       await WorkflowClient.request(
         'POST',
-        '$path/${widget.operator ? 'accept' : 'start'}',
+        '$path/${widget.callback
+            ? 'callback'
+            : widget.answer
+            ? 'answer'
+            : widget.operator
+            ? 'accept'
+            : 'start'}',
       );
       started = true;
       if (!mounted || finished) {
@@ -148,7 +161,9 @@ class _AudioCallPageState extends State<AudioCallPage> {
       } else if (data['state'] == 'waiting') {
         setState(() {
           failure = null;
-          message = 'Buscando operador · puedes cancelar';
+          message = widget.callback
+              ? 'Llamando al ciudadano…'
+              : 'Buscando operador · puedes cancelar';
         });
       }
     } catch (e) {
@@ -245,98 +260,126 @@ class _AudioCallPageState extends State<AudioCallPage> {
       if (!didPop) unawaited(finish(exit: true));
     },
     child: Scaffold(
-      appBar: AppBar(title: const Text('Llamada SOS')),
+      appBar: AppBar(title: const Text('Llamada SOS'), centerTitle: true),
       body: SafeArea(
-        child: Column(
-          children: [
-            Flexible(
-              flex: widget.operator ? 1 : 3,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 8,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.call, size: 28),
-                    const SizedBox(height: 8),
-                    Text(message, textAlign: TextAlign.center),
-                    if (failure != null)
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(failure!, textAlign: TextAlign.center),
-                      ),
-                    if (failure != null && !started && !finished)
-                      TextButton(
-                        onPressed: begin,
-                        child: const Text('Reintentar conexión'),
-                      ),
-                    const SizedBox(height: 8),
-                    if (joined && !finished)
-                      Wrap(
-                        spacing: 16,
-                        children: [
-                          IconButton(
-                            tooltip: muted ? 'Activar micrófono' : 'Silenciar',
-                            icon: Icon(muted ? Icons.mic_off : Icons.mic),
-                            onPressed: () async {
-                              try {
-                                await room.localParticipant
-                                    ?.setMicrophoneEnabled(muted);
-                                if (mounted) setState(() => muted = !muted);
-                              } catch (e) {
-                                showFailure(e);
-                              }
-                            },
-                          ),
-                          IconButton(
-                            tooltip: 'Altavoz',
-                            icon: Icon(
-                              speaker ? Icons.volume_up : Icons.hearing,
-                            ),
-                            onPressed: () async {
-                              try {
-                                await AudioManager.instance
-                                    .setSpeakerOutputPreferred(!speaker);
-                                if (mounted) setState(() => speaker = !speaker);
-                              } catch (e) {
-                                showFailure(e);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    FilledButton.icon(
-                      onPressed: closing || (widget.operator && finished)
-                          ? null
-                          : () => finish(),
-                      icon: const Icon(Icons.call_end),
-                      label: Text(
-                        closing
-                            ? 'Cerrando…'
-                            : widget.operator
-                            ? (finished ? 'Audio cerrado' : 'Finalizar llamada')
-                            : 'Finalizar y volver',
-                      ),
+        child: CallPageLayout(
+          controls: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xffdbe6df)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(widget.operator ? 16 : 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: widget.operator ? 52 : 80,
+                    height: widget.operator ? 52 : 80,
+                    decoration: const BoxDecoration(
+                      color: Color(0xffe0f2eb),
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
+                    child: Icon(
+                      finished ? Icons.call_end : Icons.support_agent,
+                      size: widget.operator ? 28 : 40,
+                      color: const Color(0xff087f68),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.operator
+                        ? 'Atención SOS'
+                        : finished
+                        ? 'Llamada finalizada'
+                        : joined
+                        ? 'Llamada SOS'
+                        : 'Conectando con un operador',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(message, textAlign: TextAlign.center),
+                  if (failure != null)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(failure!, textAlign: TextAlign.center),
+                    ),
+                  if (failure != null && !started && !finished)
+                    TextButton(
+                      onPressed: begin,
+                      child: const Text('Reintentar conexión'),
+                    ),
+                  const SizedBox(height: 8),
+                  if (joined && !finished)
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 16,
+                      children: [
+                        IconButton(
+                          tooltip: muted ? 'Activar micrófono' : 'Silenciar',
+                          icon: Icon(muted ? Icons.mic_off : Icons.mic),
+                          onPressed: () async {
+                            try {
+                              await room.localParticipant?.setMicrophoneEnabled(
+                                muted,
+                              );
+                              if (mounted) setState(() => muted = !muted);
+                            } catch (e) {
+                              showFailure(e);
+                            }
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'Altavoz',
+                          icon: Icon(speaker ? Icons.volume_up : Icons.hearing),
+                          onPressed: () async {
+                            try {
+                              await AudioManager.instance
+                                  .setSpeakerOutputPreferred(!speaker);
+                              if (mounted) setState(() => speaker = !speaker);
+                            } catch (e) {
+                              showFailure(e);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xffba303a),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(200, 48),
+                    ),
+                    onPressed: closing || (widget.operator && finished)
+                        ? null
+                        : () => finish(),
+                    icon: const Icon(Icons.call_end),
+                    label: Text(
+                      closing
+                          ? 'Cerrando…'
+                          : widget.operator
+                          ? (finished ? 'Audio cerrado' : 'Finalizar llamada')
+                          : 'Finalizar y volver',
+                    ),
+                  ),
+                ],
               ),
             ),
-            if (widget.operator)
-              Expanded(
-                flex: 3,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SosCasePanel(
-                    key: caseKey,
-                    caseId: widget.callId,
-                    guardNavigation: false,
-                  ),
-                ),
-              ),
-          ],
+          ),
+          evaluation: widget.operator
+              ? SosCasePanel(
+                  key: caseKey,
+                  caseId: widget.callId,
+                  guardNavigation: false,
+                  showCallButton: false,
+                )
+              : null,
         ),
       ),
     ),

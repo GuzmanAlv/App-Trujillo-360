@@ -19,7 +19,7 @@ class CaseUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True, allow_inf_nan=False)
     request_id: UUID
     version: int = Field(ge=0)
-    action: Literal['save','pending','confirm','discard','en_route','on_scene','resolve']
+    action: Literal['save','pending','confirm','discard','en_route','on_scene','resolve','support','support_clear']
     category: Literal['Robo','Auxilio','Agresión','Riesgo']
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)

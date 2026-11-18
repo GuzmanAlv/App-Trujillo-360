@@ -3,6 +3,46 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'report_style.dart';
 
+Future<Uint8List> renderActorMarker(IconData icon, Color color) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder)..scale(2);
+  final paint = Paint()..color = color;
+  canvas.drawCircle(const Offset(24, 24), 22, Paint()..color = Colors.white);
+  canvas.drawCircle(const Offset(24, 24), 19, paint);
+  canvas.drawPath(
+    Path()
+      ..moveTo(17, 42)
+      ..lineTo(24, 55)
+      ..lineTo(31, 42)
+      ..close(),
+    paint,
+  );
+  final text = TextPainter(
+    text: TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(
+        fontFamily: icon.fontFamily,
+        package: icon.fontPackage,
+        fontSize: 25,
+        color: Colors.white,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  text.paint(canvas, Offset(24 - text.width / 2, 24 - text.height / 2));
+  text.dispose();
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(96, 112);
+  try {
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (bytes == null) throw StateError('No se pudo dibujar la ubicación');
+    return bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
+  } finally {
+    image.dispose();
+    picture.dispose();
+  }
+}
+
 /// A label attached to the exact coordinate by its bottom tip.
 /// Render at 2x for sharp text; Maps receives the logical display dimensions.
 Future<Uint8List> renderReportMarker(
