@@ -7,3 +7,4 @@ httpx>=0.27,<1
 google-auth[requests]>=2.38,<3
 cryptography>=44
 Pillow>=12,<13
+livekit-api==2.0.0

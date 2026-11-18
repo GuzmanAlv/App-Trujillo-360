@@ -17,6 +17,8 @@ import 'models/incident.dart';
 import 'services/push_service.dart';
 import 'ui/notification_settings.dart';
 import 'ui/sos_shortcut_settings.dart';
+import 'ui/hold_sos_button.dart';
+import 'ui/audio_call_page.dart';
 import 'ui/push_destination.dart';
 import 'ui/report_details_page.dart';
 import 'ui/community_incident_page.dart';
@@ -181,6 +183,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       pendingSosOwner = null;
       pendingSosLatitude = null;
       pendingSosLongitude = null;
+      if (mounted) {
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AudioCallPage(callId: response['id'] as String),
+          ),
+        );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -405,238 +415,308 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([widget.store, nearby, mapIncidents, density]),
-    builder: (context, _) => Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        titleSpacing: 12,
-        title: Semantics(
-          label: 'Trujillo 360',
-          image: true,
-          child: Image.asset(
-            'assets/branding/logo.png',
-            height: 44,
-            width: 220,
-            fit: BoxFit.contain,
-            alignment: Alignment.centerLeft,
-          ),
-        ),
-        actions: [
-          IconButton(
-            onPressed: dial,
-            tooltip: 'Seguridad ciudadana · (044) 298734',
-            icon: const Icon(Icons.phone_outlined),
-          ),
-          const Chip(label: Text('PILOTO')),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1280),
-            child: Column(
-              children: [
-                if (widget.store.error != null)
-                  MaterialBanner(
-                    content: Text(widget.store.error!),
-                    actions: const [SizedBox.shrink()],
-                  ),
-                Expanded(
-                  child: IndexedStack(
-                    index: tab,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+    builder: (context, _) => Theme(
+      data: Theme.of(context),
+      child: Builder(
+        builder: (context) => Scaffold(
+          drawer: tab == 0
+              ? Drawer(
+                  child: SafeArea(
+                    child: ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              'Tu comunidad, a la vista',
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                            const SizedBox(height: 12),
-                            if (!historical) filters(),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                ChoiceChip(
-                                  label: const Text('Recientes · 7 días'),
-                                  selected: !historical,
-                                  onSelected: (_) => setState(() {
-                                    historical = false;
-                                    density.configure(enabled: false);
-                                  }),
+                            const Expanded(
+                              child: Text(
+                                'Filtros del mapa',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                ChoiceChip(
-                                  label: const Text('Historial · 90 días'),
-                                  selected: historical,
-                                  onSelected: (_) => setState(() {
-                                    historical = true;
-                                    density.configure(enabled: true);
-                                  }),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Cerrar filtros',
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        const Text('Tipo de incidente'),
+                        if (!historical)
+                          Wrap(
+                            spacing: 8,
+                            children: categories
+                                .map(
+                                  (c) => ChoiceChip(
+                                    label: Text(c),
+                                    selected: filter == c,
+                                    onSelected: (_) =>
+                                        setState(() => filter = c),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        const SizedBox(height: 20),
+                        const Text('Periodo del mapa'),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Recientes · 7 días'),
+                              selected: !historical,
+                              onSelected: (_) => setState(() {
+                                historical = false;
+                                density.configure(enabled: false);
+                              }),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Historial · 90 días'),
+                              selected: historical,
+                              onSelected: (_) => setState(() {
+                                historical = true;
+                                density.configure(enabled: true);
+                              }),
+                            ),
+                          ],
+                        ),
+                        if (historical) ...[
+                          DropdownButton<int>(
+                            isExpanded: true,
+                            value: density.hourBand,
+                            items: const [
+                              DropdownMenuItem(
+                                value: -1,
+                                child: Text('Todas las horas'),
+                              ),
+                              DropdownMenuItem(
+                                value: 0,
+                                child: Text('Madrugada · 00–06 h'),
+                              ),
+                              DropdownMenuItem(
+                                value: 1,
+                                child: Text('Mañana · 06–12 h'),
+                              ),
+                              DropdownMenuItem(
+                                value: 2,
+                                child: Text('Tarde · 12–18 h'),
+                              ),
+                              DropdownMenuItem(
+                                value: 3,
+                                child: Text('Noche · 18–24 h'),
+                              ),
+                            ],
+                            onChanged: (v) => setState(
+                              () => density.configure(enabled: true, band: v),
+                            ),
+                          ),
+                          const Text(
+                            'Todas las categorías · zonas aproximadas: amarillo 1–2; rojo 3 o más. Sin color no significa seguro.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          if (density.loading) const LinearProgressIndicator(),
+                          if (density.error != null)
+                            Text(
+                              density.error!,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                        ],
+
+                        const SizedBox(height: 20),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Ver mapa'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : null,
+
+          appBar: AppBar(
+            centerTitle: true,
+            titleSpacing: 12,
+            title: Semantics(
+              label: 'Trujillo 360',
+              image: true,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xfff4f6f2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  child: Image.asset(
+                    'assets/branding/logo.png',
+                    height: 40,
+                    width: 220,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              IconButton(
+                onPressed: dial,
+                tooltip: 'Seguridad ciudadana · (044) 298734',
+                icon: const Icon(Icons.phone_outlined),
+              ),
+              const SizedBox(width: 12),
+            ],
+          ),
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1280),
+                child: Column(
+                  children: [
+                    if (widget.store.error != null)
+                      MaterialBanner(
+                        content: Text(widget.store.error!),
+                        actions: const [SizedBox.shrink()],
+                      ),
+                    Expanded(
+                      child: IndexedStack(
+                        index: tab,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.zero,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (historical
+                                    ? density.loading
+                                    : mapIncidents.loading)
+                                  const LinearProgressIndicator(),
+                                if (mapIncidents.note != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Text(mapIncidents.note!),
+                                  ),
+                                Expanded(
+                                  child: MapPanel(
+                                    incidents: historical ? const [] : visible,
+                                    overlays: historical
+                                        ? density.overlays
+                                        : const {},
+                                    onIncident: communityDetails,
+                                    currentLocation: nearby.position == null
+                                        ? null
+                                        : LatLng(
+                                            nearby.position!.latitude,
+                                            nearby.position!.longitude,
+                                          ),
+                                    onLocate: nearby.start,
+                                    locating: nearby.locating,
+                                    locationRadius: 500,
+                                    onViewportChanged: (bounds) {
+                                      mapIncidents.setBounds(bounds);
+                                      density.setBounds(bounds);
+                                    },
+                                    active: tab == 0,
+                                  ),
                                 ),
                               ],
                             ),
-                            if (historical) ...[
-                              DropdownButton<int>(
-                                isExpanded: true,
-                                value: density.hourBand,
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: -1,
-                                    child: Text('Todas las horas'),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                filters(),
+                                const SizedBox(height: 16),
+                                Expanded(
+                                  child: ReportsPanel(
+                                    store: widget.store,
+                                    filter: filter,
+                                    onReport: details,
+                                    active: tab == 1,
+                                    nearby: nearby,
+                                    onSessionChanged: mapIncidents.clearSession,
+                                    onNearbySelected: (value) {
+                                      reportsNearbySelected = value;
+                                      updateNearbyActivity();
+                                    },
                                   ),
-                                  DropdownMenuItem(
-                                    value: 0,
-                                    child: Text('Madrugada · 00–06 h'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 1,
-                                    child: Text('Mañana · 06–12 h'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 2,
-                                    child: Text('Tarde · 12–18 h'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 3,
-                                    child: Text('Noche · 18–24 h'),
-                                  ),
-                                ],
-                                onChanged: (v) => setState(
-                                  () =>
-                                      density.configure(enabled: true, band: v),
                                 ),
-                              ),
-                              const Text(
-                                'Todas las categorías · zonas aproximadas: amarillo 1–2; rojo 3 o más. Sin color no significa seguro.',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                              if (density.loading)
-                                const LinearProgressIndicator(),
-                              if (density.error != null)
-                                Text(
-                                  density.error!,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                            ],
-                            const SizedBox(height: 12),
-                            if (mapIncidents.loading)
-                              const LinearProgressIndicator(),
-                            if (mapIncidents.note != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Text(mapIncidents.note!),
-                              ),
-                            Expanded(
-                              child: MapPanel(
-                                incidents: historical ? const [] : visible,
-                                overlays: historical
-                                    ? density.overlays
-                                    : const {},
-                                onIncident: communityDetails,
-                                currentLocation: nearby.position == null
-                                    ? null
-                                    : LatLng(
-                                        nearby.position!.latitude,
-                                        nearby.position!.longitude,
-                                      ),
-                                onLocate: nearby.start,
-                                locating: nearby.locating,
-                                locationRadius: 500,
-                                onViewportChanged: (bounds) {
-                                  mapIncidents.setBounds(bounds);
-                                  density.setBounds(bounds);
-                                },
-                                active: tab == 0,
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          if (operatorAllowed)
+                            const OperatorPortal(embedded: true),
+                          settings(),
+                        ],
                       ),
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            filters(),
-                            const SizedBox(height: 16),
-                            Expanded(
-                              child: ReportsPanel(
-                                store: widget.store,
-                                filter: filter,
-                                onReport: details,
-                                active: tab == 1,
-                                nearby: nearby,
-                                onSessionChanged: mapIncidents.clearSession,
-                                onNearbySelected: (value) {
-                                  reportsNearbySelected = value;
-                                  updateNearbyActivity();
-                                },
-                              ),
-                            ),
-                          ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (tab < 2)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      HoldSosButton(busy: sosSending, onComplete: sendSos),
+                      FloatingActionButton.extended(
+                        heroTag: 'report',
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => ReportForm(store: widget.store),
+                          ),
                         ),
+                        label: const Text('Reportar'),
+                        icon: const Icon(Icons.add),
                       ),
-                      if (operatorAllowed) const OperatorPortal(embedded: true),
-                      settings(),
                     ],
                   ),
                 ),
-              ],
-            ),
+              NavigationBar(
+                selectedIndex: tab,
+                onDestinationSelected: (i) {
+                  setState(() => tab = i);
+                  updateNearbyActivity();
+                },
+                destinations: [
+                  NavigationDestination(
+                    icon: Icon(Icons.map_outlined),
+                    label: 'Mapa',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.notifications_none),
+                    label: 'Reportes',
+                  ),
+                  if (operatorAllowed)
+                    NavigationDestination(
+                      icon: Icon(Icons.support_agent_outlined),
+                      label: 'Operador',
+                    ),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    label: 'Configuración',
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: tab >= 2
-          ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'sos',
-                  onPressed: sosSending ? null : sendSos,
-                  backgroundColor: const Color(0xffc62828),
-                  foregroundColor: Colors.white,
-                  label: Text(sosSending ? 'Enviando…' : 'SOS'),
-                  icon: const Icon(Icons.sos),
-                ),
-                const SizedBox(width: 12),
-                FloatingActionButton.extended(
-                  heroTag: 'report',
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => ReportForm(store: widget.store),
-                    ),
-                  ),
-                  label: const Text('Reportar'),
-                  icon: const Icon(Icons.add),
-                ),
-              ],
-            ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: tab,
-        onDestinationSelected: (i) {
-          setState(() => tab = i);
-          updateNearbyActivity();
-        },
-        destinations: [
-          NavigationDestination(icon: Icon(Icons.map_outlined), label: 'Mapa'),
-          NavigationDestination(
-            icon: Icon(Icons.notifications_none),
-            label: 'Reportes',
-          ),
-          if (operatorAllowed)
-            NavigationDestination(
-              icon: Icon(Icons.support_agent_outlined),
-              label: 'Operador',
-            ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            label: 'Configuración',
-          ),
-        ],
       ),
     ),
   );

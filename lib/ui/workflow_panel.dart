@@ -9,6 +9,7 @@ import '../services/nearby_reports_client.dart';
 import 'ai_detection_panel.dart';
 import 'map_panel.dart';
 import 'community_photo_view.dart';
+import 'audio_call_page.dart';
 
 String workflowTime(dynamic value) {
   final date = DateTime.tryParse('$value')?.toLocal();
@@ -540,6 +541,24 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Text('${r['description']}'),
+                  ),
+                if (!widget.incident && r['source'] == 'sos' && !terminal)
+                  FilledButton.icon(
+                    icon: const Icon(Icons.call),
+                    label: Text(
+                      widget.operator
+                          ? 'Aceptar llamada SOS'
+                          : 'Abrir llamada SOS',
+                    ),
+                    onPressed: () => Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AudioCallPage(
+                          callId: r['id'] as String,
+                          operator: widget.operator,
+                        ),
+                      ),
+                    ),
                   ),
                 const SizedBox(height: 12),
                 SizedBox(

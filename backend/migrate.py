@@ -67,6 +67,8 @@ def main():
             conn.execute((ROOT / 'migrations/015_moving_alerts.sql').read_text(encoding='utf-8'))
         if conn.execute('SELECT max(version) FROM trujillo.push_migrations').fetchone()[0] == 2:
             conn.execute((ROOT / 'migrations/016_restore_sos_push.sql').read_text(encoding='utf-8'))
+        if not conn.execute("SELECT to_regclass('trujillo.call_sessions')").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/017_calls.sql').read_text(encoding='utf-8'))
         # Refresh compatible public readers using the shared publication rule.
         for filename in ('007_nearby_identity_fix.sql','010_community_groups.sql','011_report_places_patch.sql'):
             source = (ROOT / 'migrations' / filename).read_text(encoding='utf-8')

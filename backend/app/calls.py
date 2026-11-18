@@ -1,0 +1,85 @@
+"""LiveKit credentials never leave this service; join grants are room-scoped."""
+import os
+from datetime import timedelta
+from uuid import UUID
+from urllib.parse import urlparse
+from fastapi import APIRouter, Depends, HTTPException, Response
+from starlette.concurrency import run_in_threadpool
+from aiohttp import ClientTimeout
+from livekit import api
+from app.auth import identity
+from app.workflows import execute
+
+router = APIRouter(prefix='/calls')
+
+def configuration():
+    url = os.environ.get('LIVEKIT_URL', '').strip()
+    key = os.environ.get('LIVEKIT_API_KEY', '').strip()
+    secret = os.environ.get('LIVEKIT_API_SECRET', '').strip()
+    parsed = urlparse(url)
+    if parsed.scheme != 'wss' or not parsed.hostname or parsed.username or not key or not secret:
+        raise HTTPException(503, 'Las llamadas todavía no están configuradas. Tu SOS sigue disponible.')
+    return url, key, secret
+
+def action(call_id, operation, claims):
+    try:
+        return execute(claims, 'SELECT trujillo.call_action(%s,%s)', (call_id, operation))
+    except HTTPException as error:
+        if error.status_code == 409:
+            raise HTTPException(409, 'La llamada ya fue atendida, terminó o tienes otra llamada activa.') from None
+        raise
+
+def private(response):
+    response.headers['Cache-Control'] = 'private, no-store'
+
+@router.post('/{call_id}/start')
+def start(call_id: UUID, response: Response, claims=Depends(identity)):
+    private(response)
+    configuration()
+    result = action(call_id, 'start', claims)
+    result.pop('participant', None)
+    return result
+
+@router.get('/{call_id}')
+def status(call_id: UUID, response: Response, claims=Depends(identity)):
+    private(response)
+    result = action(call_id, 'status', claims)
+    result.pop('participant', None)
+    return result
+
+@router.post('/{call_id}/accept')
+def accept(call_id: UUID, response: Response, claims=Depends(identity)):
+    private(response)
+    configuration()
+    result = action(call_id, 'accept', claims)
+    result.pop('participant', None)
+    return result
+
+@router.post('/{call_id}/token')
+def token(call_id: UUID, response: Response, claims=Depends(identity)):
+    private(response)
+    url, key, secret = configuration()
+    result = action(call_id, 'token', claims)
+    grant = api.VideoGrants(room_join=True, room=f'sos-{call_id}',
+        can_publish=True, can_subscribe=True, can_publish_data=False,
+        can_publish_sources=['microphone'])
+    jwt = (api.AccessToken(key, secret).with_identity(result['participant'])
+           .with_ttl(timedelta(seconds=60)).with_grants(grant).to_jwt())
+    return {'url': url, 'token': jwt}
+
+@router.post('/{call_id}/end')
+async def end(call_id: UUID, response: Response, claims=Depends(identity)):
+    private(response)
+    result = await run_in_threadpool(action, call_id, 'end', claims)
+    result.pop('participant', None)
+    # Mark ended before contacting LiveKit: no further tokens may be issued.
+    url, key, secret = configuration()
+    try:
+        async with api.LiveKitAPI(url=url, api_key=key, api_secret=secret, timeout=ClientTimeout(total=10)) as client:
+            await client.room.delete_room(api.DeleteRoomRequest(room=f'sos-{call_id}'))
+    except api.TwirpError as error:
+        if error.code != 'not_found':
+            raise HTTPException(503, 'Cierre de audio pendiente. Vuelve a pulsar Finalizar.') from None
+    except Exception:
+        raise HTTPException(503, 'Cierre de audio pendiente. Vuelve a pulsar Finalizar.') from None
+    return result
