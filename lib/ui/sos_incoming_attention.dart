@@ -29,13 +29,15 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
   );
   Timer? lease;
   bool muted = false;
+  bool signalOwned = false;
   Future<void> signal(bool enabled) async {
-    if (!widget.enableSound ||
-        kIsWeb ||
-        defaultTargetPlatform != TargetPlatform.android) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
-    await SosAlarm.update(alarmOwner, enabled);
+    final target = enabled && widget.enableSound;
+    if (!target && !signalOwned) return;
+    signalOwned = target;
+    await SosAlarm.update(alarmOwner, target);
   }
 
   void update() {
@@ -65,7 +67,10 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
   @override
   void didUpdateWidget(covariant SosIncomingAttention old) {
     super.didUpdateWidget(old);
-    if (old.active != widget.active) {
+    if (old.active != widget.active ||
+        old.enableSound != widget.enableSound ||
+        old.enableGlow != widget.enableGlow ||
+        old.glowColor != widget.glowColor) {
       if (!widget.active) muted = false;
       update();
     }
@@ -97,9 +102,9 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                   child: AnimatedBuilder(
                     animation: animation,
                     builder: (context, child) {
-                      final red = const Color(
-                        0xffff0028,
-                      ).withValues(alpha: .28 + animation.value * .42);
+                      final red = widget.glowColor.withValues(
+                        alpha: .28 + animation.value * .42,
+                      );
                       return Stack(
                         children: [
                           Positioned(

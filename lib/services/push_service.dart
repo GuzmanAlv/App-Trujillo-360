@@ -10,10 +10,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'report_sender.dart';
 import 'location_service.dart';
 import 'workflow_client.dart';
+import 'operator_duty.dart';
+import 'citizen_arrival_alerts.dart';
 
 @pragma('vm:entry-point')
 Future<void> backgroundMessage(RemoteMessage message) async {
   // FCM notification payloads are displayed by Android. Never display them twice.
+  if (message.data['kind'] == 'sos_arrival') {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(
+      CitizenArrivalAlerts.seenKey(
+        '${message.data['account_uid']}',
+        '${message.data['target_id']}',
+      ),
+      true,
+    );
+  }
 }
 
 class PushService extends ChangeNotifier {
@@ -59,18 +71,32 @@ class PushService extends ChangeNotifier {
       if (!valid(m.data)) return;
       final id = m.data['event_id']?.toString() ?? m.messageId;
       if (id == null || !seen.add(id)) return;
+      if (m.data['kind'] == 'sos_arrival') {
+        await CitizenArrivalAlerts.instance.receive('${m.data['target_id']}');
+        return;
+      }
+      if (m.data['kind'] == 'sos_callback') return;
       try {
         await channel.invokeMethod<void>('showPush', {
           'id': id,
           'title': m.notification?.title ?? 'Trujillo 360',
           'body': m.notification?.body ?? 'Tienes un nuevo aviso.',
           'payload': jsonEncode(m.data),
+          'quiet':
+              m.data['quiet'] == 'true' ||
+              (m.data['kind'] == 'operator' && OperatorDuty.engaged),
         });
       } catch (_) {
         /* Permission may have been revoked in Android settings. */
       }
     });
     FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null &&
+          (await SharedPreferences.getInstance()).getBool('push.sos.$uid') ==
+              true) {
+        await ensureSosDevice();
+      }
       if (signingOut ||
           owner == null ||
           preferences == null ||
@@ -121,7 +147,12 @@ class PushService extends ChangeNotifier {
       Firebase.apps.isNotEmpty &&
       FirebaseAuth.instance.currentUser != null &&
       data['account_uid'] == FirebaseAuth.instance.currentUser?.uid &&
-      ['citizen', 'operator'].contains(data['kind']) &&
+      [
+        'citizen',
+        'operator',
+        'sos_arrival',
+        'sos_callback',
+      ].contains(data['kind']) &&
       RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch('${data['target_id']}');
   void accept(Map<String, dynamic> data) {
     if (!valid(data)) return;
@@ -204,6 +235,12 @@ class PushService extends ChangeNotifier {
         }
       }
       if (ticket == generation) await startTracking();
+      if (ticket == generation &&
+          permission &&
+          (await SharedPreferences.getInstance()).getBool('push.sos.$uid') ==
+              true) {
+        await ensureSosDevice();
+      }
     } catch (e) {
       if (ticket == generation) error = readable(e);
     } finally {
@@ -211,6 +248,46 @@ class PushService extends ChangeNotifier {
         busy = false;
         notifyListeners();
       }
+    }
+  }
+
+  Future<void> ensureSosDevice({bool requestPermission = false}) async {
+    if (!supported || Firebase.apps.isEmpty) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || signingOut) return;
+    try {
+      if (requestPermission) await channel.invokeMethod<bool>('enable');
+      final settings = await FirebaseMessaging.instance
+          .getNotificationSettings();
+      if (![
+        AuthorizationStatus.authorized,
+        AuthorizationStatus.provisional,
+      ].contains(settings.authorizationStatus)) {
+        return;
+      }
+      await (await SharedPreferences.getInstance()).setBool(
+        'push.sos.$uid',
+        true,
+      );
+      final id = await installation(uid);
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || FirebaseAuth.instance.currentUser?.uid != uid) {
+        return;
+      }
+      await WorkflowClient.request(
+        'PUT',
+        '/push/devices/$id/sos',
+        body: {'token': token},
+      );
+      if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+      await (await SharedPreferences.getInstance()).setBool(
+        'push.sos.$uid',
+        true,
+      );
+    } catch (_) {
+      error =
+          'No se pudo registrar este celular para avisos del SOS. Se reintentará al abrir la app.';
+      notifyListeners();
     }
   }
 

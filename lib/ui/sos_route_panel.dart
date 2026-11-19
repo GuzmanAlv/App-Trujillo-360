@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import '../services/active_call.dart';
 import '../services/sos_route_controller.dart';
 import 'operator_call_bar.dart';
+import 'audio_call_page.dart';
 
 class SosRoutePanel extends StatelessWidget {
   const SosRoutePanel({super.key, required this.route});
   final SosRouteController route;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: route,
+    listenable: Listenable.merge([route, ActiveCall.presentation]),
     builder: (context, _) => ValueListenableBuilder(
       valueListenable: ActiveCall.session,
       builder: (context, session, _) => Column(
@@ -69,27 +70,47 @@ class SosRoutePanel extends StatelessWidget {
               listenable: session,
               builder: (context, _) => Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                child: OperatorCallBar(
-                  message: session.failure ?? session.message,
-                  muted: session.muted,
-                  speaker: session.speaker,
-                  finished: session.finished,
-                  closing: session.closing,
-                  connected: session.joined,
-                  onMute: session.toggleMicrophone,
-                  onSpeaker: session.toggleSpeaker,
-                  onHangUp: () async {
-                    final complete = await session.finish();
-                    if (!complete && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'No se confirmó todo el cierre de audio.',
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => AudioCallPage(
+                              callId: session.callId,
+                              operator: session.operator,
+                            ),
                           ),
                         ),
-                      );
-                    }
-                  },
+                        icon: const Icon(Icons.open_in_full, size: 16),
+                        label: const Text('Abrir llamada'),
+                      ),
+                    ),
+                    OperatorCallBar(
+                      message: session.failure ?? session.message,
+                      muted: session.muted,
+                      speaker: session.speaker,
+                      finished: session.finished,
+                      closing: session.closing,
+                      connected: session.joined,
+                      onMute: session.toggleMicrophone,
+                      onSpeaker: session.toggleSpeaker,
+                      onHangUp: () async {
+                        final complete = await session.finish();
+                        if (!complete && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'No se confirmó todo el cierre de audio.',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),

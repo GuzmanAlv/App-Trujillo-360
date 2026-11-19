@@ -85,9 +85,12 @@ class SosSupportFrame extends StatefulWidget {
     super.key,
     required this.active,
     required this.child,
+    this.pulse = false,
+    this.soft = false,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
   });
   final bool active;
+  final bool pulse, soft;
   final EdgeInsetsGeometry margin;
   final Widget child;
   @override
@@ -130,23 +133,30 @@ class _SosSupportFrameState extends State<SosSupportFrame>
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: animation,
-    builder: (_, child) => Container(
-      margin: widget.margin,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: widget.active ? Border.all(color: Colors.red, width: 2) : null,
-        boxShadow: widget.active
-            ? [
-                BoxShadow(
-                  color: Colors.red.withValues(
-                    alpha: .12 + animation.value * .18,
+    builder: (_, child) => Transform.scale(
+      scale: widget.pulse && widget.active ? 1 + animation.value * .025 : 1,
+      child: Container(
+        margin: widget.margin,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: widget.active && !widget.soft
+              ? Border.all(color: Colors.red, width: 2)
+              : null,
+          boxShadow: widget.active
+              ? [
+                  BoxShadow(
+                    color: Colors.red.withValues(
+                      alpha: widget.soft
+                          ? .08 + animation.value * .12
+                          : .12 + animation.value * .18,
+                    ),
+                    blurRadius: 5 + animation.value * 10,
                   ),
-                  blurRadius: 5 + animation.value * 10,
-                ),
-              ]
-            : [],
+                ]
+              : [],
+        ),
+        child: child,
       ),
-      child: child,
     ),
     child: widget.child,
   );

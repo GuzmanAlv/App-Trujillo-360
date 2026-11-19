@@ -10,6 +10,8 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
@@ -18,6 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val incomingAlarm by lazy { SosIncomingAlarm(this) }
+    private val userSignals by lazy { SosUserSignals(this) }
     private var activityVisible = false
     private var channel: MethodChannel? = null
     private var permissionResult: MethodChannel.Result? = null
@@ -31,9 +34,28 @@ class MainActivity : FlutterActivity() {
             alertChannel, "Incidencias a 500 metros", NotificationManager.IMPORTANCE_HIGH))
         if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(
             "trujillo_push", "Avisos de Trujillo 360", NotificationManager.IMPORTANCE_HIGH))
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(NotificationChannel("trujillo_sos_quiet", "Avisos durante una atención SOS", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(null, null); enableVibration(false)
+            })
+            manager.createNotificationChannel(NotificationChannel("trujillo_sos_calls", "Llamadas del operador SOS", NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
+                enableVibration(true); vibrationPattern = longArrayOf(0, 550, 250, 550)
+            })
+            manager.createNotificationChannel(NotificationChannel("trujillo_sos_arrival", "Llegada de la policía al SOS", NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(Uri.parse("android.resource://$packageName/${R.raw.sos_arrival}"), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT).build())
+                enableVibration(true); vibrationPattern = longArrayOf(0, 200, 800, 200, 800, 200, 800, 200)
+            })
+        }
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "sosCallbackRing" -> {
+                    if (call.argument<Boolean>("enabled") == true && activityVisible) userSignals.startRing() else userSignals.stopRing()
+                    result.success(null)
+                }
+                "sosArrivalSignal" -> { if (activityVisible) userSignals.arrival(); result.success(null) }
+                "stopSosArrivalSignal" -> { userSignals.stopArrival(); result.success(null) }
                 "sosIncomingAlarm" -> {
                     if (call.argument<Boolean>("enabled") == true && activityVisible) incomingAlarm.start()
                     else incomingAlarm.stop()
@@ -105,7 +127,9 @@ class MainActivity : FlutterActivity() {
                             .putExtra(if (isPush) "push_payload" else "nearby_payload", payload)
                         val pending = PendingIntent.getActivity(this, id.hashCode(), target,
                             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (isPush) "trujillo_push" else alertChannel) else Notification.Builder(this)
+                        val quiet = call.argument<Boolean>("quiet") == true
+                        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (quiet) "trujillo_sos_quiet" else if (isPush) "trujillo_push" else alertChannel) else Notification.Builder(this)
+                        if (quiet && Build.VERSION.SDK_INT < 26) builder.setSound(null).setVibrate(longArrayOf(0))
                         val notification = builder
                             .setSmallIcon(R.drawable.ic_notification)
                             .setColor(Color.rgb(211, 47, 47))
@@ -136,11 +160,13 @@ class MainActivity : FlutterActivity() {
     override fun onPause() {
         activityVisible = false
         incomingAlarm.stop()
+        userSignals.stop()
         super.onPause()
     }
 
     override fun onDestroy() {
         incomingAlarm.stop()
+        userSignals.stop()
         super.onDestroy()
     }
 

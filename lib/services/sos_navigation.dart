@@ -2,6 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class SosNavigation {
+  static final mapRequested = ValueNotifier(0);
+  static void showMap() {
+    mapRequested.value++;
+  }
+
   static final request =
       ValueNotifier<({String caseId, String owner, int serial})?>(null);
   static int _serial = 0;

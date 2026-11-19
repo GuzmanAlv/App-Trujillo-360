@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Última mejora: [avisos según atención activa, llegada al ciudadano y llamadas minimizadas](docs/sos-notification-experience.md). Requiere migración 023 antes de desplegar backend e instalar APK nuevo.
+
 Estados actuales: [confirmación con unidad en camino y llegada automática por GPS](docs/sos-arrival.md). Requiere migración 022, backend y APK nuevos.
 
 Ruta en el mapa al confirmar un SOS: [configuración de Google Routes y prueba en dos celulares](docs/sos-routes.md). Requiere configurar `GOOGLE_ROUTES_API_KEY` solo en Render y actualizar backend y app; no requiere migración.

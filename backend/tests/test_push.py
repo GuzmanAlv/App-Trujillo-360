@@ -83,3 +83,14 @@ def test_invalid_token_and_auth_failure_differ():
 def test_sender_stays_off_without_explicit_configuration():
     with patch('app.push_worker.settings',return_value={}):
         assert configured() is False
+
+@pytest.mark.parametrize('kind,quiet,channel',[
+    ('operator',True,'trujillo_sos_quiet'),
+    ('sos_arrival',False,'trujillo_sos_arrival'),
+    ('sos_callback',False,'trujillo_sos_calls'),
+])
+def test_sos_notification_channels_and_private_payload(kind,quiet,channel):
+    payload=message(dict(token='test',kind=kind,quiet=quiet,target_id='case',account_uid='uid',job_id='event',title='SOS',body='Aviso'))['message']
+    assert payload['android']['notification']['channel_id']==channel
+    assert payload['data']['kind']==kind
+    assert payload['android']['ttl']==('90s' if kind=='sos_callback' else '300s')

@@ -1,5 +1,8 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización de experiencia SOS: [avisos, llamadas minimizadas y filtros](sos-notification-experience.md).
+Requiere migración 023, backend y APK nuevos. `/ready` anuncia `sos_notifications_version: 1`.
+
 Actualización de estados SOS: [salida al confirmar y llegada automática por GPS](sos-arrival.md).
 Esta mejora requiere migración 022 antes de desplegar backend y actualizar ambos APK.
 

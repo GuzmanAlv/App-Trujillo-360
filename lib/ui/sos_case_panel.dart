@@ -1,5 +1,6 @@
 import '../services/sos_navigation.dart';
 import 'sos_incoming_attention.dart';
+import '../services/operator_duty.dart';
 import '../services/active_call.dart';
 import '../services/sos_alert_state.dart';
 import 'citizen_sos_page.dart';
@@ -37,15 +38,39 @@ String caseTime(dynamic value) =>
     DateTime.tryParse('$value')?.toLocal().toString().split('.').first ??
     '$value';
 
-class SosCasePage extends StatelessWidget {
+class SosCasePage extends StatefulWidget {
   const SosCasePage({super.key, required this.caseId});
   final String caseId;
   @override
+  State<SosCasePage> createState() => _SosCasePageState();
+}
+
+class _SosCasePageState extends State<SosCasePage> {
+  final incoming = ValueNotifier(false);
+  @override
+  void dispose() {
+    incoming.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Evaluación del SOS')),
-    body: SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 24),
-      child: SosCasePanel(caseId: caseId),
+    body: ValueListenableBuilder<bool>(
+      valueListenable: incoming,
+      builder: (_, active, _) => SosIncomingAttention(
+        active: active,
+        enableSound: false,
+        builder: (_, _) => SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 24),
+          child: SosCasePanel(
+            caseId: widget.caseId,
+            onAlertChanged: (value) {
+              if (mounted) incoming.value = value;
+            },
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -66,8 +91,10 @@ class SosCasePanel extends StatefulWidget {
     this.request,
     this.showCallButton = true,
     this.onConfirmed,
+    this.onAlertChanged,
   });
   final String caseId;
+  final ValueChanged<bool>? onAlertChanged;
   final FutureOr<void> Function(Map<String, dynamic>)? onConfirmed;
   final bool showCallButton;
   final bool guardNavigation;
@@ -209,6 +236,7 @@ class SosCasePanelState extends State<SosCasePanel>
   @override
   void initState() {
     super.initState();
+    OperatorDuty.cases.addListener(dutyChanged);
     WidgetsBinding.instance.addObserver(this);
     if (widget.request == null && widget.showCallButton) {
       callPoll = Timer.periodic(
@@ -229,6 +257,19 @@ class SosCasePanelState extends State<SosCasePanel>
     }
     unawaited(load());
     unawaited(prepareActors());
+  }
+
+  bool? lastAlert;
+  void dutyChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void reportAlert(bool alert) {
+    if (lastAlert == alert) return;
+    lastAlert = alert;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onAlertChanged?.call(alert);
+    });
   }
 
   void apply(Map<String, dynamic> result) {
@@ -367,6 +408,10 @@ class SosCasePanelState extends State<SosCasePanel>
       if (mounted && !stale) {
         setState(() {
           apply(result);
+          final uid = Firebase.apps.isEmpty
+              ? null
+              : FirebaseAuth.instance.currentUser?.uid;
+          if (uid != null) OperatorDuty.upsert(uid, result);
           notice = 'Evaluación guardada.';
           if (body['action'] == 'confirm' &&
               result['decision'] == 'confirmed') {
@@ -432,6 +477,7 @@ class SosCasePanelState extends State<SosCasePanel>
   );
   @override
   void dispose() {
+    OperatorDuty.cases.removeListener(dutyChanged);
     WidgetsBinding.instance.removeObserver(this);
     callPoll?.cancel();
     session?.cancel();
@@ -472,272 +518,281 @@ class SosCasePanelState extends State<SosCasePanel>
       },
       child: ValueListenableBuilder<String?>(
         valueListenable: ActiveCall.id,
-        builder: (context, active, _) => SosIncomingAttention(
-          active:
+        builder: (context, active, _) {
+          final alarming =
+              !OperatorDuty.engaged &&
               widget.request == null &&
               widget.showCallButton &&
               active == null &&
               needsOperatorSosAlert(d) &&
               foreground &&
-              (ModalRoute.isCurrentOf(context) ?? true),
-          enableGlow: false,
-          builder: (muted, toggle) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.showCallButton &&
-                  !['resolved'].contains(d['attention']) &&
-                  d['decision'] != 'discarded')
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
-                  child: SosSupportFrame(
-                    margin: EdgeInsets.zero,
-                    active:
-                        widget.request == null &&
-                        needsOperatorSosAlert(d) &&
-                        foreground &&
-                        (ModalRoute.isCurrentOf(context) ?? true),
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xffce2333),
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size.fromHeight(54),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+              (ModalRoute.isCurrentOf(context) ?? true);
+          reportAlert(alarming);
+          return SosIncomingAttention(
+            active: alarming,
+            enableGlow: false,
+            builder: (muted, toggle) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.showCallButton &&
+                    !['resolved'].contains(d['attention']) &&
+                    d['decision'] != 'discarded')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 18),
+                    child: SosSupportFrame(
+                      pulse: true,
+                      soft: true,
+                      margin: EdgeInsets.zero,
+                      active:
+                          widget.request == null &&
+                          needsOperatorSosAlert(d) &&
+                          foreground &&
+                          (ModalRoute.isCurrentOf(context) ?? true),
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xffce2333),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(54),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
-                      ),
-                      icon: const Icon(Icons.call),
-                      label: Text(
-                        ['ended', 'unanswered'].contains(d['call_state'])
-                            ? 'Llamar al usuario'
-                            : 'Tomar / abrir llamada',
-                      ),
-                      onPressed: busy || d['can_edit'] != true
-                          ? null
-                          : () async {
-                              if (!await mayLeave()) return;
-                              if (!context.mounted) return;
-                              setState(() => dirty = false);
-                              await Navigator.of(context).push<void>(
-                                MaterialPageRoute(
-                                  builder: (_) => AudioCallPage(
-                                    callId: widget.caseId,
-                                    operator: true,
-                                    callback:
-                                        [
-                                          'ended',
-                                          'unanswered',
-                                        ].contains(d['call_state']) ||
-                                        d['call_direction'] == 'operator',
+                        icon: const Icon(Icons.call),
+                        label: Text(
+                          ['ended', 'unanswered'].contains(d['call_state'])
+                              ? 'Llamar al usuario'
+                              : 'Tomar / abrir llamada',
+                        ),
+                        onPressed: busy || d['can_edit'] != true
+                            ? null
+                            : () async {
+                                if (!await mayLeave()) return;
+                                if (!context.mounted) return;
+                                setState(() => dirty = false);
+                                await Navigator.of(context).push<void>(
+                                  MaterialPageRoute(
+                                    builder: (_) => AudioCallPage(
+                                      callId: widget.caseId,
+                                      operator: true,
+                                      callback:
+                                          [
+                                            'ended',
+                                            'unanswered',
+                                          ].contains(d['call_state']) ||
+                                          d['call_direction'] == 'operator',
+                                    ),
                                   ),
-                                ),
-                              );
-                              if (mounted) {
-                                dirty = false;
-                                await load();
-                              }
-                            },
+                                );
+                                if (mounted) {
+                                  dirty = false;
+                                  await load();
+                                }
+                              },
+                      ),
                     ),
+                  ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Caso SOS',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -.7,
+                              color: const Color(0xff202a28),
+                            ),
+                      ),
+                    ),
+                    Flexible(child: SosStatusBadge(data: d)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 300,
+                  child: MapPanel(
+                    zoomControls: true,
+                    selected: point,
+                    focusTarget: focusPoint,
+                    extraMarkers: {
+                      Marker(
+                        markerId: const MarkerId('citizen_sos'),
+                        position: LatLng(
+                          (d['caller_latitude'] as num).toDouble(),
+                          (d['caller_longitude'] as num).toDouble(),
+                        ),
+                        icon:
+                            citizenIcon ??
+                            BitmapDescriptor.defaultMarkerWithHue(
+                              BitmapDescriptor.hueRed,
+                            ),
+                        infoWindow: const InfoWindow(title: 'Ciudadano · SOS'),
+                      ),
+                      if (operatorPoint != null)
+                        Marker(
+                          markerId: const MarkerId('operator_sos'),
+                          position: operatorPoint!,
+                          icon:
+                              operatorIcon ??
+                              BitmapDescriptor.defaultMarkerWithHue(
+                                BitmapDescriptor.hueAzure,
+                              ),
+                          infoWindow: const InfoWindow(
+                            title: 'Operador · mi ubicación',
+                          ),
+                        ),
+                    },
+                    onPick: editable
+                        ? (p) {
+                            setState(() {
+                              latitude.text = '${p.latitude}';
+                              longitude.text = '${p.longitude}';
+                              dirty = true;
+                            });
+                          }
+                        : null,
                   ),
                 ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Caso SOS',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -.7,
-                            color: const Color(0xff202a28),
-                          ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: locating ? null : locateOperator,
+                      icon: const Icon(Icons.local_police, color: Colors.blue),
+                      label: const Text('Mi ubicación'),
                     ),
-                  ),
-                  Flexible(child: SosStatusBadge(data: d)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 300,
-                child: MapPanel(
-                  zoomControls: true,
-                  selected: point,
-                  focusTarget: focusPoint,
-                  extraMarkers: {
-                    Marker(
-                      markerId: const MarkerId('citizen_sos'),
-                      position: LatLng(
-                        (d['caller_latitude'] as num).toDouble(),
-                        (d['caller_longitude'] as num).toDouble(),
-                      ),
-                      icon:
-                          citizenIcon ??
-                          BitmapDescriptor.defaultMarkerWithHue(
-                            BitmapDescriptor.hueRed,
-                          ),
-                      infoWindow: const InfoWindow(title: 'Ciudadano · SOS'),
-                    ),
-                    if (operatorPoint != null)
-                      Marker(
-                        markerId: const MarkerId('operator_sos'),
-                        position: operatorPoint!,
-                        icon:
-                            operatorIcon ??
-                            BitmapDescriptor.defaultMarkerWithHue(
-                              BitmapDescriptor.hueAzure,
-                            ),
-                        infoWindow: const InfoWindow(
-                          title: 'Operador · mi ubicación',
+                    OutlinedButton.icon(
+                      onPressed: () => setState(
+                        () => focusPoint = LatLng(
+                          (d['caller_latitude'] as num).toDouble(),
+                          (d['caller_longitude'] as num).toDouble(),
                         ),
                       ),
-                  },
-                  onPick: editable
-                      ? (p) {
+                      icon: const Icon(
+                        Icons.person_pin_circle,
+                        color: Colors.red,
+                      ),
+                      label: const Text('Ciudadano SOS'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  key: ValueKey(category),
+                  decoration: InputDecoration(
+                    labelText: 'Tipo de incidente',
+                    prefixIcon: const Icon(Icons.category_outlined),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 18,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xffdce3df)),
+                    ),
+                  ),
+                  items: [
+                    for (final v in ['Robo', 'Auxilio', 'Agresión', 'Riesgo'])
+                      DropdownMenuItem(value: v, child: Text(v)),
+                  ],
+                  onChanged: editable
+                      ? (v) {
                           setState(() {
-                            latitude.text = '${p.latitude}';
-                            longitude.text = '${p.longitude}';
+                            category = v!;
                             dirty = true;
                           });
                         }
                       : null,
                 ),
-              ),
-              Wrap(
-                spacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: locating ? null : locateOperator,
-                    icon: const Icon(Icons.local_police, color: Colors.blue),
-                    label: const Text('Mi ubicación'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => setState(
-                      () => focusPoint = LatLng(
-                        (d['caller_latitude'] as num).toDouble(),
-                        (d['caller_longitude'] as num).toDouble(),
-                      ),
-                    ),
-                    icon: const Icon(
-                      Icons.person_pin_circle,
-                      color: Colors.red,
-                    ),
-                    label: const Text('Ciudadano SOS'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                key: ValueKey(category),
-                decoration: InputDecoration(
-                  labelText: 'Tipo de incidente',
-                  prefixIcon: const Icon(Icons.category_outlined),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 18,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xffdce3df)),
-                  ),
-                ),
-                items: [
-                  for (final v in ['Robo', 'Auxilio', 'Agresión', 'Riesgo'])
-                    DropdownMenuItem(value: v, child: Text(v)),
-                ],
-                onChanged: editable
-                    ? (v) {
-                        setState(() {
-                          category = v!;
-                          dirty = true;
-                        });
-                      }
-                    : null,
-              ),
 
-              field(
-                internal,
-                'Comentario interno · solo operadores',
-                2000,
-                lines: 3,
-              ),
-              if (confirmed)
                 field(
-                  outcome,
-                  'Resultado de la atención · interno',
-                  1000,
-                  lines: 2,
+                  internal,
+                  'Comentario interno · solo operadores',
+                  2000,
+                  lines: 3,
                 ),
-              if (dirty) const Text('Hay cambios pendientes de confirmar.'),
-              if (busy) const LinearProgressIndicator(),
-              if (error != null)
-                Text(
-                  error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              if (notice != null) Text(notice!),
-              if (retryBody != null && error != null)
-                TextButton(
-                  onPressed: busy ? null : () => send(retryBody!),
-                  child: const Text('Reintentar el mismo envío'),
-                ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (!confirmed && d['decision'] != 'discarded') ...[
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xffc12635),
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(160, 50),
-                      ),
-                      onPressed: editable ? () => save('confirm') : null,
-                      child: const Text('Confirmar SOS'),
-                    ),
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xff687078),
-                        minimumSize: const Size(150, 50),
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: editable ? () => save('discard') : null,
-                      child: const Text('Descartar alarma'),
-                    ),
-                  ],
-                  if (confirmed && d['attention'] != 'resolved') ...[
-                    OutlinedButton(
-                      onPressed: editable ? () => save('resolve') : null,
-                      child: const Text('Resolver caso'),
-                    ),
-                  ],
-                  TextButton(
-                    onPressed: busy ? null : load,
-                    child: const Text('Recargar ficha'),
+                if (confirmed)
+                  field(
+                    outcome,
+                    'Resultado de la atención · interno',
+                    1000,
+                    lines: 2,
                   ),
-                ],
-              ),
-              SosEvidencePanel(caseId: widget.caseId),
-              ExpansionTile(
-                title: const Text('Historial privado del caso'),
-                children: [
-                  for (final event in d['events'] as List? ?? [])
-                    ListTile(
-                      title: Text(
-                        '${caseActionLabel('${event['action']}')} · ${caseTime(event['at'])}',
-                      ),
-                      subtitle: Text(
-                        '${event['snapshot']['internal_note']}\n${event['snapshot']['outcome']}\n${event['arrival_position'] == null ? '' : 'Llegada con ubicación del dispositivo registrada'}',
-                      ),
+                if (dirty) const Text('Hay cambios pendientes de confirmar.'),
+                if (busy) const LinearProgressIndicator(),
+                if (error != null)
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
                     ),
-                ],
-              ),
-            ],
-          ),
-        ),
+                  ),
+                if (notice != null) Text(notice!),
+                if (retryBody != null && error != null)
+                  TextButton(
+                    onPressed: busy ? null : () => send(retryBody!),
+                    child: const Text('Reintentar el mismo envío'),
+                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (!confirmed && d['decision'] != 'discarded') ...[
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xffc12635),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(160, 50),
+                        ),
+                        onPressed: editable ? () => save('confirm') : null,
+                        child: const Text('Confirmar SOS'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xff687078),
+                          minimumSize: const Size(150, 50),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: editable ? () => save('discard') : null,
+                        child: const Text('Descartar alarma'),
+                      ),
+                    ],
+                    if (confirmed && d['attention'] != 'resolved') ...[
+                      OutlinedButton(
+                        onPressed: editable ? () => save('resolve') : null,
+                        child: const Text('Resolver caso'),
+                      ),
+                    ],
+                    TextButton(
+                      onPressed: busy ? null : load,
+                      child: const Text('Recargar ficha'),
+                    ),
+                  ],
+                ),
+                SosEvidencePanel(caseId: widget.caseId),
+                ExpansionTile(
+                  title: const Text('Historial privado del caso'),
+                  children: [
+                    for (final event in d['events'] as List? ?? [])
+                      ListTile(
+                        title: Text(
+                          '${caseActionLabel('${event['action']}')} · ${caseTime(event['at'])}',
+                        ),
+                        subtitle: Text(
+                          '${event['snapshot']['internal_note']}\n${event['snapshot']['outcome']}\n${event['arrival_position'] == null ? '' : 'Llegada con ubicación del dispositivo registrada'}',
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

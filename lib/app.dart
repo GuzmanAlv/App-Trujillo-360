@@ -1,4 +1,8 @@
+import 'ui/map_filters_drawer.dart';
 import 'services/sos_navigation.dart';
+import 'services/operator_duty.dart';
+import 'services/citizen_arrival_alerts.dart';
+import 'ui/citizen_sos_page.dart';
 import 'services/sos_arrival_tracker.dart';
 import 'services/sos_route_controller.dart';
 import 'ui/sos_route_panel.dart';
@@ -82,6 +86,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final sosRoute = SosRouteController();
   final sosArrival = SosArrivalTracker();
   String? routeOwner;
+  void returnToMap() {
+    if (mounted) {
+      setState(() => tab = 0);
+      updateNearbyActivity();
+    }
+  }
+
   void routeRequested() {
     final value = SosNavigation.request.value;
     if (!mounted || value == null || currentReportOwner != value.owner) return;
@@ -106,6 +117,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? expiryTimer;
 
   Future<void> checkRole(User? user) async {
+    if (OperatorDuty.owner != user?.uid) OperatorDuty.clear();
     sosArrival.configure(false);
     final ticket = ++roleGeneration;
     if (user?.uid != routeOwner) {
@@ -138,6 +150,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             profile['status'] == 'active' &&
             ['operator', 'admin'].contains(profile['role']);
         sosArrival.configure(allowed && foreground);
+        if (!allowed) OperatorDuty.clear();
         if (operatorAllowed != allowed) {
           setState(() {
             if (!operatorAllowed && allowed && tab == 2) {
@@ -216,6 +229,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       pendingSosOwner = null;
       pendingSosLatitude = null;
       pendingSosLongitude = null;
+      await PushService.instance.ensureSosDevice(requestPermission: true);
       if (mounted) {
         await Navigator.push<void>(
           context,
@@ -274,6 +288,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final key = '${data['event_id']}';
     if (!openedPush.add(key)) return;
     PushService.instance.pending = null;
+    if (data['kind'] == 'sos_callback') {
+      returnToMap();
+      return;
+    }
+    if (data['kind'] == 'sos_arrival') {
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CitizenSosPage(caseId: '${data['target_id']}'),
+        ),
+      );
+      return;
+    }
     Navigator.push<void>(
       context,
       MaterialPageRoute(builder: (_) => PushDestination(data: data)),
@@ -283,7 +310,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    CitizenArrivalAlerts.instance.start();
     SosNavigation.request.addListener(routeRequested);
+    SosNavigation.mapRequested.addListener(returnToMap);
     WidgetsBinding.instance.addObserver(this);
     if (Firebase.apps.isNotEmpty) {
       roleSession = FirebaseAuth.instance.authStateChanges().listen(checkRole);
@@ -364,6 +393,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     roleSession?.cancel();
     expiryTimer?.cancel();
     SosNavigation.request.removeListener(routeRequested);
+    SosNavigation.mapRequested.removeListener(returnToMap);
     sosRoute.dispose();
     sosArrival.dispose();
     density.dispose();
@@ -469,117 +499,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Builder(
         builder: (context) => Scaffold(
           drawer: tab == 0
-              ? Drawer(
-                  child: SafeArea(
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Filtros del mapa',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Cerrar filtros',
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        const Text('Tipo de incidente'),
-                        if (!historical)
-                          Wrap(
-                            spacing: 8,
-                            children: categories
-                                .map(
-                                  (c) => ChoiceChip(
-                                    label: Text(c),
-                                    selected: filter == c,
-                                    onSelected: (_) =>
-                                        setState(() => filter = c),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        const SizedBox(height: 20),
-                        const Text('Periodo del mapa'),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            ChoiceChip(
-                              label: const Text('Recientes · 7 días'),
-                              selected: !historical,
-                              onSelected: (_) => setState(() {
-                                historical = false;
-                                density.configure(enabled: false);
-                              }),
-                            ),
-                            ChoiceChip(
-                              label: const Text('Historial · 90 días'),
-                              selected: historical,
-                              onSelected: (_) => setState(() {
-                                historical = true;
-                                density.configure(enabled: true);
-                              }),
-                            ),
-                          ],
-                        ),
-                        if (historical) ...[
-                          DropdownButton<int>(
-                            isExpanded: true,
-                            value: density.hourBand,
-                            items: const [
-                              DropdownMenuItem(
-                                value: -1,
-                                child: Text('Todas las horas'),
-                              ),
-                              DropdownMenuItem(
-                                value: 0,
-                                child: Text('Madrugada · 00–06 h'),
-                              ),
-                              DropdownMenuItem(
-                                value: 1,
-                                child: Text('Mañana · 06–12 h'),
-                              ),
-                              DropdownMenuItem(
-                                value: 2,
-                                child: Text('Tarde · 12–18 h'),
-                              ),
-                              DropdownMenuItem(
-                                value: 3,
-                                child: Text('Noche · 18–24 h'),
-                              ),
-                            ],
-                            onChanged: (v) => setState(
-                              () => density.configure(enabled: true, band: v),
-                            ),
-                          ),
-                          const Text(
-                            'Todas las categorías · zonas aproximadas: amarillo 1–2; rojo 3 o más. Sin color no significa seguro.',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          if (density.loading) const LinearProgressIndicator(),
-                          if (density.error != null)
-                            Text(
-                              density.error!,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                        ],
-
-                        const SizedBox(height: 20),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Ver mapa'),
-                        ),
-                      ],
-                    ),
+              ? MapFiltersDrawer(
+                  categories: categories,
+                  selected: filter,
+                  historical: historical,
+                  hourBand: density.hourBand,
+                  loading: density.loading,
+                  error: density.error,
+                  onCategory: (value) => setState(() => filter = value),
+                  onPeriod: (value) => setState(() {
+                    historical = value;
+                    density.configure(enabled: value && foreground && tab == 0);
+                  }),
+                  onHour: (value) => setState(
+                    () => density.configure(enabled: true, band: value),
                   ),
                 )
               : null,
@@ -762,8 +695,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
-                                if (operatorAllowed)
-                                  SosRoutePanel(route: sosRoute),
+                                SosRoutePanel(route: sosRoute),
                                 if (operatorAllowed)
                                   ValueListenableBuilder<String?>(
                                     valueListenable: sosArrival,

@@ -1,4 +1,5 @@
 import '../services/sos_alert_state.dart';
+import '../services/operator_duty.dart';
 import 'sos_waiting_queue.dart';
 import 'sos_incoming_attention.dart';
 import '../services/active_call.dart';
@@ -349,82 +350,145 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<String?>(
     valueListenable: ActiveCall.id,
-    builder: (context, call, _) => SosIncomingAttention(
-      active: widget.enabled && widget.active && alertCount > 0 && call == null,
-      builder: (muted, toggleMute) => Stack(
-        fit: StackFit.expand,
-        children: [
-          widget.builder(
-            widget.enabled ? displayedMarkers() : {},
-            widget.enabled ? incidentIds : {},
-            widget.enabled ? focus : null,
-          ),
-          if (widget.enabled && queueStates.isNotEmpty)
-            Positioned(
-              top: 8,
-              left: 8,
-              right: 8,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: SosWaitingQueue(
-                  calls: queueIds,
-                  waitingCalls: queueStates,
-                  onOpen: (id) =>
-                      openCase(id.replaceFirst('operator_sos_', '')),
-                  onSelect: focusCaller,
-                  muted: muted,
-                  onMute: toggleMute,
-                  onRefresh: busy ? null : refresh,
+    builder: (context, call, _) =>
+        ValueListenableBuilder<List<Map<String, dynamic>>>(
+          valueListenable: OperatorDuty.cases,
+          builder: (context, duty, _) => SosIncomingAttention(
+            active:
+                widget.enabled &&
+                widget.active &&
+                (duty.isNotEmpty
+                    ? duty.any((r) => r['attention'] == 'en_route')
+                    : alertCount > 0 && call == null),
+            enableSound: duty.isEmpty,
+            glowColor: duty.isNotEmpty
+                ? const Color(0xff1678ff)
+                : const Color(0xffff0028),
+            builder: (muted, toggleMute) => Stack(
+              fit: StackFit.expand,
+              children: [
+                widget.builder(
+                  widget.enabled ? displayedMarkers() : {},
+                  widget.enabled ? incidentIds : {},
+                  widget.enabled ? focus : null,
                 ),
-              ),
-            ),
-          if (widget.enabled && queueStates.isEmpty)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Material(
-                elevation: 2,
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (alertCount > 0)
-                      IconButton(
-                        tooltip: muted
-                            ? 'Activar sonido y vibración'
-                            : 'Silenciar sonido y vibración',
-                        onPressed: toggleMute,
-                        icon: Icon(
-                          muted ? Icons.volume_off : Icons.volume_up,
-                          color: Colors.red,
+                if (widget.enabled && duty.isNotEmpty)
+                  Positioned(
+                    top: 8,
+                    left: 12,
+                    right: 12,
+                    child: Center(
+                      child: Material(
+                        color: const Color(0xffe4efff),
+                        elevation: 3,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => openCase('${duty.first['id']}'),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.local_police,
+                                  color: Color(0xff145bb0),
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    duty.first['attention'] == 'on_scene'
+                                        ? 'Ya llegaste a la zona · Evaluar SOS'
+                                        : 'SOS en atención · Acércate al lugar',
+                                    style: const TextStyle(
+                                      color: Color(0xff124f96),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: Color(0xff145bb0),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    IconButton(
-                      tooltip: 'Actualizar casos SOS',
-                      onPressed: busy ? null : refresh,
-                      icon: const Icon(Icons.refresh),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                if (widget.enabled && queueStates.isNotEmpty)
+                  Positioned(
+                    top: duty.isNotEmpty ? 72 : 8,
+                    left: 8,
+                    right: 8,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: SosWaitingQueue(
+                        quiet: duty.isNotEmpty,
+                        calls: queueIds,
+                        waitingCalls: queueStates,
+                        onOpen: (id) =>
+                            openCase(id.replaceFirst('operator_sos_', '')),
+                        onSelect: focusCaller,
+                        muted: muted,
+                        onMute: toggleMute,
+                        onRefresh: busy ? null : refresh,
+                      ),
+                    ),
+                  ),
+                if (widget.enabled && queueStates.isEmpty && duty.isEmpty)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Material(
+                      elevation: 2,
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (alertCount > 0)
+                            IconButton(
+                              tooltip: muted
+                                  ? 'Activar sonido y vibración'
+                                  : 'Silenciar sonido y vibración',
+                              onPressed: toggleMute,
+                              icon: Icon(
+                                muted ? Icons.volume_off : Icons.volume_up,
+                                color: Colors.red,
+                              ),
+                            ),
+                          IconButton(
+                            tooltip: 'Actualizar casos SOS',
+                            onPressed: busy ? null : refresh,
+                            icon: const Icon(Icons.refresh),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (widget.enabled && note != null)
+                  Positioned(
+                    bottom: 12,
+                    left: 8,
+                    right: 8,
+                    child: Material(
+                      borderRadius: BorderRadius.circular(12),
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Text(note!, textAlign: TextAlign.center),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          if (widget.enabled && note != null)
-            Positioned(
-              bottom: 12,
-              left: 8,
-              right: 8,
-              child: Material(
-                borderRadius: BorderRadius.circular(12),
-                color: Theme.of(context).colorScheme.surface,
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Text(note!, textAlign: TextAlign.center),
-                ),
-              ),
-            ),
-        ],
-      ),
-    ),
+          ),
+        ),
   );
 }

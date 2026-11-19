@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../services/active_call.dart';
 import '../services/workflow_client.dart';
 import 'audio_call_page.dart';
+import 'callback_ring.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -22,6 +23,8 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
   StreamSubscription<User?>? auth;
   List<Map<String, dynamic>> incoming = [];
   final hidden = <String>{};
+  String ringKey(Map<String, dynamic> row) =>
+      '${row['id']}:${row['created_at']}';
   String? uid;
   bool busy = false, foreground = true, allowed = false;
   DateTime roleChecked = DateTime(2000);
@@ -106,7 +109,10 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
         ),
       );
     } finally {
-      if (ActiveCall.id.value == id) ActiveCall.id.value = null;
+      if (ActiveCall.id.value == id &&
+          ActiveCall.session.value?.minimized != true) {
+        ActiveCall.id.value = null;
+      }
       unawaited(refresh());
     }
   }
@@ -126,7 +132,7 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
       final queue = incoming
           .where(
             (r) =>
-                !hidden.contains(r['id']) &&
+                !hidden.contains(ringKey(r)) &&
                 (DateTime.tryParse(
                       '${r['expires_at']}',
                     )?.isAfter(DateTime.now()) ??
@@ -136,11 +142,21 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
       final shown = active == null && foreground
           ? queue
           : <Map<String, dynamic>>[];
-      return IncomingCallView(
-        queue: shown,
-        onAccept: accept,
-        onHide: (id) => setState(() => hidden.add(id)),
-        child: widget.child,
+      return CallbackRing(
+        active: shown.isNotEmpty,
+        ringId: shown.isEmpty ? null : ringKey(shown.first),
+        builder: (muted, toggle) => IncomingCallView(
+          muted: muted,
+          onMute: toggle,
+          queue: shown,
+          onAccept: accept,
+          onHide: (id) => setState(() {
+            for (final row in incoming.where((r) => r['id'] == id)) {
+              hidden.add(ringKey(row));
+            }
+          }),
+          child: widget.child,
+        ),
       );
     },
   );

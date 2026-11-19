@@ -11,8 +11,10 @@ class SosWaitingQueue extends StatefulWidget {
     required this.onRefresh,
     this.onOpen,
     this.waitingCalls = const {},
+    this.quiet = false,
   });
   final List<String> calls;
+  final bool quiet;
   final Map<String, bool> waitingCalls;
   final ValueChanged<String>? onOpen;
   bool waiting(String id) => waitingCalls[id] ?? true;
@@ -48,7 +50,7 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 460),
       child: Material(
-        color: const Color(0xffc41728),
+        color: widget.quiet ? const Color(0xff53677d) : const Color(0xffc41728),
         elevation: 5,
         borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
@@ -81,10 +83,12 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
                             size: 20,
                           ),
                           const SizedBox(width: 7),
-                          const Flexible(
+                          Flexible(
                             child: Text(
-                              'SOS Ayuda solicitada',
-                              style: TextStyle(
+                              widget.quiet
+                                  ? 'Nuevos SOS pendientes'
+                                  : 'SOS Ayuda solicitada',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
@@ -117,17 +121,18 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
                     color: Colors.white,
                     icon: const Icon(Icons.assignment_outlined, size: 20),
                   ),
-                IconButton(
-                  tooltip: widget.muted
-                      ? 'Activar sonido y vibración'
-                      : 'Silenciar sonido y vibración',
-                  onPressed: widget.onMute,
-                  color: Colors.white,
-                  icon: Icon(
-                    widget.muted ? Icons.volume_off : Icons.volume_up,
-                    size: 20,
+                if (!widget.quiet)
+                  IconButton(
+                    tooltip: widget.muted
+                        ? 'Activar sonido y vibración'
+                        : 'Silenciar sonido y vibración',
+                    onPressed: widget.onMute,
+                    color: Colors.white,
+                    icon: Icon(
+                      widget.muted ? Icons.volume_off : Icons.volume_up,
+                      size: 20,
+                    ),
                   ),
-                ),
                 IconButton(
                   tooltip: 'Actualizar casos SOS',
                   onPressed: widget.onRefresh,

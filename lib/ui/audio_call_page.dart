@@ -92,10 +92,29 @@ class _AudioCallPageState extends State<AudioCallPage> {
     });
   }
 
+  Future<void> backToMap() async {
+    if (closing) return;
+    if (widget.operator && !(await caseKey.currentState?.mayLeave() ?? true)) {
+      return;
+    }
+    if (!mounted) return;
+    if (!session.finished) {
+      minimized = true;
+      ActiveCall.minimize(session);
+    }
+    setState(() => allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        SosNavigation.showMap();
+      }
+    });
+  }
+
   Future<void> confirmed(Map<String, dynamic> data) async {
     if (!mounted) return;
     minimized = !session.finished;
-    session.minimized = minimized;
+    if (minimized) ActiveCall.minimize(session);
     setState(() => allowPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -118,10 +137,18 @@ class _AudioCallPageState extends State<AudioCallPage> {
   Widget build(BuildContext context) => PopScope(
     canPop: allowPop,
     onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) unawaited(finish(exit: true));
+      if (!didPop) unawaited(backToMap());
     },
     child: Scaffold(
-      appBar: AppBar(title: const Text('Llamada SOS'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Llamada SOS'),
+        centerTitle: true,
+        leading: IconButton(
+          tooltip: 'Volver al mapa sin colgar',
+          onPressed: backToMap,
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
       body: SafeArea(
         child: CallPageLayout(
           compactControls: widget.operator

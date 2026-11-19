@@ -6,6 +6,12 @@ import 'call_session.dart';
 class ActiveCall {
   static final id = ValueNotifier<String?>(null);
   static final session = ValueNotifier<CallSession?>(null);
+  static final presentation = ValueNotifier(0);
+  static void minimize(CallSession value) {
+    value.minimized = true;
+    presentation.value++;
+  }
+
   static VoidCallback? _listener;
   static bool bind(CallSession value) {
     final old = session.value;

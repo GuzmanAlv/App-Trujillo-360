@@ -12,10 +12,11 @@ class CallSession extends ChangeNotifier {
     required this.operator,
     this.callback = false,
     this.answer = false,
-  });
+    Room? room,
+  }) : room = room ?? Room();
   final String callId;
   final bool operator, callback, answer;
-  final room = Room();
+  final Room room;
   Timer? poll;
   StreamSubscription<User?>? auth;
   String message = 'Preparando llamada…';

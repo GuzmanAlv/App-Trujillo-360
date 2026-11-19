@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'location_service.dart';
 import 'workflow_client.dart';
+import 'operator_duty.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// Foreground only. Arrival is decided by the server, independently of routing.
 class SosArrivalTracker extends ValueNotifier<String?> {
@@ -31,6 +33,8 @@ class SosArrivalTracker extends ValueNotifier<String?> {
     try {
       final rows = await WorkflowClient.list('/operator/sos-map');
       if (!current()) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) OperatorDuty.replace(uid, rows);
       final active = rows
           .where(
             (r) =>
@@ -75,6 +79,9 @@ class SosArrivalTracker extends ValueNotifier<String?> {
         if (current() && result['reason'] == 'gps_quality') {
           value =
               'Esperando una ubicación GPS reciente y precisa para detectar la llegada.';
+        }
+        if (current() && uid != null && result['attention'] == 'on_scene') {
+          OperatorDuty.upsert(uid, {...row, 'attention': 'on_scene'});
         }
       }
     } catch (_) {

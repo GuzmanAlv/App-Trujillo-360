@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/workflow_client.dart';
+import '../services/citizen_arrival_alerts.dart';
 import 'citizen_sos_page.dart';
 import 'report_marker.dart';
 import 'report_style.dart';
@@ -120,6 +121,18 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
       if (mounted &&
           ticket == generation &&
           uid == FirebaseAuth.instance.currentUser?.uid) {
+        for (final row in rows) {
+          final previous = cases.where((r) => r['id'] == row['id']);
+          final arrived = DateTime.tryParse('${row['arrived_at']}');
+          if (row['attention'] == 'on_scene' &&
+              ((previous.isNotEmpty &&
+                      previous.first['attention'] != 'on_scene') ||
+                  (arrived != null &&
+                      DateTime.now().difference(arrived).inSeconds.abs() <
+                          300))) {
+            unawaited(CitizenArrivalAlerts.instance.receive('${row['id']}'));
+          }
+        }
         setState(() => cases = rows);
         configurePulse();
       }
@@ -185,46 +198,42 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
         : rows.isEmpty
         ? null
         : rows.first;
-    return SosIncomingAttention(
-      active: widget.enabled && widget.active && rows.isNotEmpty,
-      enableSound: false,
-      glowColor: const Color(0xffff8800),
-      builder: (muted, toggle) => Stack(
-        fit: StackFit.expand,
-        children: [
-          widget.builder(markers, ids),
-          if (current != null)
-            Positioned(
-              top: 8,
-              left: 12,
-              right: 12,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
+    return ValueListenableBuilder<String?>(
+      valueListenable: CitizenArrivalAlerts.instance,
+      builder: (context, arrivalCase, _) => SosIncomingAttention(
+        active: widget.enabled && widget.active && rows.isNotEmpty,
+        enableSound: false,
+        glowColor: const Color(0xffff8800),
+        builder: (muted, toggle) => Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.builder(markers, ids),
+            if (arrivalCase != null && widget.enabled && widget.active)
+              Positioned(
+                bottom: 14,
+                left: 16,
+                right: 16,
+                child: Center(
                   child: Material(
-                    color: const Color(0xffffb454),
-                    elevation: 4,
+                    color: const Color(0xffe3efff),
+                    elevation: 6,
                     borderRadius: BorderRadius.circular(18),
-                    clipBehavior: Clip.antiAlias,
                     child: InkWell(
-                      onTap: () => open('${current['id']}'),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () => open(arrivalCase),
+                      child: const Padding(
+                        padding: EdgeInsets.all(14),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
-                              Icons.local_police,
-                              color: Color(0xff6d3100),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
+                            Icon(Icons.local_police, color: Color(0xff1764b7)),
+                            SizedBox(width: 10),
+                            Flexible(
                               child: Text(
-                                citizenSosMessage('${current['attention']}'),
-                                style: const TextStyle(
-                                  color: Color(0xff592800),
+                                'La policía ya se encuentra en el lugar',
+                                style: TextStyle(
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 13,
+                                  color: Color(0xff154b89),
                                 ),
                               ),
                             ),
@@ -235,8 +244,51 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
                   ),
                 ),
               ),
-            ),
-        ],
+            if (current != null)
+              Positioned(
+                top: 8,
+                left: 12,
+                right: 12,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: Material(
+                      color: const Color(0xffffb454),
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(18),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => open('${current['id']}'),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.local_police,
+                                color: Color(0xff6d3100),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  citizenSosMessage('${current['attention']}'),
+                                  style: const TextStyle(
+                                    color: Color(0xff592800),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
