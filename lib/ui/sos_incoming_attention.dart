@@ -88,16 +88,16 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
             child: AnimatedBuilder(
               animation: animation,
               builder: (context, child) {
-                final red = Colors.red.withValues(
-                  alpha: .12 + animation.value * .24,
-                );
+                final red = const Color(
+                  0xffff0028,
+                ).withValues(alpha: .28 + animation.value * .42);
                 return Stack(
                   children: [
                     Positioned(
                       top: 0,
                       left: 0,
                       right: 0,
-                      height: 32,
+                      height: 52,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -112,7 +112,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      height: 32,
+                      height: 52,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -127,7 +127,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                       top: 0,
                       bottom: 0,
                       left: 0,
-                      width: 32,
+                      width: 52,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -140,7 +140,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                       top: 0,
                       bottom: 0,
                       right: 0,
-                      width: 32,
+                      width: 52,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(

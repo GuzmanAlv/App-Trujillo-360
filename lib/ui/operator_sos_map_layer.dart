@@ -1,3 +1,4 @@
+import 'sos_waiting_queue.dart';
 import 'sos_incoming_attention.dart';
 import '../services/active_call.dart';
 import 'dart:async';
@@ -10,6 +11,8 @@ import 'report_marker.dart';
 import 'sos_case_panel.dart';
 import 'sos_status.dart';
 
+typedef SosMapFocus = ({LatLng target, int revision});
+
 class OperatorSosMapLayer extends StatefulWidget {
   const OperatorSosMapLayer({
     super.key,
@@ -18,7 +21,7 @@ class OperatorSosMapLayer extends StatefulWidget {
     required this.builder,
   });
   final bool enabled, active;
-  final Widget Function(Set<Marker>, Set<String>) builder;
+  final Widget Function(Set<Marker>, Set<String>, SosMapFocus?) builder;
   @override
   State<OperatorSosMapLayer> createState() => _OperatorSosMapLayerState();
 }
@@ -29,6 +32,18 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   final List<BitmapDescriptor> pendingIcons = [], phoneIcons = [];
   Set<String> phoneIds = {}, urgentIds = {};
   int alertCount = 0;
+  SosMapFocus? focus;
+  int focusRevision = 0;
+  void focusCaller(String id) {
+    if (!widget.enabled || !phoneIds.contains(id)) return;
+    final matching = baseMarkers.where((m) => m.markerId.value == id);
+    if (matching.isEmpty) return;
+    setState(
+      () =>
+          focus = (target: matching.first.position, revision: ++focusRevision),
+    );
+  }
+
   Set<Marker> baseMarkers = {};
   Set<String> pendingIds = {};
   Future<void> preparePendingIcons() async {
@@ -129,6 +144,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         phoneIds = {};
         urgentIds = {};
         alertCount = 0;
+        focus = null;
         pulseTimer?.cancel();
         incidentIds = {};
         note = null;
@@ -252,6 +268,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           phoneIds = {};
           urgentIds = {};
           alertCount = 0;
+          focus = null;
           pulseTimer?.cancel();
           incidentIds = {};
           note = 'No se pudieron actualizar los SOS del operador.';
@@ -290,65 +307,66 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           widget.builder(
             widget.enabled ? displayedMarkers() : {},
             widget.enabled ? incidentIds : {},
+            widget.enabled ? focus : null,
           ),
-          if (widget.enabled)
+          if (widget.enabled && phoneIds.isNotEmpty)
             Positioned(
               top: 8,
               left: 8,
               right: 8,
               child: Align(
                 alignment: Alignment.topCenter,
-                child: Material(
-                  elevation: 4,
-                  color: alertCount > 0
-                      ? const Color(0xffc62828)
-                      : Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(24),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          alertCount > 0 ? Icons.sos : Icons.local_police,
-                          size: 20,
-                          color: alertCount > 0 ? Colors.white : null,
+                child: SosWaitingQueue(
+                  calls: phoneIds.toList(growable: false),
+                  onSelect: focusCaller,
+                  muted: muted,
+                  onMute: toggleMute,
+                  onRefresh: busy ? null : refresh,
+                ),
+              ),
+            ),
+          if (widget.enabled && phoneIds.isEmpty)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                elevation: 2,
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (alertCount > 0)
+                      IconButton(
+                        tooltip: muted
+                            ? 'Activar sonido y vibración'
+                            : 'Silenciar sonido y vibración',
+                        onPressed: toggleMute,
+                        icon: Icon(
+                          muted ? Icons.volume_off : Icons.volume_up,
+                          color: Colors.red,
                         ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            note ??
-                                (alertCount > 0
-                                    ? 'SOS Ayuda solicitada'
-                                    : 'SOS privados · ${markers.length}'),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: alertCount > 0 ? Colors.white : null,
-                            ),
-                          ),
-                        ),
-                        if (alertCount > 0)
-                          IconButton(
-                            tooltip: muted
-                                ? 'Activar sonido y vibración'
-                                : 'Silenciar sonido y vibración',
-                            onPressed: toggleMute,
-                            color: Colors.white,
-                            icon: Icon(
-                              muted ? Icons.volume_off : Icons.volume_up,
-                              size: 20,
-                            ),
-                          ),
-                        IconButton(
-                          tooltip: 'Actualizar casos SOS',
-                          onPressed: busy ? null : refresh,
-                          color: alertCount > 0 ? Colors.white : null,
-                          icon: const Icon(Icons.refresh, size: 20),
-                        ),
-                      ],
+                      ),
+                    IconButton(
+                      tooltip: 'Actualizar casos SOS',
+                      onPressed: busy ? null : refresh,
+                      icon: const Icon(Icons.refresh),
                     ),
-                  ),
+                  ],
+                ),
+              ),
+            ),
+          if (widget.enabled && note != null)
+            Positioned(
+              bottom: 12,
+              left: 8,
+              right: 8,
+              child: Material(
+                borderRadius: BorderRadius.circular(12),
+                color: Theme.of(context).colorScheme.surface,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(note!, textAlign: TextAlign.center),
                 ),
               ),
             ),

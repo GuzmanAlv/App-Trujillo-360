@@ -18,6 +18,7 @@ class MapPanel extends StatefulWidget {
     this.incidents = const [],
     this.extraMarkers = const {},
     this.focusTarget,
+    this.focusRevision = 0,
     this.selected,
     this.onPick,
     this.onIncident,
@@ -34,6 +35,7 @@ class MapPanel extends StatefulWidget {
   final List<Incident> incidents;
   final Set<Marker> extraMarkers;
   final LatLng? focusTarget;
+  final int focusRevision;
   final Set<Circle> overlays;
   final LatLng? currentLocation;
   final String currentLocationLabel;
@@ -122,7 +124,9 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   void didUpdateWidget(covariant MapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.focusTarget != null &&
-        widget.focusTarget != oldWidget.focusTarget) {
+        (widget.focusTarget != oldWidget.focusTarget ||
+            widget.focusRevision != oldWidget.focusRevision)) {
+      centerRequested = false;
       controller?.animateCamera(
         CameraUpdate.newLatLngZoom(widget.focusTarget!, 16),
       );
@@ -299,6 +303,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     ),
                     onMapCreated: (c) {
                       controller = c;
+                      if (widget.focusTarget != null) centerRequested = false;
                       if (widget.active) {
                         centerIfRequested();
                         reportViewport();

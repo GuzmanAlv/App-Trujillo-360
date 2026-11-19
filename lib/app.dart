@@ -617,9 +617,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                         tab == 0 &&
                                         (ModalRoute.isCurrentOf(context) ??
                                             true),
-                                    builder: (sosMarkers, sosIncidentIds) =>
-                                        MapPanel(
+                                    builder:
+                                        (
+                                          sosMarkers,
+                                          sosIncidentIds,
+                                          sosFocus,
+                                        ) => MapPanel(
                                           extraMarkers: sosMarkers,
+                                          focusTarget: sosFocus?.target,
+                                          focusRevision:
+                                              sosFocus?.revision ?? 0,
                                           incidents: historical
                                               ? const []
                                               : visible

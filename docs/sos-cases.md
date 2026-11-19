@@ -1,5 +1,13 @@
 # Evaluación y atención del SOS
 
+## Lista de llamadas vivas desde el mapa
+
+El rótulo «SOS Ayuda solicitada» se muestra exclusivamente cuando el mapa tiene llamadas que continúan esperando (`call_waiting`). Con una llamada, tocarlo centra el mapa en su posición. Con varias, despliega tarjetas desplazables; elegir una cierra la lista y centra el mapa, sin aceptar la llamada automáticamente. El operador puede tocar el marcador para abrir el caso y tomarla. La selección puede repetirse después de mover el mapa.
+
+Al desaparecer las llamadas vivas, se retira el rótulo y su lista. Los SOS que superaron 10 segundos sin respuesta conservan su marcador, resplandor y alarma mientras sigan pendientes. El control de silenciar sigue disponible en la esquina del mapa, junto a actualizar. La lista se actualiza con la consulta del mapa; una llamada atendida por otro operador o finalizada se retira en la siguiente respuesta.
+
+El resplandor ahora es más intenso y ancho, sin línea de borde. Android utiliza un patrón de tres tonos de emergencia repetido cada 2,2 segundos con mayor amplitud y vibración triple. No cambia el volumen del sistema ni ignora silencio/No molestar. Se conservan la salida al aceptar, el silencio manual y la cancelación al pausar la app. Esta extensión solo requiere instalar el APK nuevo sobre el backend que ya incorpora la migración 020; no añade rutas ni migraciones.
+
 ## Alerta localizada en el mapa y estado de la llamada
 
 Esta actualización sustituye la tarjeta de llamada entrante **del operador** por un rótulo compacto rojo «SOS Ayuda solicitada», arriba al centro del mapa. La luz roja se dibuja como un resplandor suave dentro del mapa, sin línea de borde ni iluminación en las demás pantallas. El sonido y vibración se pueden silenciar desde el rótulo y se detienen al salir del mapa o tomar una llamada. El aviso de devolución de llamada al ciudadano se conserva para que pueda aceptarla.
