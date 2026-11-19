@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Actualización: [casos resueltos durante siete días y avisos de trayecto](docs/resolved-map-and-progress-cues.md). Requiere migración 026, backend y APK nuevos.
+
 Último cambio: [descarte durante el trayecto, suspensión y controles superpuestos](docs/sos-suspension-and-map-controls.md). Requiere migración 025, backend y APK nuevos.
 
 Actualización: [mapa compacto, refuerzos privados y reevaluación tras llegar al SOS](docs/reinforcements-and-compact-map.md). Requiere migración 024, backend y APK nuevos.

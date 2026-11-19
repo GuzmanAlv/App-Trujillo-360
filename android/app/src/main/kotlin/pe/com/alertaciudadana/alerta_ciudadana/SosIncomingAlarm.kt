@@ -17,6 +17,7 @@ class SosIncomingAlarm(private val context: Context) {
     private val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     private var tone: ToneGenerator? = null
     private var running = false
+    val active: Boolean get() = running
     private var deadline = 0L
     private val pulse = object : Runnable {
         override fun run() {

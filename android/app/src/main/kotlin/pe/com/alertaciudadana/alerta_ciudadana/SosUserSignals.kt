@@ -23,6 +23,7 @@ class SosUserSignals(private val context: Context) {
     private var ringtone: Ringtone? = null
     private var arrival: MediaPlayer? = null
     private var ringing = false
+    val active: Boolean get() = ringing || arrival != null
     private var deadline = 0L
     private fun allowed() = context.getSystemService(NotificationManager::class.java)
         .currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_ALL

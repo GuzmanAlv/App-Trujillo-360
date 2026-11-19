@@ -27,6 +27,11 @@ String reportTime(DateTime value) {
   return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
 }
 
+String reportDateTime(DateTime value) {
+  final local = value.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year} · ${reportTime(local)}';
+}
+
 class ReportCategoryIcon extends StatelessWidget {
   const ReportCategoryIcon({super.key, required this.category});
 

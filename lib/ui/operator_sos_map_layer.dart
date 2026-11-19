@@ -4,6 +4,7 @@ import '../services/reinforcements_store.dart';
 import 'reinforcement_controls.dart';
 import 'sos_waiting_queue.dart';
 import 'sos_incoming_attention.dart';
+import 'sos_progress_feedback.dart';
 import '../services/active_call.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -494,106 +495,112 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                 widget.reinforcements.others.isNotEmpty &&
                 !enRoute &&
                 queueStates.isEmpty;
-            return SosIncomingAttention(
-              active:
-                  widget.enabled &&
-                  widget.active &&
-                  (enRoute || redAlert || backupGlow),
-              enableSound: redAlert,
-              glowColor: enRoute
-                  ? const Color(0xff1678ff)
-                  : redAlert
-                  ? const Color(0xffff0028)
-                  : ReinforcementControls.orange,
-              builder: (muted, toggleMute) => Stack(
-                fit: StackFit.expand,
-                children: [
-                  widget.builder(
-                    widget.enabled
-                        ? {...displayedMarkers(), ...backupMarkers()}
-                        : {},
-                    widget.enabled ? incidentIds : {},
-                    widget.enabled ? focus : null,
-                  ),
-                  if (widget.enabled)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      right: 8,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (duty.isNotEmpty) ...[
-                            dutyHeader(duty),
-                            const SizedBox(height: 8),
-                          ],
-                          if (queueStates.isNotEmpty) ...[
-                            SosWaitingQueue(
-                              quiet: duty.isNotEmpty,
-                              calls: queueIds,
-                              waitingCalls: queueStates,
-                              onOpen: (id) => openCase(
-                                id.replaceFirst('operator_sos_', ''),
+            return SosProgressFeedback(
+              mode: widget.enabled && widget.active && enRoute
+                  ? 'operator'
+                  : null,
+              child: SosIncomingAttention(
+                active:
+                    widget.enabled &&
+                    widget.active &&
+                    (enRoute || redAlert || backupGlow),
+                enableSound: redAlert,
+                glowColor: enRoute
+                    ? const Color(0xff1678ff)
+                    : redAlert
+                    ? const Color(0xffff0028)
+                    : ReinforcementControls.orange,
+                builder: (muted, toggleMute) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    widget.builder(
+                      widget.enabled
+                          ? {...displayedMarkers(), ...backupMarkers()}
+                          : {},
+                      widget.enabled ? incidentIds : {},
+                      widget.enabled ? focus : null,
+                    ),
+                    if (widget.enabled)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        right: 8,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (duty.isNotEmpty) ...[
+                              dutyHeader(duty),
+                              const SizedBox(height: 8),
+                            ],
+                            if (queueStates.isNotEmpty) ...[
+                              SosWaitingQueue(
+                                quiet: duty.isNotEmpty,
+                                calls: queueIds,
+                                waitingCalls: queueStates,
+                                onOpen: (id) => openCase(
+                                  id.replaceFirst('operator_sos_', ''),
+                                ),
+                                onSelect: focusCaller,
+                                muted: muted,
+                                onMute: toggleMute,
+                                onRefresh: busy ? null : refresh,
                               ),
-                              onSelect: focusCaller,
-                              muted: muted,
-                              onMute: toggleMute,
-                              onRefresh: busy ? null : refresh,
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          if (widget.reinforcements.banner != null)
-                            ReinforcementControls.banner(
-                              widget.reinforcements.banner!,
-                              () => widget.onReinforcement(
+                              const SizedBox(height: 8),
+                            ],
+                            if (widget.reinforcements.banner != null)
+                              ReinforcementControls.banner(
                                 widget.reinforcements.banner!,
-                                false,
+                                () => widget.onReinforcement(
+                                  widget.reinforcements.banner!,
+                                  false,
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  if (widget.enabled && widget.reinforcements.others.isNotEmpty)
-                    Positioned(
-                      right: 12,
-                      bottom: 100,
-                      child: ReinforcementControls.button(
-                        context,
-                        widget.reinforcements,
-                        widget.onReinforcement,
-                      ),
-                    ),
-                  if (widget.enabled &&
-                      queueStates.isEmpty &&
-                      duty.isEmpty &&
-                      widget.reinforcements.banner == null)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Material(
-                        elevation: 2,
-                        borderRadius: BorderRadius.circular(20),
-                        child: IconButton(
-                          tooltip: 'Actualizar casos SOS',
-                          onPressed: busy ? null : refresh,
-                          icon: const Icon(Icons.refresh),
+                          ],
                         ),
                       ),
-                    ),
-                  if (widget.enabled && note != null)
-                    Positioned(
-                      bottom: 66,
-                      left: 8,
-                      right: 8,
-                      child: Material(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Text(note!, textAlign: TextAlign.center),
+                    if (widget.enabled &&
+                        widget.reinforcements.others.isNotEmpty)
+                      Positioned(
+                        right: 12,
+                        bottom: 100,
+                        child: ReinforcementControls.button(
+                          context,
+                          widget.reinforcements,
+                          widget.onReinforcement,
                         ),
                       ),
-                    ),
-                ],
+                    if (widget.enabled &&
+                        queueStates.isEmpty &&
+                        duty.isEmpty &&
+                        widget.reinforcements.banner == null)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Material(
+                          elevation: 2,
+                          borderRadius: BorderRadius.circular(20),
+                          child: IconButton(
+                            tooltip: 'Actualizar casos SOS',
+                            onPressed: busy ? null : refresh,
+                            icon: const Icon(Icons.refresh),
+                          ),
+                        ),
+                      ),
+                    if (widget.enabled && note != null)
+                      Positioned(
+                        bottom: 66,
+                        left: 8,
+                        right: 8,
+                        child: Material(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Text(note!, textAlign: TextAlign.center),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             );
           },

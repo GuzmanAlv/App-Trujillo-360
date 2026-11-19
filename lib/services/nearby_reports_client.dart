@@ -78,6 +78,7 @@ Future<List<Incident>> fetchCommunityReports(
       'place': j['place'] as String? ?? 'Incidente de la comunidad',
       'description': j['description'] as String? ?? '',
       'attention': j['attention'],
+      'resolvedAt': j['resolved_at'],
       'latitude': j['latitude'],
       'longitude': j['longitude'],
       'createdAt': j['occurred_at'],

@@ -1,5 +1,8 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización: [casos resueltos en el mapa y avisos de trayecto](resolved-map-and-progress-cues.md).
+Requiere migración 026, backend y APK nuevos. `/ready` incluye `resolved_map_version: 1`.
+
 Nueva actualización: [descarte y suspensión, mapa ampliado y controles](sos-suspension-and-map-controls.md).
 Requiere migración 025 y actualizar backend/APK. `/ready` incluye `sos_suspension_version: 1`.
 
