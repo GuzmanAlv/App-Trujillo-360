@@ -1,5 +1,13 @@
 # Evaluación y atención del SOS
 
+## SOS privados en el mapa del operador
+
+Las cuentas de operador ven los SOS activos de Ayuda sobre el mapa reciente. Cada marcador conserva el color/icono del estado (incluido apoyo solicitado), utiliza el punto del hecho corregido y abre la ficha del caso al tocarlo. Los casos cerrados o descartados se conservan en Ayuda y no se muestran en esta capa. Si existe un incidente público vinculado, el operador ve un solo marcador del SOS.
+
+La capa se actualiza cada 15 segundos mientras el mapa está activo, al volver a él y al cerrar una ficha. El botón «Actualizar casos SOS» permite actualizarla manualmente. Cambiar o cerrar sesión borra los marcadores privados. El endpoint `/operator/sos-map` comprueba el rol activo en PostgreSQL y devuelve únicamente ID, posición, estado y vínculo del incidente; las cuentas ciudadanas no tienen acceso. La consulta usa la misma bandeja autorizada y su límite de 200 casos.
+
+Activación: desplegar el backend nuevo e instalar el APK actualizado. No requiere una migración adicional si ya se aplicaron 018 y 019. La comprobación automatizada usa PostgreSQL/PostGIS temporal y verifica rechazo a ciudadanos, ubicación corregida, privacidad de notas y retirada de casos descartados.
+
 ## Actualización de la ficha del operador
 
 La migración **019_sos_operator_actions.sql** agrega estados visuales en la ficha y Ayuda, referencia/descripcion pública opcionales, solicitud de apoyo con borde rojo animado y devolución de llamada al ciudadano del caso. El operador dispone de botones para centrar el mapa en su posición GPS o en la posición del ciudadano al solicitar el SOS. El pin del hecho sigue siendo editable tocando o arrastrando; las coordenadas ya no se muestran como campos.

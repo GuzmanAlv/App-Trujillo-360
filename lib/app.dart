@@ -1,3 +1,4 @@
+import 'ui/operator_sos_map_layer.dart';
 import 'ui/incoming_call_overlay.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -609,26 +610,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     child: Text(mapIncidents.note!),
                                   ),
                                 Expanded(
-                                  child: MapPanel(
-                                    incidents: historical ? const [] : visible,
-                                    overlays: historical
-                                        ? density.overlays
-                                        : const {},
-                                    onIncident: communityDetails,
-                                    currentLocation: nearby.position == null
-                                        ? null
-                                        : LatLng(
-                                            nearby.position!.latitude,
-                                            nearby.position!.longitude,
-                                          ),
-                                    onLocate: nearby.start,
-                                    locating: nearby.locating,
-                                    locationRadius: 500,
-                                    onViewportChanged: (bounds) {
-                                      mapIncidents.setBounds(bounds);
-                                      density.setBounds(bounds);
-                                    },
-                                    active: tab == 0,
+                                  child: OperatorSosMapLayer(
+                                    enabled: operatorAllowed && !historical,
+                                    active: foreground && tab == 0,
+                                    builder: (sosMarkers, sosIncidentIds) =>
+                                        MapPanel(
+                                          extraMarkers: sosMarkers,
+                                          incidents: historical
+                                              ? const []
+                                              : visible
+                                                    .where(
+                                                      (i) => !sosIncidentIds
+                                                          .contains(i.id),
+                                                    )
+                                                    .toList(),
+                                          overlays: historical
+                                              ? density.overlays
+                                              : const {},
+                                          onIncident: communityDetails,
+                                          currentLocation:
+                                              nearby.position == null
+                                              ? null
+                                              : LatLng(
+                                                  nearby.position!.latitude,
+                                                  nearby.position!.longitude,
+                                                ),
+                                          onLocate: nearby.start,
+                                          locating: nearby.locating,
+                                          locationRadius: 500,
+                                          onViewportChanged: (bounds) {
+                                            mapIncidents.setBounds(bounds);
+                                            density.setBounds(bounds);
+                                          },
+                                          active: tab == 0,
+                                        ),
                                   ),
                                 ),
                               ],

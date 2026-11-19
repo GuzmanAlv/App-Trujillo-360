@@ -9,6 +9,18 @@ from app.workflows import execute
 
 router = APIRouter(prefix='/operator')
 
+@router.get('/sos-map')
+def map_cases(response: Response, claims=Depends(identity)):
+    """Same authorized queue as Ayuda; publish only marker fields to operators."""
+    response.headers['Cache-Control'] = 'private, no-store'
+    return execute(claims, '''SELECT jsonb_build_object(
+        'id',h->>'id','latitude',c->'latitude','longitude',c->'longitude',
+        'decision',c->'decision','attention',c->'attention',
+        'support_requested',c->'support_requested','incident_id',c->'incident_id')
+        FROM trujillo.list_help(true) h
+        CROSS JOIN LATERAL (SELECT trujillo.sos_case_read((h->>'id')::uuid) AS c) details
+        WHERE h->>'source'='sos' AND h->>'stage' NOT IN ('Cerrada','Descartada')''', many=True)
+
 class ArrivalPosition(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     latitude: float = Field(ge=-90, le=90)
