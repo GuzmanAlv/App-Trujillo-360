@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'report_style.dart';
 
 /// Fixed anchor and canvas keep the location still while the warning breathes.
-Future<Uint8List> renderPendingSosMarker(double pulse) async {
+Future<Uint8List> renderPendingSosMarker(
+  double pulse, {
+  bool waitingCall = false,
+}) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder)..scale(2);
   const center = Offset(32, 32);
@@ -35,7 +38,9 @@ Future<Uint8List> renderPendingSosMarker(double pulse) async {
     17 + pulse * 2,
     Paint()..color = const Color(0xffcf2634),
   );
-  const icon = Icons.warning_rounded;
+  final icon = waitingCall
+      ? Icons.phone_in_talk_rounded
+      : Icons.warning_rounded;
   final text = TextPainter(
     text: TextSpan(
       text: String.fromCharCode(icon.codePoint),

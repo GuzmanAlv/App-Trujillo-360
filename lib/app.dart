@@ -612,7 +612,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 Expanded(
                                   child: OperatorSosMapLayer(
                                     enabled: operatorAllowed && !historical,
-                                    active: foreground && tab == 0,
+                                    active:
+                                        foreground &&
+                                        tab == 0 &&
+                                        (ModalRoute.isCurrentOf(context) ??
+                                            true),
                                     builder: (sosMarkers, sosIncidentIds) =>
                                         MapPanel(
                                           extraMarkers: sosMarkers,

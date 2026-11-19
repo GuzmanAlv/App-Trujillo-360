@@ -1,4 +1,3 @@
-import 'sos_incoming_attention.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -79,11 +78,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
         roleChecked = DateTime.now();
       }
       final returns = await WorkflowClient.list('/calls/incoming/return');
-      final result = allowed
-          ? await WorkflowClient.list('/operator/calls/incoming')
-          : <Map<String, dynamic>>[];
+
       if (mounted && uid == owner) {
-        setState(() => incoming = [...returns, ...result]);
+        setState(() => incoming = returns);
       }
     } catch (_) {
       if (mounted) setState(() => incoming = []);
@@ -139,16 +136,11 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
       final shown = active == null && foreground
           ? queue
           : <Map<String, dynamic>>[];
-      return SosIncomingAttention(
-        active: allowed && shown.any((r) => r['callback'] != true),
-        builder: (muted, toggleMute) => IncomingCallView(
-          muted: muted,
-          onMute: allowed ? toggleMute : null,
-          queue: shown,
-          onAccept: accept,
-          onHide: (id) => setState(() => hidden.add(id)),
-          child: widget.child,
-        ),
+      return IncomingCallView(
+        queue: shown,
+        onAccept: accept,
+        onHide: (id) => setState(() => hidden.add(id)),
+        child: widget.child,
       );
     },
   );
@@ -178,7 +170,7 @@ class IncomingCallView extends StatelessWidget {
       child: Stack(
         children: [
           child,
-          if (queue.isNotEmpty)
+          if (queue.isNotEmpty && queue.first['callback'] == true)
             Positioned(
               top: 0,
               left: 12,

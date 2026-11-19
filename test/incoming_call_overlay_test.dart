@@ -3,6 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('Las llamadas SOS al operador no muestran una tarjeta flotante', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => IncomingCallView(
+          queue: const [
+            {'id': 'operator-sos'},
+          ],
+          onAccept: (_) {},
+          onHide: (_) {},
+          child: child!,
+        ),
+        home: const Scaffold(body: Text('Mapa del operador')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Mapa del operador'), findsOneWidget);
+    expect(find.text('Tomar llamada'), findsNothing);
+    expect(find.text('SOS Alerta'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'Aviso sobre el Navigator permite tooltip, aceptar y ocultar sin perder la ruta',
     (tester) async {
@@ -40,7 +62,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       calls.value = [
-        {'id': 'sos-1'},
+        {'id': 'sos-1', 'callback': true},
       ];
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
@@ -57,12 +79,12 @@ void main() {
       expect(accepted, 'sos-1');
       expect(find.text('Otra pantalla'), findsOneWidget);
       calls.value = [
-        {'id': 'sos-2'},
+        {'id': 'sos-2', 'callback': true},
       ];
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip(tooltip));
       await tester.pumpAndSettle();
-      expect(find.text('SOS Alerta'), findsNothing);
+      expect(find.text('El operador te llama'), findsNothing);
       expect(find.text('Otra pantalla'), findsOneWidget);
       navigator.currentState!.pop();
       await tester.pumpAndSettle();

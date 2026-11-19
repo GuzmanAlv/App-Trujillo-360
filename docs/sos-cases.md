@@ -1,5 +1,27 @@
 # Evaluación y atención del SOS
 
+## Alerta localizada en el mapa y estado de la llamada
+
+Esta actualización sustituye la tarjeta de llamada entrante **del operador** por un rótulo compacto rojo «SOS Ayuda solicitada», arriba al centro del mapa. La luz roja se dibuja como un resplandor suave dentro del mapa, sin línea de borde ni iluminación en las demás pantallas. El sonido y vibración se pueden silenciar desde el rótulo y se detienen al salir del mapa o tomar una llamada. El aviso de devolución de llamada al ciudadano se conserva para que pueda aceptarla.
+
+- Teléfono rojo animado: llamada del ciudadano que sigue esperando y no ha caducado.
+- Advertencia roja con halo naranja animado: SOS pendiente cuya llamada esperó al menos 10 segundos sin aceptación, aunque el ciudadano haya colgado o se haya agotado la espera.
+- Un corte antes de 10 segundos conserva el caso pendiente y su marcador, sin activar esa alerta persistente. Una llamada atendida tampoco se clasifica como llamada sin respuesta. Confirmar, descartar o resolver continúa dependiendo del operador.
+
+La medición se hace en PostgreSQL a partir del inicio, aceptación, fin y caducidad de la llamada; no depende de que el teléfono operador haya visto la llamada desde el inicio. El mapa recibe los cambios en su siguiente consulta, aproximadamente cada seis segundos. El marcador usa un lienzo y punta fijos; solo cambia el tamaño de su símbolo y halo.
+
+**Activación de esta versión:** requiere migración 020 antes de desplegar el backend y luego instalar el APK nuevo:
+
+```powershell
+cd C:\Users\PC\Desktop\alerta_ciudadana\backend
+.\.venv\Scripts\python.exe migrate_sos_waiting.py
+.\.venv\Scripts\python.exe migrate_sos_waiting.py --apply
+```
+
+La migración añade únicamente una función de consulta autorizada para operadores y conserva todos los datos. Las pruebas usan una base temporal y cubren llamada esperando, corte antes/después de 10 segundos, espera caducada, llamada atendida y rechazo a cuentas ciudadanas.
+
+Las secciones siguientes conservan el historial de versiones; esta sección define el comportamiento actual de la alerta.
+
 ## Alerta de llamadas pendientes en primer plano
 
 Con la app abierta, una llamada SOS esperando atención activa un borde rojo pulsante alrededor de la interfaz del operador, doble pitido breve y vibración cada cuatro segundos. Un solo aviso «SOS Alerta» agrupa la cola y permite tomar la primera llamada. El botón de sonido silencia pitido y vibración durante ese episodio; el borde sigue visible. Ocultar un aviso no descarta el caso.

@@ -87,26 +87,71 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
           child: IgnorePointer(
             child: AnimatedBuilder(
               animation: animation,
-              builder: (context, child) => DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: Colors.red.withValues(
-                      alpha: .5 + animation.value * .4,
-                    ),
-                    width: 3 + animation.value * 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withValues(
-                        alpha: .16 + animation.value * .24,
+              builder: (context, child) {
+                final red = Colors.red.withValues(
+                  alpha: .12 + animation.value * .24,
+                );
+                return Stack(
+                  children: [
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 32,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [red, Colors.transparent],
+                          ),
+                        ),
                       ),
-                      blurRadius: 18 + animation.value * 12,
-                      spreadRadius: -8,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 32,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [red, Colors.transparent],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      left: 0,
+                      width: 32,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [red, Colors.transparent],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      right: 0,
+                      width: 32,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.transparent, red],
+                          ),
+                        ),
+                      ),
                     ),
                   ],
-                ),
-              ),
+                );
+              },
             ),
           ),
         ),
