@@ -29,6 +29,10 @@ def route(case_id:UUID,origin:RouteOrigin,response:Response,claims=Depends(ident
     case=execute(claims,'SELECT trujillo.sos_case_read(%s)',(case_id,))
     if not case.get('can_edit'):raise HTTPException(403,'Caso asignado a otro operador')
     if case['decision']!='confirmed' or case['attention']=='resolved':failure(409,'ROUTE_CLOSED')
+    destination={'latitude':case['latitude'],'longitude':case['longitude']}
+    return compute_route(case_id, origin, destination, claims, case['category'])
+
+def compute_route(case_id, origin, destination, claims, category):
     key=os.getenv('GOOGLE_ROUTES_API_KEY','').strip()
     if not key:failure(503,'ROUTES_NOT_CONFIGURED')
     # Small per-process throttle, after authorization. No coordinate or response cache.
@@ -38,7 +42,6 @@ def route(case_id:UUID,origin:RouteOrigin,response:Response,claims=Depends(ident
         if identity_key in _recent and now-_recent[identity_key]<10:failure(429,'ROUTES_RATE_LIMIT')
         if len(_recent)>=1024:_recent.pop(next(iter(_recent)))
         _recent[identity_key]=now
-    destination={'latitude':case['latitude'],'longitude':case['longitude']}
     body={'origin':{'location':{'latLng':origin.model_dump()}},
         'destination':{'location':{'latLng':destination}},'travelMode':'DRIVE',
         'routingPreference':'TRAFFIC_AWARE_OPTIMAL','computeAlternativeRoutes':True,
@@ -62,5 +65,5 @@ def route(case_id:UUID,origin:RouteOrigin,response:Response,claims=Depends(ident
         seconds,distance,polyline=min(valid,key=lambda r:r[0])
         return {'case_id':str(case_id),'origin':origin.model_dump(),'destination':destination,
             'duration_seconds':seconds,'distance_meters':distance,'encoded_polyline':polyline,
-            'calculated_at':datetime.now(timezone.utc).isoformat(),'category':case['category']}
+            'calculated_at':datetime.now(timezone.utc).isoformat(),'category':category}
     except (requests.RequestException,ValueError,TypeError,AttributeError):failure(503,'ROUTES_UNAVAILABLE')

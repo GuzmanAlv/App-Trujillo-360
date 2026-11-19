@@ -34,6 +34,13 @@ List<LatLng> decodeRoutePolyline(String encoded) {
 
 class SosRouteController extends ChangeNotifier {
   String? caseId, error, calculatedAt;
+  bool isReinforcement = false;
+  Future<void> recalculate() async {
+    if (caseId != null) {
+      await calculate(caseId!, reinforcement: isReinforcement);
+    }
+  }
+
   List<LatLng> points = [];
   LatLng? origin, destination;
   double seconds = 0, meters = 0;
@@ -50,10 +57,11 @@ class SosRouteController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> calculate(String id) async {
+  Future<void> calculate(String id, {bool reinforcement = false}) async {
     if (_disposed) return;
     final ticket = ++generation;
     caseId = id;
+    isReinforcement = reinforcement;
     loading = true;
     error = null;
     points = [];
@@ -65,7 +73,9 @@ class SosRouteController extends ChangeNotifier {
       if (_disposed || ticket != generation) return;
       final result = await WorkflowClient.request(
         'POST',
-        '/operator/sos-cases/$id/route',
+        reinforcement
+            ? '/operator/reinforcements/$id/route'
+            : '/operator/sos-cases/$id/route',
         body: {'latitude': gps.latitude, 'longitude': gps.longitude},
       );
       final line = decodeRoutePolyline(result['encoded_polyline'] as String);

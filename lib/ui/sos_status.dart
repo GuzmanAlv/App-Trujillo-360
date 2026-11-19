@@ -87,10 +87,12 @@ class SosSupportFrame extends StatefulWidget {
     required this.child,
     this.pulse = false,
     this.soft = false,
+    this.glowColor = Colors.red,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
   });
   final bool active;
   final bool pulse, soft;
+  final Color glowColor;
   final EdgeInsetsGeometry margin;
   final Widget child;
   @override
@@ -140,12 +142,12 @@ class _SosSupportFrameState extends State<SosSupportFrame>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           border: widget.active && !widget.soft
-              ? Border.all(color: Colors.red, width: 2)
+              ? Border.all(color: widget.glowColor, width: 2)
               : null,
           boxShadow: widget.active
               ? [
                   BoxShadow(
-                    color: Colors.red.withValues(
+                    color: widget.glowColor.withValues(
                       alpha: widget.soft
                           ? .08 + animation.value * .12
                           : .12 + animation.value * .18,

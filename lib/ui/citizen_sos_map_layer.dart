@@ -16,8 +16,10 @@ class CitizenSosMapLayer extends StatefulWidget {
     required this.enabled,
     required this.active,
     required this.builder,
+    this.onCasesChanged,
   });
   final bool enabled, active;
+  final VoidCallback? onCasesChanged;
   final Widget Function(Set<Marker>, Set<String>) builder;
   @override
   State<CitizenSosMapLayer> createState() => _CitizenSosMapLayerState();
@@ -133,7 +135,16 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
             unawaited(CitizenArrivalAlerts.instance.receive('${row['id']}'));
           }
         }
+        final previous = cases
+            .map((r) => '${r['id']}:${r['attention']}')
+            .join('|');
+        final next = rows.map((r) => '${r['id']}:${r['attention']}').join('|');
+        final arrival = CitizenArrivalAlerts.instance.value;
+        if (arrival != null && !rows.any((r) => r['id'] == arrival)) {
+          CitizenArrivalAlerts.instance.clear();
+        }
         setState(() => cases = rows);
+        if (previous != next) widget.onCasesChanged?.call();
         configurePulse();
       }
     } catch (_) {

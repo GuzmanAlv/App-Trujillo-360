@@ -1,5 +1,8 @@
 # Continuar Trujillo 360 en otra laptop
 
+Nueva versión: [mapa compacto y refuerzos](reinforcements-and-compact-map.md).
+Requiere migración 024, despliegue del backend e instalación del APK. `/ready` incluye `reinforcements_version: 1`.
+
 Actualización de experiencia SOS: [avisos, llamadas minimizadas y filtros](sos-notification-experience.md).
 Requiere migración 023, backend y APK nuevos. `/ready` anuncia `sos_notifications_version: 1`.
 

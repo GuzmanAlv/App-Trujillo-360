@@ -315,7 +315,14 @@ class SosCasePanelState extends State<SosCasePanel>
       await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-          title: Text(text),
+          title: const Text(
+            'Evaluación SOS',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          content: Text(
+            text,
+            style: const TextStyle(fontSize: 14, height: 1.4),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(c, false),
@@ -355,7 +362,9 @@ class SosCasePanelState extends State<SosCasePanel>
     final question = switch (action) {
       'confirm' => '¿Confirmar y publicar este incidente en el mapa?',
       'discard' =>
-        '¿Descartar esta alarma? La llamada sin respuesta no demuestra que sea falsa.',
+        data?['decision'] == 'confirmed'
+            ? '¿Descartar el incidente tras comprobar una falsa alarma en el lugar? Se retirará del mapa y se conservará el motivo en el historial.'
+            : '¿Descartar esta alarma? La llamada sin respuesta no demuestra que sea falsa.',
       'on_scene' =>
         '¿Confirmas que el personal ya está en el lugar del incidente?',
       'resolve' =>
@@ -408,6 +417,7 @@ class SosCasePanelState extends State<SosCasePanel>
       if (mounted && !stale) {
         setState(() {
           apply(result);
+          SosNavigation.caseUpdated(result);
           final uid = Firebase.apps.isEmpty
               ? null
               : FirebaseAuth.instance.currentUser?.uid;
@@ -763,6 +773,13 @@ class SosCasePanelState extends State<SosCasePanel>
                       ),
                     ],
                     if (confirmed && d['attention'] != 'resolved') ...[
+                      if (d['attention'] == 'on_scene')
+                        FilledButton.tonal(
+                          onPressed: editable ? () => save('discard') : null,
+                          child: const Text(
+                            'Descartar incidente · falsa alarma',
+                          ),
+                        ),
                       OutlinedButton(
                         onPressed: editable ? () => save('resolve') : null,
                         child: const Text('Resolver caso'),

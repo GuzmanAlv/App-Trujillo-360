@@ -64,6 +64,10 @@ class WorkflowClient {
               final detail = error is Map ? error['detail'] : null;
               final code = detail is Map ? detail['code'] : null;
               const routeErrors = {
+                'REINFORCEMENT_CLOSED':
+                    'La solicitud de refuerzos ya finalizó o caducó.',
+                'SOS_PRIORITY':
+                    'Primero llega al SOS ciudadano que tienes asignado. Después podrás trazar la ruta de refuerzos.',
                 'ROUTES_NOT_CONFIGURED':
                     'SOS confirmado. Falta configurar Google Routes en el servidor.',
                 'ROUTES_REJECTED':

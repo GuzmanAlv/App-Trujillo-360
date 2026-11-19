@@ -234,6 +234,18 @@ class _AudioCallPageState extends State<AudioCallPage> {
                       ],
                     ),
                   const SizedBox(height: 12),
+                  if (!widget.operator &&
+                      !widget.answer &&
+                      !joined &&
+                      !finished)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Solo para emergencias reales. El uso malicioso puede ocasionar la revisión y suspensión de tu cuenta.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xffba303a),

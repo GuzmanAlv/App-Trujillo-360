@@ -152,6 +152,7 @@ class PushService extends ChangeNotifier {
         'operator',
         'sos_arrival',
         'sos_callback',
+        'reinforcement',
       ].contains(data['kind']) &&
       RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch('${data['target_id']}');
   void accept(Map<String, dynamic> data) {

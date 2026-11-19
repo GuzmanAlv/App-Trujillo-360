@@ -50,7 +50,7 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 460),
       child: Material(
-        color: widget.quiet ? const Color(0xff53677d) : const Color(0xffc41728),
+        color: widget.quiet ? const Color(0xffa7313b) : const Color(0xffc41728),
         elevation: 5,
         borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,

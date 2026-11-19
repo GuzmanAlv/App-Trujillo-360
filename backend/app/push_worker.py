@@ -55,7 +55,7 @@ def message(job):
         'token':job['token'], 'notification':{'title':title,'body':body},
         'data': data,
         'android': {'priority':'high', 'ttl':'90s' if job['kind']=='sos_callback' else '300s', 'notification':{
-            'channel_id':channel, 'icon':'ic_notification', 'color':'#D32F2F',
+            'channel_id':channel, 'icon':'ic_notification', 'color':'#F57C00' if job['kind']=='reinforcement' else '#D32F2F',
             'tag':'arrival_'+str(job['target_id']) if job['kind']=='sos_arrival' else str(job['job_id']), 'visibility':'PRIVATE', 'click_action':'FLUTTER_NOTIFICATION_CLICK'}},
     }}
 
