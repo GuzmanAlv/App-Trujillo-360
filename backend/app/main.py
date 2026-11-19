@@ -1,3 +1,4 @@
+from app.citizen_sos import router as citizen_sos_router
 from app.sos_cases import router as sos_cases_router
 import logging
 from contextlib import asynccontextmanager
@@ -53,11 +54,12 @@ app.include_router(workflows_router)
 app.include_router(push_router)
 app.include_router(calls_router)
 app.include_router(sos_cases_router)
+app.include_router(citizen_sos_router)
 
 
 @app.middleware('http')
 async def limit_report_body(request: Request, call_next):
-    if request.method in ('POST','PUT') and (request.url.path in ('/reports','/help-requests') or request.url.path.startswith(('/operator/','/push/'))):
+    if request.method in ('POST','PUT') and (request.url.path in ('/reports','/help-requests') or request.url.path.startswith(('/operator/','/push/','/my-sos/'))):
         # Three 2-MB images expand to about 8 MB when encoded in JSON.
         chunks = []
         size = 0
@@ -96,13 +98,15 @@ def ready():
                 raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.return_calls()') IS NOT NULL").fetchone()[0]:
                 raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_citizen_submit(uuid,uuid,text,jsonb)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.sos_case_update(uuid,uuid,integer,jsonb)') IS NOT NULL").fetchone()[0]:
                 raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError) as error:
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1, 'sos_cases_version':2}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1, 'sos_cases_version':2, 'citizen_sos_version':1}
 
 
 @app.get('/me')

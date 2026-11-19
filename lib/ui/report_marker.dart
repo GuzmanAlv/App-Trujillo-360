@@ -7,6 +7,8 @@ import 'report_style.dart';
 Future<Uint8List> renderPendingSosMarker(
   double pulse, {
   bool waitingCall = false,
+  IconData? symbol,
+  Color color = const Color(0xffcf2634),
 }) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder)..scale(2);
@@ -30,17 +32,13 @@ Future<Uint8List> renderPendingSosMarker(
       ..lineTo(32, 74)
       ..lineTo(39, 48)
       ..close(),
-    Paint()..color = const Color(0xffcf2634),
+    Paint()..color = color,
   );
   canvas.drawCircle(center, 19 + pulse * 2, Paint()..color = Colors.white);
-  canvas.drawCircle(
-    center,
-    17 + pulse * 2,
-    Paint()..color = const Color(0xffcf2634),
-  );
-  final icon = waitingCall
-      ? Icons.phone_in_talk_rounded
-      : Icons.warning_rounded;
+  canvas.drawCircle(center, 17 + pulse * 2, Paint()..color = color);
+  final icon =
+      symbol ??
+      (waitingCall ? Icons.phone_in_talk_rounded : Icons.warning_rounded);
   final text = TextPainter(
     text: TextSpan(
       text: String.fromCharCode(icon.codePoint),

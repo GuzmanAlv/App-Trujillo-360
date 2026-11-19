@@ -1,3 +1,4 @@
+import 'citizen_sos_page.dart';
 import 'report_marker.dart';
 import 'sos_status.dart';
 import 'audio_call_page.dart';
@@ -603,6 +604,7 @@ class SosCasePanelState extends State<SosCasePanel> {
               ),
             ],
           ),
+          SosEvidencePanel(caseId: widget.caseId),
           ExpansionTile(
             title: const Text('Historial privado del caso'),
             children: [

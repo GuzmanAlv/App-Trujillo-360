@@ -1,5 +1,32 @@
 # Evaluación y atención del SOS
 
+## Seguimiento del ciudadano y persistencia de pendientes
+
+La luz, sonido y pulsación del marcador del operador dependen de `decision=pending`, incluso después de aceptar y terminar una llamada. Atender, colgar o retroceder no verifica ni descarta el caso. La alerta se pausa mientras se conversa o se abre otra pantalla y regresa al mapa si el caso sigue pendiente. Confirmar o descartar quita esa alerta; las peticiones explícitas de apoyo conservan su aviso propio.
+
+El ciudadano ve sus propios SOS confirmados activos en el mapa, con resplandor naranja silencioso y un marcador animado según categoría. Tocar el marcador o el aviso abre «Mi caso SOS». Se distinguen los mensajes:
+
+- Confirmado sin despliegue: «Incidente confirmado. Esperando asignación de personal».
+- **Unidad en camino** registrada por el operador: «La policía se encuentra en camino. Mantente en calma».
+- Llegada confirmada: «Personal en el lugar».
+- Resuelto: se retira el aviso activo del mapa y se conserva el historial.
+
+Confirmar no afirma automáticamente que se despachó una unidad. Esta capa solo muestra casos del titular autenticado; evita duplicar su incidente público vinculado y se actualiza aproximadamente cada seis segundos. La animación naranja nunca activa sonido ni vibración.
+
+La ficha permite aportar descripción de hasta 1000 caracteres y hasta tres fotos de 2 MB por caso, dentro de siete días desde el SOS. Los aportes son opcionales; no bloquean atención ni cambian la verificación o corroboración. Se normalizan fotos JPEG/PNG y se retiran sus metadatos. El titular y operadores autorizados pueden leerlos; las respuestas públicas no incluyen sus fotos ni sus descripciones adicionales. El operador dispone de «Aportes del ciudadano» en la ficha, con actualización manual.
+
+**Activación:** aplicar migración 021 antes de desplegar el backend y actualizar el APK en ambos teléfonos:
+
+```powershell
+cd C:\Users\PC\Desktop\alerta_ciudadana\backend
+.\.venv\Scripts\python.exe migrate_sos_citizen.py
+.\.venv\Scripts\python.exe migrate_sos_citizen.py --apply
+```
+
+`/ready` del backend actualizado debe incluir `citizen_sos_version: 1`. No requiere credenciales nuevas. La migración añade almacenamiento privado para aportes y funciones autorizadas; conserva los casos existentes. Los reintentos reutilizan el identificador del aporte. La prueba automatizada usa PostgreSQL/PostGIS temporal, nunca Supabase: verifica titularidad, acceso de operadores, aislamiento del mapa público, fotos, reintentos y conservación de un único incidente.
+
+Prueba en dos celulares: atender SOS y regresar sin decidir (alerta roja debe continuar); confirmar (aviso naranja del ciudadano con estado confirmado); marcar unidad en camino (mensaje de desplazamiento); adjuntar foto y texto como ciudadano; actualizar aportes en el operador; resolver (aviso activo desaparece). Comprobar también que otra cuenta ciudadana no puede abrir la ficha ni sus fotos.
+
 ## Lista de llamadas vivas desde el mapa
 
 El rótulo «SOS Ayuda solicitada» se muestra exclusivamente cuando el mapa tiene llamadas que continúan esperando (`call_waiting`). Con una llamada, tocarlo centra el mapa en su posición. Con varias, despliega tarjetas desplazables; elegir una cierra la lista y centra el mapa, sin aceptar la llamada automáticamente. El operador puede tocar el marcador para abrir el caso y tomarla. La selección puede repetirse después de mover el mapa.

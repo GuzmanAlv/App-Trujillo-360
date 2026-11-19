@@ -8,8 +8,11 @@ class SosIncomingAttention extends StatefulWidget {
     super.key,
     required this.active,
     required this.builder,
+    this.enableSound = true,
+    this.glowColor = const Color(0xffff0028),
   });
-  final bool active;
+  final bool active, enableSound;
+  final Color glowColor;
   final Widget Function(bool muted, VoidCallback toggleMute) builder;
   @override
   State<SosIncomingAttention> createState() => _SosIncomingAttentionState();
@@ -25,7 +28,11 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
   Timer? lease;
   bool muted = false;
   Future<void> signal(bool enabled) async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (!widget.enableSound ||
+        kIsWeb ||
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
     try {
       await channel.invokeMethod<void>('sosIncomingAlarm', {
         'enabled': enabled,
@@ -38,7 +45,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
   void update() {
     lease?.cancel();
     lease = null;
-    final active = widget.active && !muted;
+    final active = widget.active && !muted && widget.enableSound;
     unawaited(signal(active));
     if (active) {
       lease = Timer.periodic(const Duration(seconds: 8), (_) => signal(true));

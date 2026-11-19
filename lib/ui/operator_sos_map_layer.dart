@@ -1,3 +1,4 @@
+import '../services/sos_alert_state.dart';
 import 'sos_waiting_queue.dart';
 import 'sos_incoming_attention.dart';
 import '../services/active_call.dart';
@@ -212,10 +213,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         if (row['incident_id'] is String) ids.add(row['incident_id'] as String);
         final markerId = 'operator_sos_${row['id']}';
         final waiting = row['call_waiting'] == true;
-        final needsAttention =
-            waiting ||
-            (row['decision'] == 'pending' && row['unanswered_alert'] == true) ||
-            row['support_requested'] == true;
+        final needsAttention = needsOperatorSosAlert(row);
         if (needsAttention) {
           alerts++;
           urgent.add(markerId);

@@ -1,3 +1,4 @@
+import 'ui/citizen_sos_map_layer.dart';
 import 'ui/operator_sos_map_layer.dart';
 import 'ui/incoming_call_overlay.dart';
 import 'package:flutter/material.dart';
@@ -610,50 +611,78 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     child: Text(mapIncidents.note!),
                                   ),
                                 Expanded(
-                                  child: OperatorSosMapLayer(
-                                    enabled: operatorAllowed && !historical,
+                                  child: CitizenSosMapLayer(
+                                    enabled: !operatorAllowed && !historical,
                                     active:
                                         foreground &&
                                         tab == 0 &&
                                         (ModalRoute.isCurrentOf(context) ??
                                             true),
-                                    builder:
-                                        (
-                                          sosMarkers,
-                                          sosIncidentIds,
-                                          sosFocus,
-                                        ) => MapPanel(
-                                          extraMarkers: sosMarkers,
-                                          focusTarget: sosFocus?.target,
-                                          focusRevision:
-                                              sosFocus?.revision ?? 0,
-                                          incidents: historical
-                                              ? const []
-                                              : visible
-                                                    .where(
-                                                      (i) => !sosIncidentIds
-                                                          .contains(i.id),
-                                                    )
-                                                    .toList(),
-                                          overlays: historical
-                                              ? density.overlays
-                                              : const {},
-                                          onIncident: communityDetails,
-                                          currentLocation:
-                                              nearby.position == null
-                                              ? null
-                                              : LatLng(
-                                                  nearby.position!.latitude,
-                                                  nearby.position!.longitude,
-                                                ),
-                                          onLocate: nearby.start,
-                                          locating: nearby.locating,
-                                          locationRadius: 500,
-                                          onViewportChanged: (bounds) {
-                                            mapIncidents.setBounds(bounds);
-                                            density.setBounds(bounds);
-                                          },
-                                          active: tab == 0,
+                                    builder: (myMarkers, myIncidentIds) =>
+                                        OperatorSosMapLayer(
+                                          enabled:
+                                              operatorAllowed && !historical,
+                                          active:
+                                              foreground &&
+                                              tab == 0 &&
+                                              (ModalRoute.isCurrentOf(
+                                                    context,
+                                                  ) ??
+                                                  true),
+                                          builder:
+                                              (
+                                                sosMarkers,
+                                                sosIncidentIds,
+                                                sosFocus,
+                                              ) => MapPanel(
+                                                extraMarkers: {
+                                                  ...sosMarkers,
+                                                  ...myMarkers,
+                                                },
+                                                focusTarget: sosFocus?.target,
+                                                focusRevision:
+                                                    sosFocus?.revision ?? 0,
+                                                incidents: historical
+                                                    ? const []
+                                                    : visible
+                                                          .where(
+                                                            (i) =>
+                                                                !sosIncidentIds
+                                                                    .contains(
+                                                                      i.id,
+                                                                    ) &&
+                                                                !myIncidentIds
+                                                                    .contains(
+                                                                      i.id,
+                                                                    ),
+                                                          )
+                                                          .toList(),
+                                                overlays: historical
+                                                    ? density.overlays
+                                                    : const {},
+                                                onIncident: communityDetails,
+                                                currentLocation:
+                                                    nearby.position == null
+                                                    ? null
+                                                    : LatLng(
+                                                        nearby
+                                                            .position!
+                                                            .latitude,
+                                                        nearby
+                                                            .position!
+                                                            .longitude,
+                                                      ),
+                                                onLocate: nearby.start,
+                                                locating: nearby.locating,
+                                                locationRadius: 500,
+                                                onViewportChanged: (bounds) {
+                                                  mapIncidents.setBounds(
+                                                    bounds,
+                                                  );
+                                                  density.setBounds(bounds);
+                                                },
+                                                active: tab == 0,
+                                              ),
                                         ),
                                   ),
                                 ),

@@ -75,6 +75,8 @@ def main():
             conn.execute((ROOT / 'migrations/019_sos_operator_actions.sql').read_text(encoding='utf-8'))
         if not conn.execute("SELECT to_regprocedure('trujillo.sos_map_call_status(uuid)') IS NOT NULL").fetchone()[0]:
             conn.execute((ROOT / 'migrations/020_sos_waiting_status.sql').read_text(encoding='utf-8'))
+        if not conn.execute("SELECT to_regclass('trujillo.sos_citizen_updates') IS NOT NULL").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/021_citizen_sos_updates.sql').read_text(encoding='utf-8'))
     print('Base 11 compatible; solicitudes, operadores e historial habilitados.')
 
 
