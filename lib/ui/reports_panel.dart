@@ -11,6 +11,7 @@ import '../services/nearby_reports_client.dart';
 import 'report_style.dart';
 import 'nearby_incident_page.dart';
 import 'workflow_panel.dart';
+import 'sos_history_section.dart';
 
 class ReportsPanel extends StatefulWidget {
   const ReportsPanel({
@@ -40,7 +41,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
   bool historyLoading = false;
   String? historyNote;
   int historyGeneration = 0;
-  bool mine = false;
+  bool mine = true;
   bool get locating => widget.nearby.locating;
   bool get loading => widget.nearby.loading;
   String? get note => widget.nearby.note;
@@ -187,7 +188,7 @@ class _ReportsPanelState extends State<ReportsPanel> {
         const SizedBox(height: 12),
         Text(
           mine
-              ? 'Tus reportes, estés donde estés.'
+              ? 'Tu historial, incluidos los casos resueltos.'
               : 'Publicados a menos de 1 km · últimos 7 días.',
         ),
         if (mine) ...[
@@ -223,7 +224,47 @@ class _ReportsPanelState extends State<ReportsPanel> {
             ),
         ],
         Expanded(
-          child: reports.isEmpty
+          child: mine
+              ? ListView(
+                  children: [
+                    SosHistorySection(
+                      active: widget.active && mine,
+                      filter: widget.filter,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Reportes anteriores',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (reports.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          currentReportOwner == null
+                              ? 'Inicia sesión para ver tus reportes.'
+                              : 'Todavía no tienes reportes anteriores en esta categoría.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    for (final i in reports)
+                      Card(
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(16),
+                          leading: ReportCategoryIcon(category: i.type),
+                          title: Text('${i.type} · ${i.place}'),
+                          subtitle: Text(
+                            '${reportDateTime(i.createdAt)} · ${i.deliveryLabel}',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => widget.onReport(i),
+                        ),
+                      ),
+                  ],
+                )
+              : reports.isEmpty
               ? Center(
                   child: Text(
                     mine

@@ -157,7 +157,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
               incident.isResolved
                   ? await renderActorMarker(
                       ReportStyle.forCategory(incident.type).icon,
-                      const Color(0xff64748b),
+                      ReportStyle.forCategory(incident.type).color,
                     )
                   : await renderReportMarker(
                       incident.type,

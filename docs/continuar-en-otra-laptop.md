@@ -1,5 +1,8 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización: [historial ciudadano y navegación por rol](citizen-history-and-role-navigation.md).
+Requiere migración 027 y actualizar backend/APK. `/ready` incluye `citizen_history_version: 1`.
+
 Actualización: [casos resueltos en el mapa y avisos de trayecto](resolved-map-and-progress-cues.md).
 Requiere migración 026, backend y APK nuevos. `/ready` incluye `resolved_map_version: 1`.
 

@@ -85,6 +85,9 @@ void main() {
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
       expect(find.text('Cerca de mí'), findsOneWidget);
+      expect(find.text('Historial de SOS'), findsOneWidget);
+      await tester.tap(find.text('Cerca de mí'));
+      await tester.pumpAndSettle();
       expect(find.text('Activar ubicación'), findsOneWidget);
       await tester.tap(find.text('Mis reportes'));
       await tester.pumpAndSettle();

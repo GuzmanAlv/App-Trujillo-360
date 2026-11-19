@@ -82,6 +82,8 @@ void main() {
       expect(NearbyReportsStore.searchRadius, 1000);
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Cerca de mí'));
+      await tester.pumpAndSettle();
       expect(find.text('Robo · Comunidad'), findsOneWidget);
       expect(location.events.hasListener, isTrue);
       await tester.tap(find.text('Mapa'));
@@ -143,31 +145,16 @@ void main() {
       await nearby.start();
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Cerca de mí'));
+      await tester.pumpAndSettle();
       expect(find.text('Robo · pendiente'), findsNothing);
       expect(find.text('Robo · confirmado'), findsOneWidget);
       expect(find.text('Auxilio · auxilio'), findsOneWidget);
       expect(find.text('Robo · lejano'), findsNothing);
-      await tester.tap(find.text('Corroborados'));
-      await tester.pumpAndSettle();
-      expect(find.text('Robo · pendiente'), findsNothing);
-      expect(find.text('Robo · confirmado'), findsOneWidget);
       await tester.tap(find.text('Robo'));
       await tester.pumpAndSettle();
       expect(find.text('Auxilio · auxilio'), findsNothing);
       expect(find.text('Robo · confirmado'), findsOneWidget);
-      final statusFilter = find.byWidgetPredicate(
-        (widget) =>
-            widget is SegmentedButton<bool> &&
-            widget.segments.any(
-              (s) =>
-                  s.label is Text && (s.label as Text).data == 'Corroborados',
-            ),
-      );
-      await tester.tap(
-        find.descendant(of: statusFilter, matching: find.text('Publicados')),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Robo · pendiente'), findsNothing);
       await tester.tap(find.text('Mis reportes'));
       await tester.pumpAndSettle();
       expect(find.text('Corroborados'), findsNothing);

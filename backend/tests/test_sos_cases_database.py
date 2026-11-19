@@ -81,6 +81,7 @@ def test_case_lifecycle_and_privacy(database):
     with pytest.raises(psycopg.errors.RaiseException): update(op,0)
     rows=query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)
     assert any(str(row[0])==incident and row[6]==0 for row in rows)
+    assert any(str(row[0])==incident for row in query(other,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True))
     public=query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))
     assert public['description']=='Descripción pública' and 'NO PUBLICAR' not in str(public)
     assert 'caller_latitude' not in public and 'internal_note' not in public
@@ -104,6 +105,8 @@ def test_case_lifecycle_and_privacy(database):
     assert len(result['events'])==3
     retained=query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)
     assert len(retained)==1 and retained[0][5]=='closed'
+    for reader in (op,other):
+        assert any(str(row[0])==incident for row in query(reader,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True))
     public=query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))
     assert public['attention']=='resolved' and public['resolved_at']
     assert 'internal_note' not in public and 'caller_latitude' not in public

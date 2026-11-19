@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Actualización: [historial ciudadano, pestañas por rol y colores del mapa](docs/citizen-history-and-role-navigation.md). Requiere migración 027, backend y APK nuevos.
+
 Actualización: [casos resueltos durante siete días y avisos de trayecto](docs/resolved-map-and-progress-cues.md). Requiere migración 026, backend y APK nuevos.
 
 Último cambio: [descarte durante el trayecto, suspensión y controles superpuestos](docs/sos-suspension-and-map-controls.md). Requiere migración 025, backend y APK nuevos.

@@ -4,7 +4,7 @@ Requiere migración **026** después de 025, backend y APK nuevos.
 
 Los incidentes públicos resueltos permanecen siete días desde su resolución.
 Se conserva la fecha original del hecho; no se sustituye por la fecha de cierre.
-El marcador pasa a gris, conserva el símbolo del tipo de incidente y no pulsa.
+El marcador conserva el color y símbolo del tipo de incidente y no pulsa.
 Al tocarlo se muestra una ventana sobre el icono con «Caso resuelto», fecha y
 hora del hecho (hora local del teléfono). No abre automáticamente otra pantalla.
 Los descartados, privados y pendientes siguen fuera del mapa público.
@@ -45,7 +45,7 @@ en ambos celulares. No se ejecuta la migración automáticamente.
    vibración cada dos segundos. Iniciar una llamada: comprobar suspensión del aviso.
 2. Llegar: comprobar que se detienen ambos avisos de trayecto y se mantiene
    el aviso de llegada ya existente. Probar también segundo plano y No molestar.
-3. Resolver: comprobar en ambos mapas el icono estático gris, tocarlo y verificar
+3. Resolver: comprobar en ambos mapas el icono estático con su color de categoría, tocarlo y verificar
    fecha/hora del hecho. No debe continuar la sirena de presencia ni la ruta.
 4. Descartar otro SOS: comprobar que no aparece como caso resuelto público.
 5. El vencimiento exacto a siete días se verifica en PostgreSQL aislado y en el
