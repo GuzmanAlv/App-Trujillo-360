@@ -1,5 +1,10 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización del 19 de noviembre: [ruta en el mapa al confirmar un SOS](sos-routes.md).
+Requiere desplegar el backend, configurar `GOOGLE_ROUTES_API_KEY` en Render e
+instalar la app nueva; no requiere otra migración. El cálculo real con Google
+y la continuidad del audio al confirmar se deben comprobar en dos celulares.
+
 Actualización de código del 18 de noviembre: [casos SOS y atención por operadores](sos-cases.md). Incluye migración 018, aviso flotante dentro de la app, evaluación durante/después de la llamada y presencia en el mapa. Consultar esa guía para activar y probar; su existencia no confirma un despliegue en Render.
 
 Estado actualizado el 16 de noviembre de 2026. Esta guía sustituye las notas del 3 de noviembre sobre Firebase y la supuesta RTX 4060.

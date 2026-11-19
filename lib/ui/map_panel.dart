@@ -17,6 +17,9 @@ class MapPanel extends StatefulWidget {
     super.key,
     this.incidents = const [],
     this.extraMarkers = const {},
+    this.polylines = const {},
+    this.routeBounds,
+    this.routeRevision = 0,
     this.focusTarget,
     this.focusRevision = 0,
     this.selected,
@@ -34,6 +37,9 @@ class MapPanel extends StatefulWidget {
   });
   final List<Incident> incidents;
   final Set<Marker> extraMarkers;
+  final Set<Polyline> polylines;
+  final LatLngBounds? routeBounds;
+  final int routeRevision;
   final LatLng? focusTarget;
   final int focusRevision;
   final Set<Circle> overlays;
@@ -123,6 +129,13 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant MapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.routeBounds != null &&
+        widget.routeRevision != oldWidget.routeRevision) {
+      centerRequested = false;
+      controller?.animateCamera(
+        CameraUpdate.newLatLngBounds(widget.routeBounds!, 44),
+      );
+    }
     if (widget.focusTarget != null &&
         (widget.focusTarget != oldWidget.focusTarget ||
             widget.focusRevision != oldWidget.focusRevision)) {
@@ -303,13 +316,26 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     ),
                     onMapCreated: (c) {
                       controller = c;
-                      if (widget.focusTarget != null) centerRequested = false;
+                      final bounds = widget.routeBounds;
+                      if (widget.focusTarget != null || bounds != null) {
+                        centerRequested = false;
+                      }
+                      if (bounds != null) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            controller?.animateCamera(
+                              CameraUpdate.newLatLngBounds(bounds, 44),
+                            );
+                          }
+                        });
+                      }
                       if (widget.active) {
                         centerIfRequested();
                         reportViewport();
                       }
                     },
                     onCameraIdle: reportViewport,
+                    polylines: widget.polylines,
                     circles: {
                       ...widget.overlays,
                       ...locationHighlight(

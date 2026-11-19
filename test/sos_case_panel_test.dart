@@ -35,6 +35,7 @@ void main() {
     'Confirmación conserva GPS del teléfono y reintenta el mismo identificador',
     (tester) async {
       final sent = <Map<String, dynamic>>[];
+      final confirmed = <Map<String, dynamic>>[];
       final data = {
         ...initial(),
         'place': 'Plaza de prueba',
@@ -61,7 +62,13 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: SosCasePanel(caseId: 'case', request: request),
+              child: SosCasePanel(
+                caseId: 'case',
+                request: request,
+                onConfirmed: (data) {
+                  confirmed.add(data);
+                },
+              ),
             ),
           ),
         ),
@@ -85,10 +92,12 @@ void main() {
       expect(sent.single.containsKey('caller_latitude'), isFalse);
       expect(sent.single['public_description'], 'Incidente confirmado');
       expect(sent.single['internal_note'], 'Nota confidencial');
+      expect(confirmed, isEmpty);
       await tester.ensureVisible(find.text('Reintentar el mismo envío'));
       await tester.tap(find.text('Reintentar el mismo envío'));
       await tester.pumpAndSettle();
       expect(sent.length, 2);
+      expect(confirmed.single['incident_id'], 'incident');
       expect(sent[1]['request_id'], sent[0]['request_id']);
       expect(find.textContaining('Teléfono: -8.11, -79.03'), findsNothing);
       expect(find.text('Unidad en camino'), findsOneWidget);

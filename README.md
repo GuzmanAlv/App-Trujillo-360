@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Ruta en el mapa al confirmar un SOS: [configuración de Google Routes y prueba en dos celulares](docs/sos-routes.md). Requiere configurar `GOOGLE_ROUTES_API_KEY` solo en Render y actualizar backend y app; no requiere migración.
+
 Nuevo flujo: [evaluación del SOS, llamada entrante y estados de atención](docs/sos-cases.md). Requiere migración 018 y actualizar backend y app; incluye la prueba de aceptación en dos celulares.
 
 Nuevo piloto: [SOS mantenido tres segundos y llamadas privadas con LiveKit](docs/audio-calls.md). Requiere la migración 017, despliegue del backend y app actualizada; las claves quedan exclusivamente en Render.

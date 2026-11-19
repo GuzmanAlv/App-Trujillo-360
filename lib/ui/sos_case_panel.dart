@@ -1,3 +1,4 @@
+import '../services/sos_navigation.dart';
 import 'sos_incoming_attention.dart';
 import '../services/active_call.dart';
 import '../services/sos_alert_state.dart';
@@ -64,8 +65,10 @@ class SosCasePanel extends StatefulWidget {
     this.guardNavigation = true,
     this.request,
     this.showCallButton = true,
+    this.onConfirmed,
   });
   final String caseId;
+  final FutureOr<void> Function(Map<String, dynamic>)? onConfirmed;
   final bool showCallButton;
   final bool guardNavigation;
   final CaseRequest? request;
@@ -352,6 +355,7 @@ class SosCasePanelState extends State<SosCasePanel>
   }
 
   Future<void> send(Map<String, dynamic> body) async {
+    Map<String, dynamic>? confirmed;
     setState(() {
       busy = true;
       error = null;
@@ -364,12 +368,28 @@ class SosCasePanelState extends State<SosCasePanel>
         setState(() {
           apply(result);
           notice = 'Evaluación guardada.';
+          if (body['action'] == 'confirm' &&
+              result['decision'] == 'confirmed') {
+            confirmed = result;
+          }
         });
       }
     } catch (e) {
       if (mounted) setState(() => error = readable(e));
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+    if (confirmed != null && mounted && !stale) {
+      if (widget.onConfirmed != null) {
+        await widget.onConfirmed!(confirmed!);
+      } else if (widget.request == null) {
+        setState(() => allowLeave = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          SosNavigation.open(widget.caseId);
+        });
+      }
     }
   }
 
@@ -496,6 +516,7 @@ class SosCasePanelState extends State<SosCasePanel>
                           : () async {
                               if (!await mayLeave()) return;
                               if (!context.mounted) return;
+                              setState(() => dirty = false);
                               await Navigator.of(context).push<void>(
                                 MaterialPageRoute(
                                   builder: (_) => AudioCallPage(

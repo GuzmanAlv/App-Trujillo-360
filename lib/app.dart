@@ -1,3 +1,6 @@
+import 'services/sos_navigation.dart';
+import 'services/sos_route_controller.dart';
+import 'ui/sos_route_panel.dart';
 import 'ui/citizen_sos_map_layer.dart';
 import 'ui/operator_sos_map_layer.dart';
 import 'ui/incoming_call_overlay.dart';
@@ -75,6 +78,21 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final density = DensityStore();
+  final sosRoute = SosRouteController();
+  String? routeOwner;
+  void routeRequested() {
+    final value = SosNavigation.request.value;
+    if (!mounted || value == null || currentReportOwner != value.owner) return;
+    routeOwner = value.owner;
+    setState(() {
+      tab = 0;
+      historical = false;
+      filter = 'Todos';
+    });
+    updateNearbyActivity();
+    unawaited(sosRoute.calculate(value.caseId));
+  }
+
   bool historical = false;
   StreamSubscription<User?>? roleSession;
   int roleGeneration = 0;
@@ -87,6 +105,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> checkRole(User? user) async {
     final ticket = ++roleGeneration;
+    if (user?.uid != routeOwner) {
+      routeOwner = null;
+      sosRoute.clear();
+    }
     if (user?.uid != pendingSosOwner) {
       pendingSosId = null;
       pendingSosOwner = null;
@@ -123,6 +145,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               tab = 0;
             }
             operatorAllowed = allowed;
+            if (!allowed) sosRoute.clear();
           });
         }
       }
@@ -256,6 +279,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    SosNavigation.request.addListener(routeRequested);
     WidgetsBinding.instance.addObserver(this);
     if (Firebase.apps.isNotEmpty) {
       roleSession = FirebaseAuth.instance.authStateChanges().listen(checkRole);
@@ -334,6 +358,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     roleGeneration++;
     roleSession?.cancel();
     expiryTimer?.cancel();
+    SosNavigation.request.removeListener(routeRequested);
+    sosRoute.dispose();
     density.dispose();
     super.dispose();
   }
@@ -425,7 +451,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   );
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([widget.store, nearby, mapIncidents, density]),
+    listenable: Listenable.merge([
+      widget.store,
+      nearby,
+      mapIncidents,
+      density,
+      sosRoute,
+    ]),
     builder: (context, _) => Theme(
       data: Theme.of(context),
       child: Builder(
@@ -618,74 +650,114 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                         tab == 0 &&
                                         (ModalRoute.isCurrentOf(context) ??
                                             true),
-                                    builder: (myMarkers, myIncidentIds) =>
-                                        OperatorSosMapLayer(
-                                          enabled:
-                                              operatorAllowed && !historical,
-                                          active:
-                                              foreground &&
-                                              tab == 0 &&
-                                              (ModalRoute.isCurrentOf(
-                                                    context,
-                                                  ) ??
-                                                  true),
-                                          builder:
-                                              (
-                                                sosMarkers,
-                                                sosIncidentIds,
-                                                sosFocus,
-                                              ) => MapPanel(
-                                                extraMarkers: {
-                                                  ...sosMarkers,
-                                                  ...myMarkers,
-                                                },
-                                                focusTarget: sosFocus?.target,
-                                                focusRevision:
-                                                    sosFocus?.revision ?? 0,
-                                                incidents: historical
-                                                    ? const []
-                                                    : visible
-                                                          .where(
-                                                            (i) =>
-                                                                !sosIncidentIds
-                                                                    .contains(
-                                                                      i.id,
-                                                                    ) &&
-                                                                !myIncidentIds
-                                                                    .contains(
-                                                                      i.id,
-                                                                    ),
-                                                          )
-                                                          .toList(),
-                                                overlays: historical
-                                                    ? density.overlays
-                                                    : const {},
-                                                onIncident: communityDetails,
-                                                currentLocation:
-                                                    nearby.position == null
-                                                    ? null
-                                                    : LatLng(
-                                                        nearby
-                                                            .position!
-                                                            .latitude,
-                                                        nearby
-                                                            .position!
-                                                            .longitude,
+                                    builder: (myMarkers, myIncidentIds) => OperatorSosMapLayer(
+                                      enabled: operatorAllowed && !historical,
+                                      active:
+                                          foreground &&
+                                          tab == 0 &&
+                                          (ModalRoute.isCurrentOf(context) ??
+                                              true),
+                                      builder:
+                                          (
+                                            sosMarkers,
+                                            sosIncidentIds,
+                                            sosFocus,
+                                          ) => MapPanel(
+                                            extraMarkers: {
+                                              ...sosMarkers,
+                                              ...myMarkers,
+                                              if (operatorAllowed &&
+                                                  sosRoute.origin != null)
+                                                Marker(
+                                                  markerId: const MarkerId(
+                                                    'route_origin',
+                                                  ),
+                                                  position: sosRoute.origin!,
+                                                  icon:
+                                                      BitmapDescriptor.defaultMarkerWithHue(
+                                                        BitmapDescriptor
+                                                            .hueAzure,
                                                       ),
-                                                onLocate: nearby.start,
-                                                locating: nearby.locating,
-                                                locationRadius: 500,
-                                                onViewportChanged: (bounds) {
-                                                  mapIncidents.setBounds(
-                                                    bounds,
-                                                  );
-                                                  density.setBounds(bounds);
-                                                },
-                                                active: tab == 0,
-                                              ),
-                                        ),
+                                                  infoWindow: const InfoWindow(
+                                                    title:
+                                                        'Mi ubicación · inicio de ruta',
+                                                  ),
+                                                ),
+                                              if (operatorAllowed &&
+                                                  sosRoute.destination != null)
+                                                Marker(
+                                                  markerId: const MarkerId(
+                                                    'route_destination',
+                                                  ),
+                                                  position:
+                                                      sosRoute.destination!,
+                                                  infoWindow: const InfoWindow(
+                                                    title: 'Destino · caso SOS',
+                                                  ),
+                                                ),
+                                            },
+                                            polylines:
+                                                operatorAllowed &&
+                                                    sosRoute.points.isNotEmpty
+                                                ? {
+                                                    Polyline(
+                                                      polylineId:
+                                                          const PolylineId(
+                                                            'sos_route',
+                                                          ),
+                                                      points: sosRoute.points,
+                                                      color: const Color(
+                                                        0xff1769ce,
+                                                      ),
+                                                      width: 6,
+                                                    ),
+                                                  }
+                                                : const {},
+                                            routeBounds: operatorAllowed
+                                                ? sosRoute.bounds
+                                                : null,
+                                            routeRevision: sosRoute.revision,
+                                            focusTarget: sosFocus?.target,
+                                            focusRevision:
+                                                sosFocus?.revision ?? 0,
+                                            incidents: historical
+                                                ? const []
+                                                : visible
+                                                      .where(
+                                                        (i) =>
+                                                            !sosIncidentIds
+                                                                .contains(
+                                                                  i.id,
+                                                                ) &&
+                                                            !myIncidentIds
+                                                                .contains(i.id),
+                                                      )
+                                                      .toList(),
+                                            overlays: historical
+                                                ? density.overlays
+                                                : const {},
+                                            onIncident: communityDetails,
+                                            currentLocation:
+                                                nearby.position == null
+                                                ? null
+                                                : LatLng(
+                                                    nearby.position!.latitude,
+                                                    nearby.position!.longitude,
+                                                  ),
+                                            onLocate: nearby.start,
+                                            locating: nearby.locating,
+                                            locationRadius: 500,
+                                            onViewportChanged: (bounds) {
+                                              mapIncidents.setBounds(bounds);
+                                              density.setBounds(bounds);
+                                            },
+                                            active: tab == 0,
+                                          ),
+                                    ),
                                   ),
                                 ),
+                                if (operatorAllowed)
+                                  SosRoutePanel(route: sosRoute),
                               ],
                             ),
                           ),

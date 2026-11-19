@@ -1,3 +1,4 @@
+from app.sos_routes import router as sos_routes_router
 from app.citizen_sos import router as citizen_sos_router
 from app.sos_cases import router as sos_cases_router
 import logging
@@ -55,6 +56,7 @@ app.include_router(push_router)
 app.include_router(calls_router)
 app.include_router(sos_cases_router)
 app.include_router(citizen_sos_router)
+app.include_router(sos_routes_router)
 
 
 @app.middleware('http')
