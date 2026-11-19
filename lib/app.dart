@@ -1,3 +1,18 @@
+import 'ui/map_filters_drawer.dart';
+import 'services/sos_navigation.dart';
+import 'services/operator_duty.dart';
+import 'services/reinforcements_store.dart';
+import 'ui/map_bottom_controls.dart';
+import 'services/active_call.dart';
+import 'ui/reinforcement_controls.dart';
+import 'ui/report_form.dart' show categories;
+import 'services/citizen_arrival_alerts.dart';
+import 'ui/citizen_sos_page.dart';
+import 'services/sos_arrival_tracker.dart';
+import 'services/sos_route_controller.dart';
+import 'ui/citizen_sos_map_layer.dart';
+import 'ui/operator_sos_map_layer.dart';
+import 'ui/incoming_call_overlay.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -17,14 +32,12 @@ import 'models/incident.dart';
 import 'services/push_service.dart';
 import 'ui/notification_settings.dart';
 import 'ui/sos_shortcut_settings.dart';
-import 'ui/hold_sos_button.dart';
 import 'ui/audio_call_page.dart';
 import 'ui/push_destination.dart';
 import 'ui/report_details_page.dart';
 import 'ui/community_incident_page.dart';
 import 'ui/reports_panel.dart';
 import 'ui/map_panel.dart';
-import 'ui/report_form.dart';
 import 'ui/report_style.dart';
 import 'ui/account_panel.dart';
 import 'services/nearby_reports_client.dart';
@@ -35,11 +48,14 @@ class TrujilloApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Trujillo 360',
+    navigatorKey: appNavigatorKey,
     debugShowCheckedModeBanner: false,
     // Reserva el espacio de navegación de Android para todas las rutas.
     // SafeArea elimina ese margen del MediaQuery de los hijos para no duplicarlo.
-    builder: (context, child) =>
-        SafeArea(top: false, child: child ?? const SizedBox.shrink()),
+    builder: (context, child) => SafeArea(
+      top: false,
+      child: IncomingCallOverlay(child: child ?? const SizedBox.shrink()),
+    ),
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff087f68)),
@@ -69,10 +85,81 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final density = DensityStore();
+  final sosRoute = SosRouteController();
+  final sosArrival = SosArrivalTracker();
+  final reinforcements = ReinforcementsStore();
+  void reinforcementsChanged() {
+    if (sosRoute.isReinforcement &&
+        reinforcements.loaded &&
+        !reinforcements.rows.any((r) => r['id'] == sosRoute.caseId)) {
+      sosRoute.clear();
+    }
+  }
+
+  void dutyPriorityChanged() {
+    if (sosRoute.isReinforcement &&
+        OperatorDuty.cases.value.any((r) => r['attention'] == 'en_route')) {
+      sosRoute.clear();
+    }
+  }
+
+  void caseChanged() {
+    final change = SosNavigation.caseChanges.value;
+    if (!mounted || change == null) return;
+    if (change.closed &&
+        !sosRoute.isReinforcement &&
+        sosRoute.caseId == change.id) {
+      sosRoute.clear();
+    }
+    if (tab == 0) unawaited(mapIncidents.refresh());
+  }
+
+  void selectReinforcement(Map<String, dynamic> row, bool drawRoute) {
+    returnToMap();
+    setState(() => historical = false);
+    reinforcements.select(row);
+    if (!drawRoute) return;
+    if (OperatorDuty.cases.value.any((r) => r['attention'] == 'en_route')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Primero llega al SOS ciudadano asignado. Su ruta tiene prioridad.',
+          ),
+        ),
+      );
+      return;
+    }
+    routeOwner = currentReportOwner;
+    unawaited(sosRoute.calculate('${row['id']}', reinforcement: true));
+  }
+
+  String? routeOwner;
+  void returnToMap() {
+    if (mounted) {
+      setState(() => tab = 0);
+      updateNearbyActivity();
+    }
+  }
+
+  void routeRequested() {
+    final value = SosNavigation.request.value;
+    if (!mounted || value == null || currentReportOwner != value.owner) return;
+    routeOwner = value.owner;
+    setState(() {
+      tab = 0;
+      historical = false;
+      filter = 'Todos';
+    });
+    updateNearbyActivity();
+    unawaited(sosRoute.calculate(value.caseId));
+  }
+
   bool historical = false;
   StreamSubscription<User?>? roleSession;
   int roleGeneration = 0;
   bool operatorAllowed = false;
+  bool citizenAllowed = false;
+  String? roleOwner;
   bool sosSending = false;
   String? pendingSosId;
   String? pendingSosOwner;
@@ -80,7 +167,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? expiryTimer;
 
   Future<void> checkRole(User? user) async {
+    if (roleOwner != user?.uid) {
+      roleOwner = user?.uid;
+      if (mounted) setState(() => citizenAllowed = false);
+    }
+    if (OperatorDuty.owner != user?.uid) OperatorDuty.clear();
+    sosArrival.configure(false);
+    reinforcements.configure(false);
     final ticket = ++roleGeneration;
+    if (user?.uid != routeOwner) {
+      routeOwner = null;
+      sosRoute.clear();
+    }
     if (user?.uid != pendingSosOwner) {
       pendingSosId = null;
       pendingSosOwner = null;
@@ -93,6 +191,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           operatorAllowed = false;
+          citizenAllowed = false;
           if (tab >= 2) tab = 0;
         });
       }
@@ -106,7 +205,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final allowed =
             profile['status'] == 'active' &&
             ['operator', 'admin'].contains(profile['role']);
-        if (operatorAllowed != allowed) {
+        final citizen =
+            profile['status'] == 'active' && profile['role'] == 'citizen';
+        sosArrival.configure(allowed && foreground);
+        reinforcements.configure(allowed && foreground);
+        if (!allowed) OperatorDuty.clear();
+        if (operatorAllowed != allowed || citizenAllowed != citizen) {
           setState(() {
             if (!operatorAllowed && allowed && tab == 2) {
               tab = 3;
@@ -117,6 +221,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               tab = 0;
             }
             operatorAllowed = allowed;
+            citizenAllowed = citizen;
+            if (!allowed) sosRoute.clear();
           });
         }
       }
@@ -183,6 +289,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       pendingSosOwner = null;
       pendingSosLatitude = null;
       pendingSosLongitude = null;
+      await PushService.instance.ensureSosDevice(requestPermission: true);
       if (mounted) {
         await Navigator.push<void>(
           context,
@@ -236,11 +343,50 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   final Set<String> openedPush = {};
-  void openPush(Map<String, dynamic> data) {
+  void openPush(Map<String, dynamic> data) async {
     if (!mounted || !PushService.instance.valid(data)) return;
     final key = '${data['event_id']}';
     if (!openedPush.add(key)) return;
     PushService.instance.pending = null;
+    if (data['kind'] == 'reinforcement') {
+      final owner = currentReportOwner;
+      try {
+        final rows = await WorkflowClient.list('/operator/reinforcements');
+        if (!mounted || owner != currentReportOwner) return;
+        final matching = rows.where((r) => r['id'] == data['target_id']);
+        if (matching.isNotEmpty) {
+          selectReinforcement(matching.first, false);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('La solicitud de refuerzos ya no está activa.'),
+            ),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo abrir la solicitud de refuerzos.'),
+            ),
+          );
+        }
+      }
+      return;
+    }
+    if (data['kind'] == 'sos_callback') {
+      returnToMap();
+      return;
+    }
+    if (data['kind'] == 'sos_arrival') {
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CitizenSosPage(caseId: '${data['target_id']}'),
+        ),
+      );
+      return;
+    }
     Navigator.push<void>(
       context,
       MaterialPageRoute(builder: (_) => PushDestination(data: data)),
@@ -250,12 +396,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    CitizenArrivalAlerts.instance.start();
+    SosNavigation.request.addListener(routeRequested);
+    reinforcements.addListener(reinforcementsChanged);
+    OperatorDuty.cases.addListener(dutyPriorityChanged);
+    SosNavigation.caseChanges.addListener(caseChanged);
+    SosNavigation.mapRequested.addListener(returnToMap);
     WidgetsBinding.instance.addObserver(this);
     if (Firebase.apps.isNotEmpty) {
       roleSession = FirebaseAuth.instance.authStateChanges().listen(checkRole);
     }
     expiryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && foreground) setState(() {});
+      if (mounted && foreground) {
+        setState(() {});
+        if (tab == 0 && !historical && !mapIncidents.loading) {
+          unawaited(mapIncidents.refresh());
+        }
+      }
     });
     pushOpens = PushService.instance.opened.stream.listen(openPush);
     sosSettingsRoutes = PushService.instance.sosSettingsRoutes.stream.listen(
@@ -278,6 +435,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void updateNearbyActivity() {
+    sosArrival.configure(operatorAllowed && foreground);
+    reinforcements.configure(operatorAllowed && foreground);
     nearby.setActive(
       foreground && (tab == 0 || (tab == 1 && reportsNearbySelected)),
     );
@@ -323,6 +482,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     roleGeneration++;
     roleSession?.cancel();
     expiryTimer?.cancel();
+    SosNavigation.request.removeListener(routeRequested);
+    reinforcements.removeListener(reinforcementsChanged);
+    OperatorDuty.cases.removeListener(dutyPriorityChanged);
+    SosNavigation.caseChanges.removeListener(caseChanged);
+    SosNavigation.mapRequested.removeListener(returnToMap);
+    sosRoute.dispose();
+    sosArrival.dispose();
+    reinforcements.dispose();
     density.dispose();
     super.dispose();
   }
@@ -414,123 +581,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   );
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([widget.store, nearby, mapIncidents, density]),
+    listenable: Listenable.merge([
+      widget.store,
+      nearby,
+      mapIncidents,
+      density,
+      sosRoute,
+      ActiveCall.session,
+      ActiveCall.presentation,
+      reinforcements,
+    ]),
     builder: (context, _) => Theme(
       data: Theme.of(context),
       child: Builder(
         builder: (context) => Scaffold(
           drawer: tab == 0
-              ? Drawer(
-                  child: SafeArea(
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Filtros del mapa',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Cerrar filtros',
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        const Text('Tipo de incidente'),
-                        if (!historical)
-                          Wrap(
-                            spacing: 8,
-                            children: categories
-                                .map(
-                                  (c) => ChoiceChip(
-                                    label: Text(c),
-                                    selected: filter == c,
-                                    onSelected: (_) =>
-                                        setState(() => filter = c),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        const SizedBox(height: 20),
-                        const Text('Periodo del mapa'),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            ChoiceChip(
-                              label: const Text('Recientes · 7 días'),
-                              selected: !historical,
-                              onSelected: (_) => setState(() {
-                                historical = false;
-                                density.configure(enabled: false);
-                              }),
-                            ),
-                            ChoiceChip(
-                              label: const Text('Historial · 90 días'),
-                              selected: historical,
-                              onSelected: (_) => setState(() {
-                                historical = true;
-                                density.configure(enabled: true);
-                              }),
-                            ),
-                          ],
-                        ),
-                        if (historical) ...[
-                          DropdownButton<int>(
-                            isExpanded: true,
-                            value: density.hourBand,
-                            items: const [
-                              DropdownMenuItem(
-                                value: -1,
-                                child: Text('Todas las horas'),
-                              ),
-                              DropdownMenuItem(
-                                value: 0,
-                                child: Text('Madrugada · 00–06 h'),
-                              ),
-                              DropdownMenuItem(
-                                value: 1,
-                                child: Text('Mañana · 06–12 h'),
-                              ),
-                              DropdownMenuItem(
-                                value: 2,
-                                child: Text('Tarde · 12–18 h'),
-                              ),
-                              DropdownMenuItem(
-                                value: 3,
-                                child: Text('Noche · 18–24 h'),
-                              ),
-                            ],
-                            onChanged: (v) => setState(
-                              () => density.configure(enabled: true, band: v),
-                            ),
-                          ),
-                          const Text(
-                            'Todas las categorías · zonas aproximadas: amarillo 1–2; rojo 3 o más. Sin color no significa seguro.',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          if (density.loading) const LinearProgressIndicator(),
-                          if (density.error != null)
-                            Text(
-                              density.error!,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                        ],
-
-                        const SizedBox(height: 20),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Ver mapa'),
-                        ),
-                      ],
-                    ),
+              ? MapFiltersDrawer(
+                  categories: categories,
+                  selected: filter,
+                  historical: historical,
+                  hourBand: density.hourBand,
+                  loading: density.loading,
+                  error: density.error,
+                  onCategory: (value) => setState(() => filter = value),
+                  onPeriod: (value) => setState(() {
+                    historical = value;
+                    density.configure(enabled: value && foreground && tab == 0);
+                  }),
+                  onHour: (value) => setState(
+                    () => density.configure(enabled: true, band: value),
                   ),
                 )
               : null,
@@ -600,26 +679,204 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     child: Text(mapIncidents.note!),
                                   ),
                                 Expanded(
-                                  child: MapPanel(
-                                    incidents: historical ? const [] : visible,
-                                    overlays: historical
-                                        ? density.overlays
-                                        : const {},
-                                    onIncident: communityDetails,
-                                    currentLocation: nearby.position == null
-                                        ? null
-                                        : LatLng(
-                                            nearby.position!.latitude,
-                                            nearby.position!.longitude,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      CitizenSosMapLayer(
+                                        onCasesChanged: () =>
+                                            unawaited(mapIncidents.refresh()),
+                                        enabled:
+                                            !operatorAllowed && !historical,
+                                        active:
+                                            foreground &&
+                                            tab == 0 &&
+                                            (ModalRoute.isCurrentOf(context) ??
+                                                true),
+                                        builder: (myMarkers, myIncidentIds) => OperatorSosMapLayer(
+                                          reinforcements: reinforcements,
+                                          onReinforcement: selectReinforcement,
+                                          enabled:
+                                              operatorAllowed && !historical,
+                                          active:
+                                              foreground &&
+                                              tab == 0 &&
+                                              (ModalRoute.isCurrentOf(
+                                                    context,
+                                                  ) ??
+                                                  true),
+                                          builder:
+                                              (
+                                                sosMarkers,
+                                                sosIncidentIds,
+                                                sosFocus,
+                                              ) => MapPanel(
+                                                bottomInset:
+                                                    (operatorAllowed
+                                                        ? (sosRoute.caseId !=
+                                                                  null
+                                                              ? 68.0
+                                                              : 8.0)
+                                                        : 90.0) +
+                                                    (ActiveCall
+                                                                .session
+                                                                .value
+                                                                ?.minimized ==
+                                                            true
+                                                        ? 58.0
+                                                        : 0.0),
+                                                extraMarkers: {
+                                                  ...sosMarkers,
+                                                  ...myMarkers,
+                                                  if (operatorAllowed &&
+                                                      sosRoute.origin != null)
+                                                    Marker(
+                                                      markerId: const MarkerId(
+                                                        'route_origin',
+                                                      ),
+                                                      position:
+                                                          sosRoute.origin!,
+                                                      icon:
+                                                          BitmapDescriptor.defaultMarkerWithHue(
+                                                            BitmapDescriptor
+                                                                .hueAzure,
+                                                          ),
+                                                      infoWindow: const InfoWindow(
+                                                        title:
+                                                            'Mi ubicación · inicio de ruta',
+                                                      ),
+                                                    ),
+                                                  if (operatorAllowed &&
+                                                      sosRoute.destination !=
+                                                          null)
+                                                    Marker(
+                                                      markerId: const MarkerId(
+                                                        'route_destination',
+                                                      ),
+                                                      position:
+                                                          sosRoute.destination!,
+                                                      infoWindow: const InfoWindow(
+                                                        title:
+                                                            'Destino · caso SOS',
+                                                      ),
+                                                    ),
+                                                },
+                                                polylines:
+                                                    operatorAllowed &&
+                                                        sosRoute
+                                                            .points
+                                                            .isNotEmpty
+                                                    ? {
+                                                        Polyline(
+                                                          polylineId:
+                                                              const PolylineId(
+                                                                'sos_route',
+                                                              ),
+                                                          points:
+                                                              sosRoute.points,
+                                                          color:
+                                                              sosRoute
+                                                                  .isReinforcement
+                                                              ? ReinforcementControls
+                                                                    .orange
+                                                              : const Color(
+                                                                  0xff1769ce,
+                                                                ),
+                                                          width: 6,
+                                                        ),
+                                                      }
+                                                    : const {},
+                                                routeBounds: operatorAllowed
+                                                    ? sosRoute.bounds
+                                                    : null,
+                                                routeRevision:
+                                                    sosRoute.revision,
+                                                focusTarget: sosFocus?.target,
+                                                focusRevision:
+                                                    sosFocus?.revision ?? 0,
+                                                incidents: historical
+                                                    ? const []
+                                                    : visible
+                                                          .where(
+                                                            (i) =>
+                                                                !sosIncidentIds
+                                                                    .contains(
+                                                                      i.id,
+                                                                    ) &&
+                                                                !myIncidentIds
+                                                                    .contains(
+                                                                      i.id,
+                                                                    ),
+                                                          )
+                                                          .toList(),
+                                                overlays: historical
+                                                    ? density.overlays
+                                                    : const {},
+                                                onIncident: communityDetails,
+                                                currentLocation:
+                                                    nearby.position == null
+                                                    ? null
+                                                    : LatLng(
+                                                        nearby
+                                                            .position!
+                                                            .latitude,
+                                                        nearby
+                                                            .position!
+                                                            .longitude,
+                                                      ),
+                                                onLocate: nearby.start,
+                                                locating: nearby.locating,
+                                                locationRadius: 500,
+                                                onViewportChanged: (bounds) {
+                                                  mapIncidents.setBounds(
+                                                    bounds,
+                                                  );
+                                                  density.setBounds(bounds);
+                                                },
+                                                active: tab == 0,
+                                              ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        left: 12,
+                                        right: 12,
+                                        bottom: 12,
+                                        child: MapBottomControls(
+                                          operator: operatorAllowed,
+                                          showSos: citizenAllowed,
+                                          route: sosRoute,
+                                          sending: sosSending,
+                                          onSos: sendSos,
+                                        ),
+                                      ),
+                                      if (operatorAllowed)
+                                        Positioned(
+                                          right: 12,
+                                          bottom: 160,
+                                          child: ValueListenableBuilder<String?>(
+                                            valueListenable: sosArrival,
+                                            builder: (context, message, _) =>
+                                                message == null
+                                                ? const SizedBox.shrink()
+                                                : IconButton.filledTonal(
+                                                    tooltip: message,
+                                                    icon: const Icon(
+                                                      Icons.gps_off,
+                                                      color: Colors.orange,
+                                                    ),
+                                                    onPressed: () =>
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              message,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                  ),
                                           ),
-                                    onLocate: nearby.start,
-                                    locating: nearby.locating,
-                                    locationRadius: 500,
-                                    onViewportChanged: (bounds) {
-                                      mapIncidents.setBounds(bounds);
-                                      density.setBounds(bounds);
-                                    },
-                                    active: tab == 0,
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -662,32 +919,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           bottomNavigationBar: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (tab < 2)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      HoldSosButton(busy: sosSending, onComplete: sendSos),
-                      FloatingActionButton.extended(
-                        heroTag: 'report',
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                            builder: (_) => ReportForm(store: widget.store),
-                          ),
-                        ),
-                        label: const Text('Reportar'),
-                        icon: const Icon(Icons.add),
-                      ),
-                    ],
-                  ),
-                ),
               NavigationBar(
                 selectedIndex: tab,
                 onDestinationSelected: (i) {

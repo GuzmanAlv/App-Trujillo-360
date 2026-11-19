@@ -1,5 +1,24 @@
 # Continuar Trujillo 360 en otra laptop
 
+Nueva actualización: [descarte y suspensión, mapa ampliado y controles](sos-suspension-and-map-controls.md).
+Requiere migración 025 y actualizar backend/APK. `/ready` incluye `sos_suspension_version: 1`.
+
+Nueva versión: [mapa compacto y refuerzos](reinforcements-and-compact-map.md).
+Requiere migración 024, despliegue del backend e instalación del APK. `/ready` incluye `reinforcements_version: 1`.
+
+Actualización de experiencia SOS: [avisos, llamadas minimizadas y filtros](sos-notification-experience.md).
+Requiere migración 023, backend y APK nuevos. `/ready` anuncia `sos_notifications_version: 1`.
+
+Actualización de estados SOS: [salida al confirmar y llegada automática por GPS](sos-arrival.md).
+Esta mejora requiere migración 022 antes de desplegar backend y actualizar ambos APK.
+
+Actualización del 19 de noviembre: [ruta en el mapa al confirmar un SOS](sos-routes.md).
+Requiere desplegar el backend, configurar `GOOGLE_ROUTES_API_KEY` en Render e
+instalar la app nueva; no requiere otra migración. El cálculo real con Google
+y la continuidad del audio al confirmar se deben comprobar en dos celulares.
+
+Actualización de código del 18 de noviembre: [casos SOS y atención por operadores](sos-cases.md). Incluye migración 018, aviso flotante dentro de la app, evaluación durante/después de la llamada y presencia en el mapa. Consultar esa guía para activar y probar; su existencia no confirma un despliegue en Render.
+
 Estado actualizado el 16 de noviembre de 2026. Esta guía sustituye las notas del 3 de noviembre sobre Firebase y la supuesta RTX 4060.
 
 Actualización de implementación del 17 de noviembre: consultar [el piloto de llamadas SOS](audio-calls.md) antes de desplegar. Incluye migración 017 y configuración LiveKit; el estado histórico de abajo describe el SOS anterior al despliegue de llamadas.

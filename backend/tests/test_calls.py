@@ -27,7 +27,7 @@ def test_auth_required(operation):
         db.assert_not_called()
 
 def test_join_token_is_private_audio_only(signed):
-    with patch('app.calls.action', return_value={'participant': 'internal-user-id'}) as db:
+    with patch('app.calls.action', return_value={'participant': 'internal-user-id', 'room': f'sos-{CALL}'}) as db:
         response = client.post(f'/calls/{CALL}/token')
     db.assert_called_once()
     assert db.call_args.args[1] == 'token'
@@ -57,7 +57,7 @@ def test_end_deletes_room_after_database_authorizes(signed):
     live.__aenter__ = AsyncMock(return_value=live)
     live.__aexit__ = AsyncMock(return_value=False)
     live.room.delete_room = AsyncMock()
-    with patch('app.calls.action', return_value={'state': 'ended', 'participant': 'hidden'}), patch('app.calls.api.LiveKitAPI', return_value=live):
+    with patch('app.calls.action', return_value={'state': 'ended', 'participant': 'hidden', 'room': f'sos-{CALL}'}), patch('app.calls.api.LiveKitAPI', return_value=live):
         response = client.post(f'/calls/{CALL}/end')
-    assert response.json() == {'state': 'ended'}
+    assert response.json() == {'state': 'ended', 'room': f'sos-{CALL}'}
     assert live.room.delete_room.call_args.args[0].room == f'sos-{CALL}'

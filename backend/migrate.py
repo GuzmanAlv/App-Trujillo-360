@@ -69,18 +69,14 @@ def main():
             conn.execute((ROOT / 'migrations/016_restore_sos_push.sql').read_text(encoding='utf-8'))
         if not conn.execute("SELECT to_regclass('trujillo.call_sessions')").fetchone()[0]:
             conn.execute((ROOT / 'migrations/017_calls.sql').read_text(encoding='utf-8'))
-        # Refresh compatible public readers using the shared publication rule.
-        for filename in ('007_nearby_identity_fix.sql','010_community_groups.sql','011_report_places_patch.sql'):
-            source = (ROOT / 'migrations' / filename).read_text(encoding='utf-8')
-            if filename == '010_community_groups.sql':
-                source = source.split('-- Shared summaries')[0]
-            source = source.replace('CREATE FUNCTION trujillo.nearby_incidents', 'CREATE OR REPLACE FUNCTION trujillo.nearby_incidents')
-            source = source.replace("i.status IN ('pending','corroborated','verified')", 'trujillo.is_public_incident(i.status,i.corroboration_count,i.needs_review)')
-            source = source.replace("i.status IN ('corroborated','verified') AND i.corroboration_count >= 3 AND NOT i.needs_review", 'trujillo.is_public_incident(i.status,i.corroboration_count,i.needs_review)')
-            source = source.replace("i.status IN ('corroborated','verified') AND i.corroboration_count>=3\n AND NOT i.needs_review", 'trujillo.is_public_incident(i.status,i.corroboration_count,i.needs_review)')
-            source = source.replace("i.occurred_at >= now()-interval '7 days'", "i.occurred_at > now()-interval '7 days' AND i.occurred_at<=now()")
-            source = '\n'.join(line for line in source.splitlines() if 'INSERT INTO trujillo.schema_migrations' not in line)
-            conn.execute(source)
+        if not conn.execute("SELECT to_regclass('trujillo.sos_cases')").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/018_sos_cases.sql').read_text(encoding='utf-8'))
+        if not conn.execute("SELECT to_regprocedure('trujillo.return_calls()') IS NOT NULL").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/019_sos_operator_actions.sql').read_text(encoding='utf-8'))
+        if not conn.execute("SELECT to_regprocedure('trujillo.sos_map_call_status(uuid)') IS NOT NULL").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/020_sos_waiting_status.sql').read_text(encoding='utf-8'))
+        if not conn.execute("SELECT to_regclass('trujillo.sos_citizen_updates') IS NOT NULL").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/021_citizen_sos_updates.sql').read_text(encoding='utf-8'))
     print('Base 11 compatible; solicitudes, operadores e historial habilitados.')
 
 

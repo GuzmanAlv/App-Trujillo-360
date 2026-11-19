@@ -24,6 +24,18 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Último cambio: [descarte durante el trayecto, suspensión y controles superpuestos](docs/sos-suspension-and-map-controls.md). Requiere migración 025, backend y APK nuevos.
+
+Actualización: [mapa compacto, refuerzos privados y reevaluación tras llegar al SOS](docs/reinforcements-and-compact-map.md). Requiere migración 024, backend y APK nuevos.
+
+Última mejora: [avisos según atención activa, llegada al ciudadano y llamadas minimizadas](docs/sos-notification-experience.md). Requiere migración 023 antes de desplegar backend e instalar APK nuevo.
+
+Estados actuales: [confirmación con unidad en camino y llegada automática por GPS](docs/sos-arrival.md). Requiere migración 022, backend y APK nuevos.
+
+Ruta en el mapa al confirmar un SOS: [configuración de Google Routes y prueba en dos celulares](docs/sos-routes.md). Requiere configurar `GOOGLE_ROUTES_API_KEY` solo en Render y actualizar backend y app; no requiere migración.
+
+Nuevo flujo: [evaluación del SOS, llamada entrante y estados de atención](docs/sos-cases.md). Requiere migración 018 y actualizar backend y app; incluye la prueba de aceptación en dos celulares.
+
 Nuevo piloto: [SOS mantenido tres segundos y llamadas privadas con LiveKit](docs/audio-calls.md). Requiere la migración 017, despliegue del backend y app actualizada; las claves quedan exclusivamente en Render.
 
 La aplicación conserva cuenta Google, reportes, fotos, filtros y configuración.

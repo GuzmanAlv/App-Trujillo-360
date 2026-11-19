@@ -1,3 +1,4 @@
+import 'sos_case_panel.dart' show attentionLabel;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -115,6 +116,10 @@ class _CommunityIncidentPageState extends State<CommunityIncidentPage> {
               : 'Corroborado por la comunidad',
           style: Theme.of(context).textTheme.titleLarge,
         ),
+        if (widget.incident.description.isNotEmpty)
+          Text(widget.incident.description),
+        if (widget.incident.attention != 'none')
+          Text(attentionLabel(widget.incident.attention)),
         const SizedBox(height: 16),
         Text(
           'Ubicación del incidente',

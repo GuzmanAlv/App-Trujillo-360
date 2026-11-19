@@ -60,7 +60,7 @@ def token(call_id: UUID, response: Response, claims=Depends(identity)):
     private(response)
     url, key, secret = configuration()
     result = action(call_id, 'token', claims)
-    grant = api.VideoGrants(room_join=True, room=f'sos-{call_id}',
+    grant = api.VideoGrants(room_join=True, room=result['room'],
         can_publish=True, can_subscribe=True, can_publish_data=False,
         can_publish_sources=['microphone'])
     jwt = (api.AccessToken(key, secret).with_identity(result['participant'])
@@ -76,10 +76,31 @@ async def end(call_id: UUID, response: Response, claims=Depends(identity)):
     url, key, secret = configuration()
     try:
         async with api.LiveKitAPI(url=url, api_key=key, api_secret=secret, timeout=ClientTimeout(total=10)) as client:
-            await client.room.delete_room(api.DeleteRoomRequest(room=f'sos-{call_id}'))
+            await client.room.delete_room(api.DeleteRoomRequest(room=result['room']))
     except api.TwirpError as error:
         if error.code != 'not_found':
             raise HTTPException(503, 'Cierre de audio pendiente. Vuelve a pulsar Finalizar.') from None
     except Exception:
         raise HTTPException(503, 'Cierre de audio pendiente. Vuelve a pulsar Finalizar.') from None
     return result
+
+@router.post('/{call_id}/callback')
+def callback(call_id: UUID, response: Response, claims=Depends(identity)):
+    private(response)
+    configuration()
+    result = action(call_id, 'callback', claims)
+    result.pop('participant', None)
+    return result
+
+@router.post('/{call_id}/answer')
+def answer(call_id: UUID, response: Response, claims=Depends(identity)):
+    private(response)
+    configuration()
+    result = action(call_id, 'answer', claims)
+    result.pop('participant', None)
+    return result
+
+@router.get('/incoming/return')
+def return_calls(response: Response, claims=Depends(identity)):
+    private(response)
+    return execute(claims, 'SELECT trujillo.return_calls()', many=True)

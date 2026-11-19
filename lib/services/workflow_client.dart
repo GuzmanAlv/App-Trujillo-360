@@ -58,12 +58,50 @@ class WorkflowClient {
         }
         if (response.statusCode == 401 && attempt == 0) continue;
         if (response.statusCode != 200) {
+          if (path.endsWith('/route')) {
+            try {
+              final error = jsonDecode(response.body);
+              final detail = error is Map ? error['detail'] : null;
+              final code = detail is Map ? detail['code'] : null;
+              const routeErrors = {
+                'REINFORCEMENT_CLOSED':
+                    'La solicitud de refuerzos ya finalizó o caducó.',
+                'SOS_PRIORITY':
+                    'Primero llega al SOS ciudadano que tienes asignado. Después podrás trazar la ruta de refuerzos.',
+                'ROUTES_NOT_CONFIGURED':
+                    'SOS confirmado. Falta configurar Google Routes en el servidor.',
+                'ROUTES_REJECTED':
+                    'Google Routes rechazó la consulta. Revisa la clave, la API y su facturación.',
+                'ROUTE_NOT_FOUND':
+                    'No se encontró una ruta en vehículo para este destino.',
+                'ROUTES_UNAVAILABLE':
+                    'No se pudo consultar Google Routes. Puedes reintentar.',
+                'ROUTES_RATE_LIMIT':
+                    'Espera unos segundos antes de actualizar la ruta.',
+                'ROUTE_CLOSED':
+                    'El SOS ya no está activo o aún no está confirmado.',
+              };
+              if (routeErrors.containsKey(code)) {
+                throw StateError(routeErrors[code]!);
+              }
+            } on FormatException {
+              /* Use the regular HTTP message. */
+            }
+          }
           throw StateError(switch (response.statusCode) {
             401 => 'Sesión vencida. Vuelve a ingresar.',
-            403 => 'Tu cuenta no está autorizada para esta operación.',
+            403 =>
+              path == '/me'
+                  ? 'Tu cuenta está suspendida en Trujillo 360.'
+                  : 'Tu cuenta no está autorizada para esta operación.',
             404 =>
               'Esta función aún no está disponible en el servidor conectado.',
-            409 => 'El identificador ya fue usado con otros datos.',
+            409 =>
+              path.startsWith('/operator/sos-cases/')
+                  ? 'El caso cambió o la acción no está disponible. Recarga la ficha antes de continuar.'
+                  : path.startsWith('/calls/')
+                  ? 'La llamada terminó, ya fue atendida o tienes otra llamada activa.'
+                  : 'El identificador ya fue usado con otros datos.',
             422 => 'Revisa los datos o el estado del caso.',
             _ =>
               'Servidor no disponible. No se confirmó ningún cambio. Vuelve a intentar.',

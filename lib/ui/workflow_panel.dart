@@ -1,3 +1,5 @@
+import 'sos_status.dart';
+import 'sos_case_panel.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -357,44 +359,62 @@ class _WorkflowPanelState extends State<WorkflowPanel>
                   itemCount: visibleRows.length,
                   itemBuilder: (_, index) {
                     final r = visibleRows[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      child: ListTile(
-                        leading: Icon(
-                          widget.incidents
-                              ? Icons.fact_check_outlined
-                              : Icons.sos,
-                          color: r['priority'] == 'Alta'
-                              ? Colors.red
-                              : const Color(0xff087f68),
-                        ),
-                        title: Text(
-                          r['source'] == 'sos'
-                              ? 'SOS · Ubicación compartida'
-                              : '${r['category']} · ${r['place'] ?? 'Incidente'}',
-                        ),
-                        subtitle: Text(
-                          widget.incidents
-                              ? '${r['status']} · ${r['corroboration_count']} aportes · ${workflowTime(r['occurred_at'])}'
-                              : 'Urgencia ${r['priority']} · ${r['stage']}\n${workflowTime(r['received_at'])}',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          await Navigator.push<void>(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => WorkflowDetail(
-                                row: r,
-                                operator: widget.operator,
-                                incident: widget.incidents,
+                    final sos = Map<String, dynamic>.from(
+                      r['sos_case'] as Map? ?? {},
+                    );
+                    if (r['stage'] == 'Descartada') {
+                      sos['decision'] = 'discarded';
+                    }
+                    if (r['stage'] == 'Cerrada') sos['attention'] = 'resolved';
+                    final style = sosStyle(sos);
+                    return SosSupportFrame(
+                      active:
+                          widget.operator && sos['support_requested'] == true,
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        child: ListTile(
+                          leading: Icon(
+                            widget.incidents
+                                ? Icons.fact_check_outlined
+                                : r['source'] == 'sos'
+                                ? style.icon
+                                : Icons.sos,
+                            color: r['source'] == 'sos'
+                                ? style.color
+                                : r['priority'] == 'Alta'
+                                ? Colors.red
+                                : const Color(0xff087f68),
+                          ),
+                          title: Text(
+                            r['source'] == 'sos'
+                                ? 'SOS · Ubicación compartida'
+                                : '${r['category']} · ${r['place'] ?? 'Incidente'}',
+                          ),
+                          subtitle: Text(
+                            widget.incidents
+                                ? '${r['status']} · ${r['corroboration_count']} aportes · ${workflowTime(r['occurred_at'])}'
+                                : 'Urgencia ${r['priority']} · ${r['stage']}\n${workflowTime(r['received_at'])}',
+                          ),
+                          trailing: widget.operator && r['source'] == 'sos'
+                              ? SizedBox(
+                                  width: 140,
+                                  child: SosStatusBadge(data: sos),
+                                )
+                              : const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            await Navigator.push<void>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => WorkflowDetail(
+                                  row: r,
+                                  operator: widget.operator,
+                                  incident: widget.incidents,
+                                ),
                               ),
-                            ),
-                          );
-                          load();
-                        },
+                            );
+                            load();
+                          },
+                        ),
                       ),
                     );
                   },
@@ -507,6 +527,18 @@ class _WorkflowDetailState extends State<WorkflowDetail> {
   @override
   Widget build(BuildContext context) {
     final r = widget.row;
+    if (widget.operator && widget.incident && r['sos_case_id'] != null) {
+      return SosCasePage(caseId: r['sos_case_id'] as String);
+    }
+    if (widget.operator && !widget.incident && r['source'] == 'sos') {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Caso SOS')),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(children: [SosCasePanel(caseId: r['id'] as String)]),
+        ),
+      );
+    }
     final terminal = ['Cerrada', 'Descartada'].contains(r['stage']);
     final options = r['stage'] == 'Recibida'
         ? ['En revisión', 'Descartada']
