@@ -18,7 +18,7 @@ import 'map_panel.dart';
 
 String attentionLabel(String value) => switch (value) {
   'en_route' => 'Unidad en camino',
-  'on_scene' => 'Personal en el lugar',
+  'on_scene' => 'Unidad en la zona',
   'resolved' => 'Caso resuelto',
   _ => 'Sin despliegue confirmado',
 };
@@ -29,7 +29,7 @@ String caseActionLabel(String action) => switch (action) {
   'confirm' => 'Incidente confirmado',
   'discard' => 'Alarma descartada',
   'en_route' => 'Unidad en camino',
-  'on_scene' => 'Personal en el lugar',
+  'on_scene' => 'Unidad en la zona',
   'resolve' => 'Atención resuelta',
   _ => action,
 };
@@ -709,17 +709,6 @@ class SosCasePanelState extends State<SosCasePanel>
                     ),
                   ],
                   if (confirmed && d['attention'] != 'resolved') ...[
-                    if (d['attention'] == 'none')
-                      FilledButton(
-                        onPressed: editable ? () => save('en_route') : null,
-                        child: const Text('Unidad en camino'),
-                      ),
-                    if (d['attention'] != 'on_scene')
-                      FilledButton.icon(
-                        onPressed: editable ? () => save('on_scene') : null,
-                        icon: const Icon(Icons.location_on),
-                        label: const Text('Personal en el lugar'),
-                      ),
                     OutlinedButton(
                       onPressed: editable ? () => save('resolve') : null,
                       child: const Text('Resolver caso'),

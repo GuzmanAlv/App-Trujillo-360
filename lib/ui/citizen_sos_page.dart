@@ -11,7 +11,7 @@ import 'report_style.dart';
 
 String citizenSosMessage(String attention) => switch (attention) {
   'en_route' => 'La policía se encuentra en camino. Mantente en calma.',
-  'on_scene' => 'Personal en el lugar.',
+  'on_scene' => 'Unidad en la zona.',
   'resolved' => 'La atención ha finalizado.',
   _ => 'Incidente confirmado. Esperando asignación de personal.',
 };

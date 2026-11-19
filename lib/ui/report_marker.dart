@@ -201,7 +201,7 @@ Future<Uint8List> renderReportMarker(
     101,
   );
   text(
-    onScene ? 'Personal en el lugar' : 'Reportado $time',
+    onScene ? 'Unidad en la zona' : 'Reportado $time',
     const TextStyle(color: Color(0xff475569), fontSize: 10),
     const Offset(59, 39),
     101,

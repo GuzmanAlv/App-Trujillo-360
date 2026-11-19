@@ -1,4 +1,5 @@
 import 'services/sos_navigation.dart';
+import 'services/sos_arrival_tracker.dart';
 import 'services/sos_route_controller.dart';
 import 'ui/sos_route_panel.dart';
 import 'ui/citizen_sos_map_layer.dart';
@@ -79,6 +80,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final density = DensityStore();
   final sosRoute = SosRouteController();
+  final sosArrival = SosArrivalTracker();
   String? routeOwner;
   void routeRequested() {
     final value = SosNavigation.request.value;
@@ -104,6 +106,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? expiryTimer;
 
   Future<void> checkRole(User? user) async {
+    sosArrival.configure(false);
     final ticket = ++roleGeneration;
     if (user?.uid != routeOwner) {
       routeOwner = null;
@@ -134,6 +137,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final allowed =
             profile['status'] == 'active' &&
             ['operator', 'admin'].contains(profile['role']);
+        sosArrival.configure(allowed && foreground);
         if (operatorAllowed != allowed) {
           setState(() {
             if (!operatorAllowed && allowed && tab == 2) {
@@ -313,6 +317,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void updateNearbyActivity() {
+    sosArrival.configure(operatorAllowed && foreground);
     nearby.setActive(
       foreground && (tab == 0 || (tab == 1 && reportsNearbySelected)),
     );
@@ -360,6 +365,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     expiryTimer?.cancel();
     SosNavigation.request.removeListener(routeRequested);
     sosRoute.dispose();
+    sosArrival.dispose();
     density.dispose();
     super.dispose();
   }
@@ -758,6 +764,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 ),
                                 if (operatorAllowed)
                                   SosRoutePanel(route: sosRoute),
+                                if (operatorAllowed)
+                                  ValueListenableBuilder<String?>(
+                                    valueListenable: sosArrival,
+                                    builder: (_, message, _) => message == null
+                                        ? const SizedBox.shrink()
+                                        : Padding(
+                                            padding: const EdgeInsets.all(8),
+                                            child: Text(
+                                              message,
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                  ),
                               ],
                             ),
                           ),

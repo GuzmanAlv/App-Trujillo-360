@@ -1,3 +1,9 @@
+# Cambio vigente: estados automáticos
+
+La [guía de llegada automática](sos-arrival.md) sustituye los pasos antiguos de
+marcar salida/llegada manualmente: confirmar inicia en camino y el GPS del
+operador asignado detecta la llegada. Requiere migración 022 y actualizar backend/app.
+
 # Evaluación y atención del SOS
 
 ## Recuadro unificado de llamadas y casos pendientes

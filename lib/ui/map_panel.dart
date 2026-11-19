@@ -62,6 +62,35 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   StreamSubscription<Position>? subscription;
   final service = LocationService();
   final Map<String, BitmapDescriptor> reportIcons = {};
+  final pulseIcons = <String, List<BitmapDescriptor>>{};
+  BitmapDescriptor? animatedIcon(Incident incident) {
+    final frames = pulseIcons[incident.type];
+    return incident.attention == 'en_route' && frames != null
+        ? frames[pulseFrame]
+        : null;
+  }
+
+  Timer? markerPulse;
+  int pulseFrame = 0;
+  void configureMarkerPulse() {
+    markerPulse?.cancel();
+    if (!widget.active ||
+        !foreground ||
+        MediaQuery.disableAnimationsOf(context) ||
+        !widget.incidents.any((i) => i.attention == 'en_route')) {
+      return;
+    }
+    markerPulse = Timer.periodic(const Duration(milliseconds: 220), (_) {
+      if (mounted) setState(() => pulseFrame = (pulseFrame + 1) % 6);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    configureMarkerPulse();
+  }
+
   int iconGeneration = 0;
   BitmapDescriptor? locationIcon;
   BitmapDescriptor? explorationIcon;
@@ -96,6 +125,28 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
     final next = <String, BitmapDescriptor>{};
     for (final incident in incidents) {
       final key = iconKey(incident);
+      if (incident.attention == 'en_route' &&
+          !pulseIcons.containsKey(incident.type)) {
+        final style = ReportStyle.forCategory(incident.type);
+        final frames = <BitmapDescriptor>[];
+        for (final phase in [0.0, .35, .75, 1.0, .75, .35]) {
+          final bytes = await renderPendingSosMarker(
+            phase,
+            symbol: style.icon,
+            color: style.color,
+          );
+          if (!mounted || generation != iconGeneration) return;
+          frames.add(
+            BitmapDescriptor.bytes(
+              bytes,
+              imagePixelRatio: 2,
+              width: 64,
+              height: 76,
+            ),
+          );
+        }
+        pulseIcons[incident.type] = frames;
+      }
       if (next.containsKey(key)) continue;
       try {
         next[key] =
@@ -129,6 +180,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant MapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    configureMarkerPulse();
     if (widget.routeBounds != null &&
         widget.routeRevision != oldWidget.routeRevision) {
       centerRequested = false;
@@ -215,6 +267,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
+    configureMarkerPulse();
     if (!foreground) {
       subscription?.cancel();
       subscription = null;
@@ -227,6 +280,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     subscription?.cancel();
     viewportGeneration++;
+    markerPulse?.cancel();
     controller?.dispose();
     super.dispose();
   }
@@ -352,10 +406,15 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                         Marker(
                           markerId: MarkerId(i.id),
                           position: LatLng(i.latitude, i.longitude),
-                          anchor: reportIcons.containsKey(iconKey(i))
+                          anchor:
+                              i.attention == 'en_route' &&
+                                  pulseIcons.containsKey(i.type)
+                              ? const Offset(.5, 74 / 76)
+                              : reportIcons.containsKey(iconKey(i))
                               ? const Offset(0.5, 78 / 82)
                               : const Offset(0.5, 1),
                           icon:
+                              animatedIcon(i) ??
                               reportIcons[iconKey(i)] ??
                               BitmapDescriptor.defaultMarkerWithHue(
                                 switch (i.type) {
@@ -370,7 +429,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                             title:
                                 '${i.type} · Reportado ${reportTime(i.createdAt)}',
                             snippet: i.attention == 'on_scene'
-                                ? 'Personal en el lugar · ${i.place}'
+                                ? 'Unidad en la zona · ${i.place}'
                                 : i.place,
                           ),
                           onTap: () => widget.onIncident?.call(i),

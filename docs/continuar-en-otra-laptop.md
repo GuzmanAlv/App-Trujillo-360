@@ -1,5 +1,8 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización de estados SOS: [salida al confirmar y llegada automática por GPS](sos-arrival.md).
+Esta mejora requiere migración 022 antes de desplegar backend y actualizar ambos APK.
+
 Actualización del 19 de noviembre: [ruta en el mapa al confirmar un SOS](sos-routes.md).
 Requiere desplegar el backend, configurar `GOOGLE_ROUTES_API_KEY` en Render e
 instalar la app nueva; no requiere otra migración. El cálculo real con Google

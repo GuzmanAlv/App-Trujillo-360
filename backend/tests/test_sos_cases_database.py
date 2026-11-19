@@ -41,6 +41,13 @@ def database(tmp_path_factory):
 
 from psycopg.types.json import Jsonb
 
+def arrive(database, query, operator, case, latitude, longitude):
+    sql='SELECT trujillo.sos_arrival_check(%s,%s,%s,10,clock_timestamp())'
+    assert query(operator,sql,(case,latitude,longitude))['attention']=='en_route'
+    with psycopg.connect(database) as c:
+        c.execute("UPDATE trujillo.sos_arrival_samples SET first_at=clock_timestamp()-interval '12 seconds', observed_at=clock_timestamp()-interval '12 seconds' WHERE case_id=%s",(case,))
+    assert query(operator,sql,(case,latitude,longitude))['attention']=='on_scene'
+
 def test_case_lifecycle_and_privacy(database):
     citizen, op, other = [uuid4() for _ in range(3)]
     with psycopg.connect(database) as c:
@@ -68,6 +75,7 @@ def test_case_lifecycle_and_privacy(database):
     request=uuid4()
     result=update(op,0,request=request)
     incident=result['incident_id']
+    assert result['attention']=='en_route'
     assert result['caller_latitude']==-8.11 and result['latitude']==-8.12
     assert update(op,0,request=request)['incident_id']==incident
     with pytest.raises(psycopg.errors.RaiseException): update(op,0)
@@ -86,12 +94,14 @@ def test_case_lifecycle_and_privacy(database):
         query(op,"SELECT trujillo.review_incident(%s,'discarded','No autorizado por este flujo')",(incident,))
     assert query(citizen,'SELECT * FROM trujillo.incident_reports(%s)',(incident,),many=True)==[]
     assert query(citizen,'SELECT * FROM trujillo.community_photos(%s)',(incident,),many=True)==[]
-    for action, version in [('en_route',1),('on_scene',2),('resolve',3)]:
+    arrive(database,query,op,case,-8.12,-79.04)
+    assert query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))['attention']=='on_scene'
+    for action, version in [('resolve',2)]:
         result=update(op,version,{**data,'action':action,'outcome':'Atención concluida'})
         assert result['attention']==('resolved' if action=='resolve' else action)
         if action!='resolve':
             assert query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))['attention']==action
-    assert len(result['events'])==4
+    assert len(result['events'])==3
     assert query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)==[]
     assert query(op,"SELECT * FROM trujillo.incident_density(-9,-7,-80,-78,-1)",many=True)
     with pytest.raises(psycopg.errors.RaiseException): update(op,4)

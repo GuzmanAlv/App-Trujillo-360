@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/workflow_client.dart';
 import 'report_marker.dart';
+import 'report_style.dart';
 import 'sos_case_panel.dart';
 import 'sos_status.dart';
 
@@ -31,6 +32,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   Timer? timer, pulseTimer;
   int pulseFrame = 0;
   final List<BitmapDescriptor> pendingIcons = [], phoneIcons = [];
+  final categoryIcons = <String, List<BitmapDescriptor>>{};
+  Map<String, String> categoryIds = {};
   Set<String> phoneIds = {}, urgentIds = {};
   int alertCount = 0;
   Map<String, bool> queueStates = {};
@@ -85,7 +88,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     pulseTimer = null;
     if (!widget.enabled ||
         !widget.active ||
-        urgentIds.isEmpty ||
+        (urgentIds.isEmpty && categoryIds.isEmpty) ||
         pendingIcons.length != 6 ||
         MediaQuery.disableAnimationsOf(context)) {
       return;
@@ -107,6 +110,13 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                     : pendingIcons)[urgentIds.contains(m.markerId.value)
                         ? pulseFrame % pendingIcons.length
                         : 0],
+                anchorParam: const Offset(.5, 74 / 76),
+              )
+            : categoryIds.containsKey(m.markerId.value)
+            ? m.copyWith(
+                iconParam:
+                    categoryIcons[categoryIds[m.markerId.value]]?[pulseFrame %
+                        6],
                 anchorParam: const Offset(.5, 74 / 76),
               )
             : m,
@@ -147,6 +157,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         markers = {};
         baseMarkers = {};
         pendingIds = {};
+        categoryIds = {};
         phoneIds = {};
         urgentIds = {};
         alertCount = 0;
@@ -191,6 +202,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgent = <String>{};
       var alerts = 0;
       final nextQueue = <String, bool>{};
+      final categories = <String, String>{};
       for (final row in rows) {
         final style = sosStyle(row);
         final key = style.label;
@@ -219,6 +231,31 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         }
         if (row['incident_id'] is String) ids.add(row['incident_id'] as String);
         final markerId = 'operator_sos_${row['id']}';
+        if (row['decision'] == 'confirmed' && row['attention'] == 'en_route') {
+          final category = '${row['category']}';
+          if (!categoryIcons.containsKey(category)) {
+            final frames = <BitmapDescriptor>[];
+            final categoryStyle = ReportStyle.forCategory(category);
+            for (final phase in [0.0, .35, .75, 1.0, .75, .35]) {
+              final bytes = await renderPendingSosMarker(
+                phase,
+                symbol: categoryStyle.icon,
+                color: categoryStyle.color,
+              );
+              if (!mounted || ticket != generation) return;
+              frames.add(
+                BitmapDescriptor.bytes(
+                  bytes,
+                  imagePixelRatio: 2,
+                  width: 64,
+                  height: 76,
+                ),
+              );
+            }
+            categoryIcons[category] = frames;
+          }
+          categories[markerId] = category;
+        }
         final waiting = row['call_waiting'] == true;
         if (waiting || row['decision'] == 'pending') {
           nextQueue[markerId] = waiting;
@@ -259,6 +296,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           markers = next;
           baseMarkers = next;
           pendingIds = pending;
+          categoryIds = categories;
           phoneIds = phones;
           urgentIds = urgent;
           alertCount = alerts;
@@ -274,6 +312,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           markers = {};
           baseMarkers = {};
           pendingIds = {};
+          categoryIds = {};
           phoneIds = {};
           urgentIds = {};
           alertCount = 0;

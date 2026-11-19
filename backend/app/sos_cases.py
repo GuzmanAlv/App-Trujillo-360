@@ -2,7 +2,7 @@
 from typing import Literal
 from uuid import UUID
 from fastapi import APIRouter, Depends, Response, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, AwareDatetime
 from psycopg.types.json import Jsonb
 from app.auth import identity
 from app.workflows import execute
@@ -15,7 +15,7 @@ def map_cases(response: Response, claims=Depends(identity)):
     response.headers['Cache-Control'] = 'private, no-store'
     return execute(claims, '''SELECT jsonb_build_object(
         'id',h->>'id','latitude',c->'latitude','longitude',c->'longitude',
-        'decision',c->'decision','attention',c->'attention',
+        'decision',c->'decision','attention',c->'attention','category',c->'category','can_track',c->'can_track',
         'support_requested',c->'support_requested','incident_id',c->'incident_id')
         || trujillo.sos_map_call_status((h->>'id')::uuid)
         FROM trujillo.list_help(true) h
@@ -41,6 +41,15 @@ class CaseUpdate(BaseModel):
     internal_note: str = Field(default='', max_length=2000)
     outcome: str = Field(default='', max_length=1000)
     arrival_position: ArrivalPosition | None = None
+
+class ArrivalCheck(ArrivalPosition):
+    observed_at: AwareDatetime
+
+@router.post('/sos-cases/{case_id}/arrival')
+def arrival(case_id: UUID, data: ArrivalCheck, response: Response, claims=Depends(identity)):
+    response.headers['Cache-Control'] = 'private, no-store'
+    return execute(claims, 'SELECT trujillo.sos_arrival_check(%s,%s,%s,%s,%s)',
+                   (case_id,data.latitude,data.longitude,data.accuracy,data.observed_at))
 
 @router.get('/calls/incoming')
 def incoming(response: Response, claims=Depends(identity)):

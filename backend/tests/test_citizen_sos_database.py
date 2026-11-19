@@ -5,7 +5,7 @@ from PIL import Image
 import psycopg
 import pytest
 from psycopg.types.json import Jsonb
-from test_sos_cases_database import database
+from test_sos_cases_database import database, arrive
 from app.photos import PhotoInput, normalize_photo
 
 def test_owner_follow_up_privacy_photos_and_idempotency(database):
@@ -29,7 +29,7 @@ def test_owner_follow_up_privacy_photos_and_idempotency(database):
     data=dict(action='confirm',category='Robo',latitude=-8.12,longitude=-79.02,place='',public_description='',internal_note='NO PUBLICAR',outcome='')
     result=query(operator,'SELECT trujillo.sos_case_update(%s,%s,0,%s)',(case,uuid4(),Jsonb(data)))
     own=query(citizen,'SELECT trujillo.citizen_sos_cases()')
-    assert own['id']==case and own['attention']=='none'
+    assert own['id']==case and own['attention']=='en_route'
     assert 'NO PUBLICAR' not in str(own)
     assert query(other,'SELECT trujillo.citizen_sos_cases()',many=True)==[]
     with pytest.raises(psycopg.errors.InsufficientPrivilege):query(other,'SELECT trujillo.sos_citizen_evidence(%s)',(case,))
@@ -49,7 +49,9 @@ def test_owner_follow_up_privacy_photos_and_idempotency(database):
     with pytest.raises(psycopg.errors.RaiseException):query(citizen,'SELECT trujillo.sos_citizen_submit(%s,%s,%s,%s)',(case,request,'Cambio',Jsonb([photo])))
     public=query(other,'SELECT trujillo.public_case_fields(%s::uuid[])',([result['incident_id']],))
     assert 'Aporte privado' not in str(public)
-    for action,version in [('en_route',1),('on_scene',2),('resolve',3)]:
+    arrive(database,query,operator,case,-8.12,-79.02)
+    assert query(citizen,'SELECT trujillo.citizen_sos_cases()')['attention']=='on_scene'
+    for action,version in [('resolve',2)]:
         query(operator,'SELECT trujillo.sos_case_update(%s,%s,%s,%s)',(case,uuid4(),version,Jsonb({**data,'action':action,'outcome':'Atención concluida'})))
         if action!='resolve':assert query(citizen,'SELECT trujillo.citizen_sos_cases()')['attention']==action
     assert query(citizen,'SELECT trujillo.citizen_sos_cases()',many=True)==[]

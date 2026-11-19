@@ -22,7 +22,7 @@ import 'package:flutter/material.dart';
       icon: Icons.local_police,
     ),
     'on_scene' => (
-      label: 'Personal en el lugar',
+      label: 'Unidad en la zona',
       color: Colors.purple.shade700,
       icon: Icons.location_on,
     ),

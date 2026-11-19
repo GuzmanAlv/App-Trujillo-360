@@ -100,8 +100,8 @@ void main() {
       expect(confirmed.single['incident_id'], 'incident');
       expect(sent[1]['request_id'], sent[0]['request_id']);
       expect(find.textContaining('Teléfono: -8.11, -79.03'), findsNothing);
-      expect(find.text('Unidad en camino'), findsOneWidget);
-      expect(find.text('Personal en el lugar'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Unidad en camino'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Unidad en la zona'), findsNothing);
     },
   );
 
@@ -159,8 +159,8 @@ void main() {
       expect(restored.isCommunityVisible, isTrue);
       expect(restored.corroborationCount, 0);
       expect(restored.attention, 'on_scene');
-      expect(attentionLabel(restored.attention), 'Personal en el lugar');
-      expect(attentionLabel('en_route'), isNot('Personal en el lugar'));
+      expect(attentionLabel(restored.attention), 'Unidad en la zona');
+      expect(attentionLabel('en_route'), 'Unidad en camino');
     },
   );
 }

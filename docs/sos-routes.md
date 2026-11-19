@@ -6,9 +6,9 @@ guardado en la ficha. Este punto puede haber sido corregido por el operador y no
 se confunde con el GPS original del teléfono ciudadano. Se muestran distancia y
 tiempo estimado; el mapa encuadra todo el recorrido.
 
-La llamada activa continúa en una barra con micrófono, altavoz y colgar. No se
-marca automáticamente «Unidad en camino»: esa declaración sigue siendo una
-acción explícita del operador. Se puede actualizar o quitar la ruta del mapa.
+La llamada activa continúa en una barra con micrófono, altavoz y colgar.
+Confirmar ahora marca «Unidad en camino» automáticamente; ver
+[estados y llegada por GPS](sos-arrival.md). Se puede actualizar o quitar la ruta del mapa.
 No hay navegación giro a giro ni recálculo continuo en segundo plano.
 
 ## Configuración pendiente en Google y Render
@@ -21,7 +21,7 @@ No hay navegación giro a giro ni recálculo continuo en segundo plano.
    `GOOGLE_ROUTES_API_KEY` con la clave como secreto y desplegar el backend.
    Nunca incluirla en Dart, `--dart-define`, capturas, mensajes ni Git.
 4. Compilar e instalar la app actualizada con `MAPS_ENABLED=true` y el backend
-   público. No hace falta una nueva migración de base de datos.
+   público. El cálculo de rutas no requiere migración; el nuevo flujo de llegada requiere la 022.
 
 La consulta usa Google Routes `DRIVE`, `TRAFFIC_AWARE_OPTIMAL` y alternativas;
 elige la menor duración entre las rutas devueltas. Es una estimación con tráfico,
