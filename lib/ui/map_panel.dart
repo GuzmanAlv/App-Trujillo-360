@@ -34,10 +34,12 @@ class MapPanel extends StatefulWidget {
     this.active = true,
     this.zoomControls = false,
     this.overlays = const {},
+    this.bottomInset = 0,
   });
   final List<Incident> incidents;
   final Set<Marker> extraMarkers;
   final Set<Polyline> polylines;
+  final double bottomInset;
   final LatLngBounds? routeBounds;
   final int routeRevision;
   final LatLng? focusTarget;
@@ -390,6 +392,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     },
                     onCameraIdle: reportViewport,
                     polylines: widget.polylines,
+                    padding: EdgeInsets.only(bottom: widget.bottomInset),
                     circles: {
                       ...widget.overlays,
                       ...locationHighlight(

@@ -1,5 +1,8 @@
 # Continuar Trujillo 360 en otra laptop
 
+Nueva actualización: [descarte y suspensión, mapa ampliado y controles](sos-suspension-and-map-controls.md).
+Requiere migración 025 y actualizar backend/APK. `/ready` incluye `sos_suspension_version: 1`.
+
 Nueva versión: [mapa compacto y refuerzos](reinforcements-and-compact-map.md).
 Requiere migración 024, despliegue del backend e instalación del APK. `/ready` incluye `reinforcements_version: 1`.
 

@@ -11,10 +11,13 @@ class SosIncomingAttention extends StatefulWidget {
     this.enableSound = true,
     this.glowColor = const Color(0xffff0028),
     this.enableGlow = true,
+    this.glowExtent = 52,
+    this.intensity = 1,
   });
   final bool active, enableSound;
   final Color glowColor;
   final bool enableGlow;
+  final double glowExtent, intensity;
   final Widget Function(bool muted, VoidCallback toggleMute) builder;
   @override
   State<SosIncomingAttention> createState() => _SosIncomingAttentionState();
@@ -103,7 +106,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                     animation: animation,
                     builder: (context, child) {
                       final red = widget.glowColor.withValues(
-                        alpha: .28 + animation.value * .42,
+                        alpha: (.28 + animation.value * .42) * widget.intensity,
                       );
                       return Stack(
                         children: [
@@ -111,7 +114,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                             top: 0,
                             left: 0,
                             right: 0,
-                            height: 52,
+                            height: widget.glowExtent,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -126,7 +129,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                             bottom: 0,
                             left: 0,
                             right: 0,
-                            height: 52,
+                            height: widget.glowExtent,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -141,7 +144,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                             top: 0,
                             bottom: 0,
                             left: 0,
-                            width: 52,
+                            width: widget.glowExtent,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -154,7 +157,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
                             top: 0,
                             bottom: 0,
                             right: 0,
-                            width: 52,
+                            width: widget.glowExtent,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(

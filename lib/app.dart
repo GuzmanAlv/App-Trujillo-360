@@ -2,14 +2,14 @@ import 'ui/map_filters_drawer.dart';
 import 'services/sos_navigation.dart';
 import 'services/operator_duty.dart';
 import 'services/reinforcements_store.dart';
-import 'ui/sos_route_badge.dart';
+import 'ui/map_bottom_controls.dart';
+import 'services/active_call.dart';
 import 'ui/reinforcement_controls.dart';
 import 'ui/report_form.dart' show categories;
 import 'services/citizen_arrival_alerts.dart';
 import 'ui/citizen_sos_page.dart';
 import 'services/sos_arrival_tracker.dart';
 import 'services/sos_route_controller.dart';
-import 'ui/sos_route_panel.dart';
 import 'ui/citizen_sos_map_layer.dart';
 import 'ui/operator_sos_map_layer.dart';
 import 'ui/incoming_call_overlay.dart';
@@ -32,7 +32,6 @@ import 'models/incident.dart';
 import 'services/push_service.dart';
 import 'ui/notification_settings.dart';
 import 'ui/sos_shortcut_settings.dart';
-import 'ui/hold_sos_button.dart';
 import 'ui/audio_call_page.dart';
 import 'ui/push_destination.dart';
 import 'ui/report_details_page.dart';
@@ -134,42 +133,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     unawaited(sosRoute.calculate('${row['id']}', reinforcement: true));
   }
 
-  Future<void> requestReinforcements() async {
-    if (reinforcements.mine != null) {
-      final close = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: const Text(
-            'Refuerzos solicitados',
-            style: TextStyle(fontSize: 17),
-          ),
-          content: const Text(
-            'Tu ubicación está compartida con los operadores. ¿Ya no necesitas apoyo?',
-            style: TextStyle(fontSize: 14),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Seguir esperando'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('Finalizar solicitud'),
-            ),
-          ],
-        ),
-      );
-      if (close == true) await reinforcements.closeMine();
-    } else {
-      await reinforcements.request();
-    }
-    if (mounted && reinforcements.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(reinforcements.error!)));
-    }
-  }
-
   String? routeOwner;
   void returnToMap() {
     if (mounted) {
@@ -195,6 +158,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   StreamSubscription<User?>? roleSession;
   int roleGeneration = 0;
   bool operatorAllowed = false;
+  bool citizenAllowed = false;
+  String? roleOwner;
   bool sosSending = false;
   String? pendingSosId;
   String? pendingSosOwner;
@@ -202,6 +167,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? expiryTimer;
 
   Future<void> checkRole(User? user) async {
+    if (roleOwner != user?.uid) {
+      roleOwner = user?.uid;
+      if (mounted) setState(() => citizenAllowed = false);
+    }
     if (OperatorDuty.owner != user?.uid) OperatorDuty.clear();
     sosArrival.configure(false);
     reinforcements.configure(false);
@@ -222,6 +191,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           operatorAllowed = false;
+          citizenAllowed = false;
           if (tab >= 2) tab = 0;
         });
       }
@@ -235,10 +205,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final allowed =
             profile['status'] == 'active' &&
             ['operator', 'admin'].contains(profile['role']);
+        final citizen =
+            profile['status'] == 'active' && profile['role'] == 'citizen';
         sosArrival.configure(allowed && foreground);
         reinforcements.configure(allowed && foreground);
         if (!allowed) OperatorDuty.clear();
-        if (operatorAllowed != allowed) {
+        if (operatorAllowed != allowed || citizenAllowed != citizen) {
           setState(() {
             if (!operatorAllowed && allowed && tab == 2) {
               tab = 3;
@@ -249,6 +221,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               tab = 0;
             }
             operatorAllowed = allowed;
+            citizenAllowed = citizen;
             if (!allowed) sosRoute.clear();
           });
         }
@@ -614,6 +587,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       mapIncidents,
       density,
       sosRoute,
+      ActiveCall.session,
+      ActiveCall.presentation,
       reinforcements,
     ]),
     builder: (context, _) => Theme(
@@ -735,6 +710,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                                 sosIncidentIds,
                                                 sosFocus,
                                               ) => MapPanel(
+                                                bottomInset:
+                                                    (operatorAllowed
+                                                        ? (sosRoute.caseId !=
+                                                                  null
+                                                              ? 68.0
+                                                              : 8.0)
+                                                        : 90.0) +
+                                                    (ActiveCall
+                                                                .session
+                                                                .value
+                                                                ?.minimized ==
+                                                            true
+                                                        ? 58.0
+                                                        : 0.0),
                                                 extraMarkers: {
                                                   ...sosMarkers,
                                                   ...myMarkers,
@@ -847,29 +836,49 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                               ),
                                         ),
                                       ),
+                                      Positioned(
+                                        left: 12,
+                                        right: 12,
+                                        bottom: 12,
+                                        child: MapBottomControls(
+                                          operator: operatorAllowed,
+                                          showSos: citizenAllowed,
+                                          route: sosRoute,
+                                          sending: sosSending,
+                                          onSos: sendSos,
+                                        ),
+                                      ),
                                       if (operatorAllowed)
                                         Positioned(
-                                          left: 12,
-                                          bottom: 12,
-                                          child: SosRouteBadge(route: sosRoute),
+                                          right: 12,
+                                          bottom: 160,
+                                          child: ValueListenableBuilder<String?>(
+                                            valueListenable: sosArrival,
+                                            builder: (context, message, _) =>
+                                                message == null
+                                                ? const SizedBox.shrink()
+                                                : IconButton.filledTonal(
+                                                    tooltip: message,
+                                                    icon: const Icon(
+                                                      Icons.gps_off,
+                                                      color: Colors.orange,
+                                                    ),
+                                                    onPressed: () =>
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              message,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                  ),
+                                          ),
                                         ),
                                     ],
                                   ),
                                 ),
-                                SosRoutePanel(route: sosRoute),
-                                if (operatorAllowed)
-                                  ValueListenableBuilder<String?>(
-                                    valueListenable: sosArrival,
-                                    builder: (_, message, _) => message == null
-                                        ? const SizedBox.shrink()
-                                        : Padding(
-                                            padding: const EdgeInsets.all(8),
-                                            child: Text(
-                                              message,
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                  ),
                               ],
                             ),
                           ),
@@ -910,41 +919,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           bottomNavigationBar: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (tab < 2)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      if (operatorAllowed)
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: ReinforcementControls.orange,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(220, 50),
-                          ),
-                          onPressed: reinforcements.busy
-                              ? null
-                              : requestReinforcements,
-                          icon: ReinforcementControls.icon(),
-                          label: Text(
-                            reinforcements.busy
-                                ? 'Enviando…'
-                                : reinforcements.mine != null
-                                ? 'Refuerzos solicitados'
-                                : 'Solicitar refuerzos',
-                          ),
-                        )
-                      else
-                        HoldSosButton(busy: sosSending, onComplete: sendSos),
-                    ],
-                  ),
-                ),
               NavigationBar(
                 selectedIndex: tab,
                 onDestinationSelected: (i) {

@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Último cambio: [descarte durante el trayecto, suspensión y controles superpuestos](docs/sos-suspension-and-map-controls.md). Requiere migración 025, backend y APK nuevos.
+
 Actualización: [mapa compacto, refuerzos privados y reevaluación tras llegar al SOS](docs/reinforcements-and-compact-map.md). Requiere migración 024, backend y APK nuevos.
 
 Última mejora: [avisos según atención activa, llegada al ciudadano y llamadas minimizadas](docs/sos-notification-experience.md). Requiere migración 023 antes de desplegar backend e instalar APK nuevo.

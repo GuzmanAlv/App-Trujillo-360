@@ -95,8 +95,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Mapa'), findsOneWidget);
       expect(find.text('Abrir llamada'), findsNothing);
-      expect(find.text('Atención SOS'), findsOneWidget);
-      await tester.tap(find.text('Atención SOS'));
+      expect(find.byTooltip('Abrir llamada SOS'), findsOneWidget);
+      await tester.tap(find.byTooltip('Abrir llamada SOS'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Volver al mapa sin colgar'), findsOneWidget);
       await tester.tap(find.byTooltip('Volver al mapa sin colgar'));

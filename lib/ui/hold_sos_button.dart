@@ -101,9 +101,13 @@ class _HoldSosButtonState extends State<HoldSosButton>
                       : const Icon(Icons.sos, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  widget.busy ? 'Enviando…' : 'SOS · Mantén 3 s',
-                  style: const TextStyle(color: Colors.white),
+                Flexible(
+                  child: Text(
+                    widget.busy ? 'Enviando…' : 'SOS · Mantén 3 s',
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ],
             ),

@@ -90,7 +90,10 @@ class WorkflowClient {
           }
           throw StateError(switch (response.statusCode) {
             401 => 'Sesión vencida. Vuelve a ingresar.',
-            403 => 'Tu cuenta no está autorizada para esta operación.',
+            403 =>
+              path == '/me'
+                  ? 'Tu cuenta está suspendida en Trujillo 360.'
+                  : 'Tu cuenta no está autorizada para esta operación.',
             404 =>
               'Esta función aún no está disponible en el servidor conectado.',
             409 =>

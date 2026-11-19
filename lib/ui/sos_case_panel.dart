@@ -6,6 +6,7 @@ import '../services/sos_alert_state.dart';
 import 'citizen_sos_page.dart';
 import 'report_marker.dart';
 import 'sos_status.dart';
+import 'sos_discard_dialog.dart';
 import 'audio_call_page.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -29,6 +30,7 @@ String caseActionLabel(String action) => switch (action) {
   'pending' => 'Pendiente por información insuficiente',
   'confirm' => 'Incidente confirmado',
   'discard' => 'Alarma descartada',
+  'discard_block' => 'SOS descartado y cuenta suspendida',
   'en_route' => 'Unidad en camino',
   'on_scene' => 'Unidad en la zona',
   'resolve' => 'Atención resuelta',
@@ -61,6 +63,8 @@ class _SosCasePageState extends State<SosCasePage> {
       builder: (_, active, _) => SosIncomingAttention(
         active: active,
         enableSound: false,
+        glowExtent: 28,
+        intensity: .5,
         builder: (_, _) => SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 8, 12, 24),
           child: SosCasePanel(
@@ -345,12 +349,21 @@ class SosCasePanelState extends State<SosCasePanel>
 
   Future<void> save(String action) async {
     if (!editable) return;
+    if (action == 'discard') {
+      final choice = await showDialog<SosDiscardDecision>(
+        context: context,
+        builder: (_) => const SosDiscardDialog(),
+      );
+      if (!mounted || choice == null || !editable) return;
+      action = choice.action;
+      internal.text = choice.reason;
+    }
     final selected = point;
     if (selected == null) {
       setState(() => error = 'Revisa las coordenadas del hecho.');
       return;
     }
-    if (['pending', 'discard'].contains(action) &&
+    if (['pending', 'discard', 'discard_block'].contains(action) &&
         internal.text.trim().length < 5) {
       setState(() => error = 'Explica el motivo en el comentario interno.');
       return;
@@ -361,10 +374,6 @@ class SosCasePanelState extends State<SosCasePanel>
     }
     final question = switch (action) {
       'confirm' => '¿Confirmar y publicar este incidente en el mapa?',
-      'discard' =>
-        data?['decision'] == 'confirmed'
-            ? '¿Descartar el incidente tras comprobar una falsa alarma en el lugar? Se retirará del mapa y se conservará el motivo en el historial.'
-            : '¿Descartar esta alarma? La llamada sin respuesta no demuestra que sea falsa.',
       'on_scene' =>
         '¿Confirmas que el personal ya está en el lugar del incidente?',
       'resolve' =>
@@ -433,6 +442,12 @@ class SosCasePanelState extends State<SosCasePanel>
       if (mounted) setState(() => error = readable(e));
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+    if (mounted && !stale && data?['decision'] == 'discarded') {
+      final call = ActiveCall.session.value;
+      if (call != null && call.callId == widget.caseId && !call.finished) {
+        unawaited(call.finish());
+      }
     }
     if (confirmed != null && mounted && !stale) {
       if (widget.onConfirmed != null) {
@@ -773,13 +788,10 @@ class SosCasePanelState extends State<SosCasePanel>
                       ),
                     ],
                     if (confirmed && d['attention'] != 'resolved') ...[
-                      if (d['attention'] == 'on_scene')
-                        FilledButton.tonal(
-                          onPressed: editable ? () => save('discard') : null,
-                          child: const Text(
-                            'Descartar incidente · falsa alarma',
-                          ),
-                        ),
+                      FilledButton.tonal(
+                        onPressed: editable ? () => save('discard') : null,
+                        child: const Text('Descartar SOS'),
+                      ),
                       OutlinedButton(
                         onPressed: editable ? () => save('resolve') : null,
                         child: const Text('Resolver caso'),

@@ -42,7 +42,7 @@ def test_private_reinforcements_priority_and_on_scene_false_alarm(database):
         return query(operator,'SELECT trujillo.sos_case_update(%s,%s,%s,%s)',(case,uuid4(),version,Jsonb(body)))
     confirmed=update(0,data)
     with pytest.raises(psycopg.errors.RaiseException):query(operator,'SELECT trujillo.reinforcement_destination(%s)',(own['id'],))
-    with pytest.raises(psycopg.errors.RaiseException):update(1,{**data,'action':'discard'})
+    with pytest.raises(psycopg.errors.InvalidParameterValue):update(1,{**data,'action':'discard','internal_note':''})
     arrive(database,query,operator,case,-8.11,-79.03)
     assert query(operator,'SELECT trujillo.reinforcement_destination(%s)',(own['id'],))['id']==own['id']
     with pytest.raises(psycopg.errors.InvalidParameterValue):update(2,{**data,'action':'discard','internal_note':''})

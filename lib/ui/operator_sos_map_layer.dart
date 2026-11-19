@@ -81,13 +81,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           ),
           onTap: () {
             if (row['is_mine'] == true) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Tu solicitud está activa. Puedes finalizarla con el botón inferior.',
-                  ),
-                ),
-              );
+              unawaited(closeOwnReinforcement());
             } else {
               widget.onReinforcement(row, true);
             }
@@ -95,6 +89,33 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         ),
       )
       .toSet();
+  Future<void> closeOwnReinforcement() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text(
+          'Solicitud de refuerzos',
+          style: TextStyle(fontSize: 17),
+        ),
+        content: const Text(
+          '¿Ya no necesitas apoyo? Puedes finalizar la solicitud activa.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Finalizar solicitud'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await widget.reinforcements.closeMine();
+  }
+
   final List<BitmapDescriptor> pendingIcons = [], phoneIcons = [];
   final categoryIcons = <String, List<BitmapDescriptor>>{};
   Map<String, String> categoryIds = {};
