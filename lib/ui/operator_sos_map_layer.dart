@@ -231,7 +231,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         }
         if (row['incident_id'] is String) ids.add(row['incident_id'] as String);
         final markerId = 'operator_sos_${row['id']}';
-        if (row['decision'] == 'confirmed' && row['attention'] == 'en_route') {
+        if (row['decision'] == 'confirmed' &&
+            !['on_scene', 'resolved'].contains(row['attention'])) {
           final category = '${row['category']}';
           if (!categoryIcons.containsKey(category)) {
             final frames = <BitmapDescriptor>[];

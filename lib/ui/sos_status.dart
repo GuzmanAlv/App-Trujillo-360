@@ -36,7 +36,7 @@ import 'package:flutter/material.dart';
           ? (
               label: 'Confirmado',
               color: Colors.teal.shade700,
-              icon: Icons.verified,
+              icon: Icons.warning_rounded,
             )
           : (
               label: 'Pendiente',
