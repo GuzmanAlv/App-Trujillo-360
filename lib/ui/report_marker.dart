@@ -3,6 +3,65 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'report_style.dart';
 
+/// Fixed anchor and canvas keep the location still while the warning breathes.
+Future<Uint8List> renderPendingSosMarker(double pulse) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder)..scale(2);
+  const center = Offset(32, 32);
+  canvas.drawCircle(
+    center,
+    23 + pulse * 5,
+    Paint()..color = Colors.orange.withValues(alpha: .16 + pulse * .20),
+  );
+  canvas.drawCircle(
+    center,
+    24 + pulse * 5,
+    Paint()
+      ..color = Colors.orange.withValues(alpha: .6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2,
+  );
+  canvas.drawPath(
+    Path()
+      ..moveTo(25, 48)
+      ..lineTo(32, 74)
+      ..lineTo(39, 48)
+      ..close(),
+    Paint()..color = const Color(0xffcf2634),
+  );
+  canvas.drawCircle(center, 19 + pulse * 2, Paint()..color = Colors.white);
+  canvas.drawCircle(
+    center,
+    17 + pulse * 2,
+    Paint()..color = const Color(0xffcf2634),
+  );
+  const icon = Icons.warning_rounded;
+  final text = TextPainter(
+    text: TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(
+        fontFamily: icon.fontFamily,
+        package: icon.fontPackage,
+        fontSize: 25 + pulse * 2,
+        color: Colors.white,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  text.paint(canvas, Offset(32 - text.width / 2, 32 - text.height / 2));
+  text.dispose();
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(128, 152);
+  try {
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) throw StateError('No se pudo dibujar SOS');
+    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+  } finally {
+    image.dispose();
+    picture.dispose();
+  }
+}
+
 Future<Uint8List> renderActorMarker(IconData icon, Color color) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder)..scale(2);

@@ -1,3 +1,4 @@
+import 'sos_incoming_attention.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -44,13 +45,16 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
         }
         unawaited(refresh());
       });
-      timer = Timer.periodic(const Duration(seconds: 4), (_) => refresh());
+      timer = Timer.periodic(const Duration(seconds: 4), (_) {
+        if (mounted) setState(() {});
+        unawaited(refresh());
+      });
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    foreground = state == AppLifecycleState.resumed;
+    setState(() => foreground = state == AppLifecycleState.resumed);
     if (foreground) unawaited(refresh());
   }
 
@@ -132,11 +136,19 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
                     false),
           )
           .toList();
-      return IncomingCallView(
-        queue: active == null ? queue : const [],
-        onAccept: accept,
-        onHide: (id) => setState(() => hidden.add(id)),
-        child: widget.child,
+      final shown = active == null && foreground
+          ? queue
+          : <Map<String, dynamic>>[];
+      return SosIncomingAttention(
+        active: allowed && shown.any((r) => r['callback'] != true),
+        builder: (muted, toggleMute) => IncomingCallView(
+          muted: muted,
+          onMute: allowed ? toggleMute : null,
+          queue: shown,
+          onAccept: accept,
+          onHide: (id) => setState(() => hidden.add(id)),
+          child: widget.child,
+        ),
       );
     },
   );
@@ -152,7 +164,11 @@ class IncomingCallView extends StatelessWidget {
     required this.queue,
     required this.onAccept,
     required this.onHide,
+    this.muted = false,
+    this.onMute,
   });
+  final bool muted;
+  final VoidCallback? onMute;
   final Widget child;
   final List<Map<String, dynamic>> queue;
   final ValueChanged<String> onAccept, onHide;
@@ -194,13 +210,25 @@ class IncomingCallView extends StatelessWidget {
                                   child: Text(
                                     queue.first['callback'] == true
                                         ? 'El operador te llama'
-                                        : 'Llamada SOS entrante',
+                                        : 'SOS Alerta',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,
                                     ),
                                   ),
                                 ),
+                                if (onMute != null)
+                                  IconButton(
+                                    tooltip: muted
+                                        ? 'Activar sonido y vibración'
+                                        : 'Silenciar sonido y vibración',
+                                    onPressed: onMute,
+                                    icon: Icon(
+                                      muted
+                                          ? Icons.volume_off
+                                          : Icons.volume_up,
+                                    ),
+                                  ),
                                 IconButton(
                                   tooltip:
                                       'Ocultar aviso; el SOS sigue pendiente',
@@ -213,10 +241,9 @@ class IncomingCallView extends StatelessWidget {
                             Text(
                               queue.first['callback'] == true
                                   ? 'Devolución de llamada de tu caso SOS.'
-                                  : 'Un ciudadano solicita hablar con un operador.',
+                                  : '${queue.length} ${queue.length == 1 ? 'llamada esperando atención' : 'llamadas esperando atención'}',
                             ),
-                            if (queue.length > 1)
-                              Text('${queue.length} llamadas esperando'),
+
                             FilledButton.icon(
                               onPressed: () => onAccept('${queue.first['id']}'),
                               icon: const Icon(Icons.call),

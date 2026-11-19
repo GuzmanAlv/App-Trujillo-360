@@ -22,7 +22,63 @@ class OperatorSosMapLayer extends StatefulWidget {
 }
 
 class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
-  Timer? timer;
+  Timer? timer, pulseTimer;
+  int pulseFrame = 0;
+  final List<BitmapDescriptor> pendingIcons = [];
+  Set<Marker> baseMarkers = {};
+  Set<String> pendingIds = {};
+  Future<void> preparePendingIcons() async {
+    for (final phase in [0.0, .35, .75, 1.0, .75, .35]) {
+      final bytes = await renderPendingSosMarker(phase);
+      if (!mounted) return;
+      pendingIcons.add(
+        BitmapDescriptor.bytes(
+          bytes,
+          imagePixelRatio: 2,
+          width: 64,
+          height: 76,
+        ),
+      );
+    }
+    if (mounted) {
+      setState(() {});
+      configurePulse();
+    }
+  }
+
+  void configurePulse() {
+    pulseTimer?.cancel();
+    pulseTimer = null;
+    if (!widget.enabled ||
+        !widget.active ||
+        pendingIds.isEmpty ||
+        pendingIcons.length != 6 ||
+        MediaQuery.disableAnimationsOf(context)) {
+      return;
+    }
+    pulseTimer = Timer.periodic(const Duration(milliseconds: 220), (_) {
+      if (mounted) {
+        setState(() => pulseFrame = (pulseFrame + 1) % pendingIcons.length);
+      }
+    });
+  }
+
+  Set<Marker> displayedMarkers() => baseMarkers
+      .map(
+        (m) => pendingIds.contains(m.markerId.value) && pendingIcons.isNotEmpty
+            ? m.copyWith(
+                iconParam: pendingIcons[pulseFrame % pendingIcons.length],
+                anchorParam: const Offset(.5, 74 / 76),
+              )
+            : m,
+      )
+      .toSet();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    configurePulse();
+  }
+
   StreamSubscription<User?>? session;
   Set<Marker> markers = {};
   Set<String> incidentIds = {};
@@ -39,8 +95,9 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         unawaited(refresh());
       });
     }
-    timer = Timer.periodic(const Duration(seconds: 15), (_) => refresh());
+    timer = Timer.periodic(const Duration(seconds: 6), (_) => refresh());
     unawaited(refresh());
+    unawaited(preparePendingIcons());
   }
 
   void clear() {
@@ -49,6 +106,9 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     if (mounted) {
       setState(() {
         markers = {};
+        baseMarkers = {};
+        pendingIds = {};
+        pulseTimer?.cancel();
         incidentIds = {};
         note = null;
       });
@@ -58,6 +118,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   @override
   void didUpdateWidget(covariant OperatorSosMapLayer old) {
     super.didUpdateWidget(old);
+    configurePulse();
     if (!widget.enabled) {
       clear();
     } else if (!old.enabled || (!old.active && widget.active)) {
@@ -79,7 +140,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     busy = true;
     try {
       final rows = await WorkflowClient.list('/operator/sos-map');
-      final next = <Marker>{}, ids = <String>{};
+      final next = <Marker>{}, ids = <String>{}, pending = <String>{};
       for (final row in rows) {
         final style = sosStyle(row);
         final key = style.label;
@@ -107,6 +168,9 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           continue;
         }
         if (row['incident_id'] is String) ids.add(row['incident_id'] as String);
+        if (row['decision'] == 'pending' && row['support_requested'] != true) {
+          pending.add('operator_sos_${row['id']}');
+        }
         next.add(
           Marker(
             markerId: MarkerId('operator_sos_${row['id']}'),
@@ -128,14 +192,20 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           FirebaseAuth.instance.currentUser?.uid == uid) {
         setState(() {
           markers = next;
+          baseMarkers = next;
+          pendingIds = pending;
           incidentIds = ids;
           note = null;
         });
+        configurePulse();
       }
     } catch (_) {
       if (mounted && ticket == generation) {
         setState(() {
           markers = {};
+          baseMarkers = {};
+          pendingIds = {};
+          pulseTimer?.cancel();
           incidentIds = {};
           note = 'No se pudieron actualizar los SOS del operador.';
         });
@@ -157,6 +227,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   void dispose() {
     generation++;
     timer?.cancel();
+    pulseTimer?.cancel();
     session?.cancel();
     super.dispose();
   }
@@ -166,7 +237,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     fit: StackFit.expand,
     children: [
       widget.builder(
-        widget.enabled ? markers : {},
+        widget.enabled ? displayedMarkers() : {},
         widget.enabled ? incidentIds : {},
       ),
       if (widget.enabled)
@@ -188,7 +259,10 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        note ?? 'SOS privados · ${markers.length}',
+                        note ??
+                            (pendingIds.isNotEmpty
+                                ? 'SOS Alerta · ${pendingIds.length} pendientes'
+                                : 'SOS privados · ${markers.length}'),
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),

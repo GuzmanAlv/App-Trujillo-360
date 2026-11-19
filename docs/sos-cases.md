@@ -1,10 +1,20 @@
 # Evaluación y atención del SOS
 
+## Alerta de llamadas pendientes en primer plano
+
+Con la app abierta, una llamada SOS esperando atención activa un borde rojo pulsante alrededor de la interfaz del operador, doble pitido breve y vibración cada cuatro segundos. Un solo aviso «SOS Alerta» agrupa la cola y permite tomar la primera llamada. El botón de sonido silencia pitido y vibración durante ese episodio; el borde sigue visible. Ocultar un aviso no descarta el caso.
+
+Al tomar una llamada, salir de la app, cerrar sesión o dejar de haber llamadas esperando, se detiene la alarma. Android cancela los efectos al pausar la actividad y limita el aviso a una concesión de 12 segundos que la app renueva mientras sigue activa. Se respetan el volumen de notificaciones, modo silencioso y No molestar. No se implementó una nueva alarma en segundo plano; se mantienen los avisos FCM existentes.
+
+Los marcadores pendientes del mapa privado utilizan advertencia roja, halo naranja y una pulsación suave de tamaño con la punta anclada a la ubicación. Las imágenes se preparan una vez y se reutilizan para todos los pendientes. La capa consulta cambios cada seis segundos y pausa la animación cuando el mapa no está activo. Reducir animaciones en el teléfono deja una representación estática. Los casos con apoyo solicitado conservan su icono de apoyo para distinguirlos.
+
+Activación de esta mejora: instalar el APK nuevo en el teléfono del operador. No requiere nuevas migraciones ni cambios en Render sobre la versión que ya contiene `/operator/sos-map`. Probar en un Android real el volumen, doble pitido, vibración, botón de silenciar, llegada de varias llamadas y apagado al aceptar o poner la app en segundo plano.
+
 ## SOS privados en el mapa del operador
 
 Las cuentas de operador ven los SOS activos de Ayuda sobre el mapa reciente. Cada marcador conserva el color/icono del estado (incluido apoyo solicitado), utiliza el punto del hecho corregido y abre la ficha del caso al tocarlo. Los casos cerrados o descartados se conservan en Ayuda y no se muestran en esta capa. Si existe un incidente público vinculado, el operador ve un solo marcador del SOS.
 
-La capa se actualiza cada 15 segundos mientras el mapa está activo, al volver a él y al cerrar una ficha. El botón «Actualizar casos SOS» permite actualizarla manualmente. Cambiar o cerrar sesión borra los marcadores privados. El endpoint `/operator/sos-map` comprueba el rol activo en PostgreSQL y devuelve únicamente ID, posición, estado y vínculo del incidente; las cuentas ciudadanas no tienen acceso. La consulta usa la misma bandeja autorizada y su límite de 200 casos.
+La capa se actualiza cada seis segundos mientras el mapa está activo, al volver a él y al cerrar una ficha. El botón «Actualizar casos SOS» permite actualizarla manualmente. Cambiar o cerrar sesión borra los marcadores privados. El endpoint `/operator/sos-map` comprueba el rol activo en PostgreSQL y devuelve únicamente ID, posición, estado y vínculo del incidente; las cuentas ciudadanas no tienen acceso. La consulta usa la misma bandeja autorizada y su límite de 200 casos.
 
 Activación: desplegar el backend nuevo e instalar el APK actualizado. No requiere una migración adicional si ya se aplicaron 018 y 019. La comprobación automatizada usa PostgreSQL/PostGIS temporal y verifica rechazo a ciudadanos, ubicación corregida, privacidad de notas y retirada de casos descartados.
 

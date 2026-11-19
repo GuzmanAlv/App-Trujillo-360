@@ -17,6 +17,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private val incomingAlarm by lazy { SosIncomingAlarm(this) }
+    private var activityVisible = false
     private var channel: MethodChannel? = null
     private var permissionResult: MethodChannel.Result? = null
     private val alertChannel = "nearby_incidents"
@@ -32,6 +34,11 @@ class MainActivity : FlutterActivity() {
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "sosIncomingAlarm" -> {
+                    if (call.argument<Boolean>("enabled") == true && activityVisible) incomingAlarm.start()
+                    else incomingAlarm.stop()
+                    result.success(null)
+                }
                 "sosVolumeStatus" -> {
                     val (enabled, testOnly) = SosVolumeConfig.read(this)
                     val accessibility = getSystemService(AccessibilityManager::class.java)
@@ -119,6 +126,22 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        activityVisible = true
+    }
+
+    override fun onPause() {
+        activityVisible = false
+        incomingAlarm.stop()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        incomingAlarm.stop()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

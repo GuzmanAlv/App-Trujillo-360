@@ -62,7 +62,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip(tooltip));
       await tester.pumpAndSettle();
-      expect(find.text('Llamada SOS entrante'), findsNothing);
+      expect(find.text('SOS Alerta'), findsNothing);
       expect(find.text('Otra pantalla'), findsOneWidget);
       navigator.currentState!.pop();
       await tester.pumpAndSettle();
