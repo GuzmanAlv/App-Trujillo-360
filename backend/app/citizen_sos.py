@@ -21,6 +21,11 @@ def own_cases(response:Response,claims=Depends(identity)):
     private(response)
     return execute(claims,'SELECT trujillo.citizen_sos_cases()',many=True)
 
+@router.get('/incidents/nearby-sos')
+def nearby_sos(response:Response,latitude:float=Query(ge=-90,le=90,allow_inf_nan=False),longitude:float=Query(ge=-180,le=180,allow_inf_nan=False),claims=Depends(identity)):
+    private(response)
+    return execute(claims,'SELECT trujillo.nearby_sos(%s,%s)',(latitude,longitude),many=True)
+
 @router.get('/my-sos/history')
 def own_history(response:Response,limit:int=Query(default=50,ge=1,le=100),offset:int=Query(default=0,ge=0),claims=Depends(identity)):
     private(response)

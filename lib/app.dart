@@ -889,9 +889,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                   const SizedBox(height: 16),
                                   Expanded(
                                     child: ReportsPanel(
-                                      store: widget.store,
                                       filter: filter,
-                                      onReport: details,
                                       active: tab == 1,
                                       nearby: nearby,
                                       onSessionChanged:

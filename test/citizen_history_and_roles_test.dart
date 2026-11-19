@@ -140,7 +140,9 @@ void main() {
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
       expect(
-        find.text('Tu historial, incluidos los casos resueltos.'),
+        find.text(
+          'Tus solicitudes SOS, incluidas las confirmadas y resueltas.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Historial de SOS'), findsOneWidget);

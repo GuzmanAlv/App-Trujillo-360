@@ -43,7 +43,8 @@ Incident incident(String id, double lat) => Incident(
   latitude: lat,
   longitude: -79.02,
   createdAt: DateTime.now(),
-  remoteStatus: 'corroborated',
+  remoteStatus: 'verified',
+  isSos: true,
   corroborationCount: 3,
 );
 void main() {
@@ -84,7 +85,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cerca de mí'));
       await tester.pumpAndSettle();
-      expect(find.text('Robo · Comunidad'), findsOneWidget);
+      expect(find.text('SOS · Robo'), findsOneWidget);
       expect(location.events.hasListener, isTrue);
       await tester.tap(find.text('Mapa'));
       await tester.pumpAndSettle();
@@ -99,7 +100,7 @@ void main() {
     },
   );
   testWidgets(
-    'Cerca de mí combina corroboración, categoría y 1 km sin afectar Mis reportes',
+    'Cerca de mí combina corroboración, categoría y 1 km sin afectar Mis Solicitudes',
     (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -112,7 +113,7 @@ void main() {
       Incident entry(
         String id, {
         String type = 'Robo',
-        String status = 'corroborated',
+        String status = 'verified',
         int count = 3,
         double lat = -8.1101,
       }) => Incident.fromJson({
@@ -148,17 +149,20 @@ void main() {
       await tester.tap(find.text('Cerca de mí'));
       await tester.pumpAndSettle();
       expect(find.text('Robo · pendiente'), findsNothing);
-      expect(find.text('Robo · confirmado'), findsOneWidget);
-      expect(find.text('Auxilio · auxilio'), findsOneWidget);
+      expect(find.text('SOS · Robo'), findsOneWidget);
+      expect(find.text('SOS · Auxilio'), findsOneWidget);
       expect(find.text('Robo · lejano'), findsNothing);
       await tester.tap(find.text('Robo'));
       await tester.pumpAndSettle();
-      expect(find.text('Auxilio · auxilio'), findsNothing);
-      expect(find.text('Robo · confirmado'), findsOneWidget);
-      await tester.tap(find.text('Mis reportes'));
+      expect(find.text('SOS · Auxilio'), findsNothing);
+      expect(find.text('SOS · Robo'), findsOneWidget);
+      await tester.tap(find.text('Mis Solicitudes'));
       await tester.pumpAndSettle();
       expect(find.text('Corroborados'), findsNothing);
-      expect(find.text('Inicia sesión para ver tus reportes.'), findsOneWidget);
+      expect(
+        find.text('Inicia sesión para ver tu historial SOS.'),
+        findsOneWidget,
+      );
       await tester.pumpWidget(const SizedBox.shrink());
       await location.events.close();
       local.dispose();

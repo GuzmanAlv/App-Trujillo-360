@@ -1,5 +1,8 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización: [solo SOS en Mis Solicitudes y Cerca de mí](sos-only-requests.md).
+Requiere migración 028 y actualizar backend/APK. `/ready` incluye `nearby_sos_version: 1`.
+
 Actualización: [historial ciudadano y navegación por rol](citizen-history-and-role-navigation.md).
 Requiere migración 027 y actualizar backend/APK. `/ready` incluye `citizen_history_version: 1`.
 
