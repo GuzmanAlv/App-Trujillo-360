@@ -1,5 +1,13 @@
 # Evaluación y atención del SOS
 
+## Recuadro unificado de llamadas y casos pendientes
+
+El rótulo superior «SOS Ayuda solicitada» reúne llamadas que siguen esperando y todos los SOS que siguen pendientes de decisión, aunque la llamada haya terminado. Por ello también conserva los casos que esperaron 30 segundos o más sin respuesta. Abrir o atender una llamada no los retira de esta lista mientras el caso continúe pendiente. Confirmar o descartar los retira, salvo que todavía exista una llamada activa esperando.
+
+Con un solo caso, tocar el rótulo centra el mapa y el botón pequeño «Evaluar caso SOS» abre directamente la ficha. Con varios, el rótulo despliega tarjetas: tocar la tarjeta o «Ver ubicación» centra el mapa; «Evaluar caso SOS» abre la evaluación sin requerir otro toque en el marcador. La lista distingue «Llamada en espera» de «Pendiente de evaluación» y muestra las llamadas vivas primero.
+
+Este cambio usa los estados ya disponibles del backend. No modifica la caducidad de las llamadas ni agrega migraciones. Requiere instalar el APK actualizado en el dispositivo del operador. Las secciones anteriores sobre un rótulo exclusivo para llamadas vivas describen el comportamiento histórico sustituido por esta sección.
+
 ## Evaluación simplificada y cabecera compacta
 
 La evaluación muestra el botón rojo «Tomar / abrir llamada» arriba de «Caso SOS», con un resplandor pequeño pulsante. Si ya terminó, conserva la devolución «Llamar al usuario». La alarma continúa en la ficha mientras el caso esté pendiente y se pausa al entrar a la llamada. Mapa y ficha coordinan la alarma por propietario para evitar que el mapa oculto cancele el sonido de la ficha; se mantienen la pausa al salir de la app y los controles de Android.

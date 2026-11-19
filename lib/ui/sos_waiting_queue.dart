@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Only live waiting calls belong here. Missed SOS remain on the map itself.
+/// Live calls and unresolved SOS share the queue; map and evaluation are distinct actions.
 class SosWaitingQueue extends StatefulWidget {
   const SosWaitingQueue({
     super.key,
@@ -9,8 +9,13 @@ class SosWaitingQueue extends StatefulWidget {
     required this.muted,
     required this.onMute,
     required this.onRefresh,
+    this.onOpen,
+    this.waitingCalls = const {},
   });
   final List<String> calls;
+  final Map<String, bool> waitingCalls;
+  final ValueChanged<String>? onOpen;
+  bool waiting(String id) => waitingCalls[id] ?? true;
   final ValueChanged<String> onSelect;
   final bool muted;
   final VoidCallback onMute;
@@ -25,6 +30,11 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
   void didUpdateWidget(covariant SosWaitingQueue old) {
     super.didUpdateWidget(old);
     if (widget.calls.length <= 1) expanded = false;
+  }
+
+  void open(String id) {
+    setState(() => expanded = false);
+    widget.onOpen?.call(id);
   }
 
   void select(String id) {
@@ -63,8 +73,10 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(
-                            Icons.phone_in_talk,
+                          Icon(
+                            widget.calls.any(widget.waiting)
+                                ? Icons.phone_in_talk
+                                : Icons.warning_rounded,
                             color: Colors.white,
                             size: 20,
                           ),
@@ -98,6 +110,13 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
                     ),
                   ),
                 ),
+                if (widget.calls.length == 1 && widget.onOpen != null)
+                  IconButton(
+                    tooltip: 'Evaluar caso SOS',
+                    onPressed: () => open(widget.calls.single),
+                    color: Colors.white,
+                    icon: const Icon(Icons.assignment_outlined, size: 20),
+                  ),
                 IconButton(
                   tooltip: widget.muted
                       ? 'Activar sonido y vibración'
@@ -131,18 +150,43 @@ class _SosWaitingQueueState extends State<SosWaitingQueue> {
                       borderRadius: BorderRadius.circular(12),
                       child: ListTile(
                         dense: true,
-                        leading: const Icon(
-                          Icons.phone_in_talk,
+                        leading: Icon(
+                          widget.waiting(widget.calls[index])
+                              ? Icons.phone_in_talk
+                              : Icons.warning_rounded,
                           color: Colors.red,
                         ),
                         title: Text(
-                          'Llamada SOS ${index + 1}',
+                          '${widget.waiting(widget.calls[index]) ? 'Llamada SOS' : 'Caso SOS'} ${index + 1}',
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        subtitle: const Text('En espera · ver ubicación'),
-                        trailing: const Icon(
-                          Icons.my_location,
-                          color: Colors.red,
+                        subtitle: Text(
+                          widget.waiting(widget.calls[index])
+                              ? 'Llamada en espera'
+                              : 'Pendiente de evaluación',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Ver ubicación',
+                              onPressed: () => select(widget.calls[index]),
+                              icon: const Icon(
+                                Icons.my_location,
+                                color: Colors.red,
+                                size: 20,
+                              ),
+                            ),
+                            if (widget.onOpen != null)
+                              IconButton.filledTonal(
+                                tooltip: 'Evaluar caso SOS',
+                                onPressed: () => open(widget.calls[index]),
+                                icon: const Icon(
+                                  Icons.assignment_outlined,
+                                  size: 20,
+                                ),
+                              ),
+                          ],
                         ),
                         onTap: () => select(widget.calls[index]),
                       ),

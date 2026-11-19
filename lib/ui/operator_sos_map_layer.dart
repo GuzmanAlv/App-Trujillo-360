@@ -33,10 +33,15 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   final List<BitmapDescriptor> pendingIcons = [], phoneIcons = [];
   Set<String> phoneIds = {}, urgentIds = {};
   int alertCount = 0;
+  Map<String, bool> queueStates = {};
+  List<String> get queueIds => [
+    ...queueStates.keys.where((id) => queueStates[id] == true),
+    ...queueStates.keys.where((id) => queueStates[id] != true),
+  ];
   SosMapFocus? focus;
   int focusRevision = 0;
   void focusCaller(String id) {
-    if (!widget.enabled || !phoneIds.contains(id)) return;
+    if (!widget.enabled || !queueStates.containsKey(id)) return;
     final matching = baseMarkers.where((m) => m.markerId.value == id);
     if (matching.isEmpty) return;
     setState(
@@ -145,6 +150,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         phoneIds = {};
         urgentIds = {};
         alertCount = 0;
+        queueStates = {};
         focus = null;
         pulseTimer?.cancel();
         incidentIds = {};
@@ -184,6 +190,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           phones = <String>{},
           urgent = <String>{};
       var alerts = 0;
+      final nextQueue = <String, bool>{};
       for (final row in rows) {
         final style = sosStyle(row);
         final key = style.label;
@@ -213,6 +220,9 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         if (row['incident_id'] is String) ids.add(row['incident_id'] as String);
         final markerId = 'operator_sos_${row['id']}';
         final waiting = row['call_waiting'] == true;
+        if (waiting || row['decision'] == 'pending') {
+          nextQueue[markerId] = waiting;
+        }
         final needsAttention = needsOperatorSosAlert(row);
         if (needsAttention) {
           alerts++;
@@ -252,6 +262,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           phoneIds = phones;
           urgentIds = urgent;
           alertCount = alerts;
+          queueStates = nextQueue;
           incidentIds = ids;
           note = null;
         });
@@ -266,6 +277,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           phoneIds = {};
           urgentIds = {};
           alertCount = 0;
+          queueStates = {};
           focus = null;
           pulseTimer?.cancel();
           incidentIds = {};
@@ -307,7 +319,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
             widget.enabled ? incidentIds : {},
             widget.enabled ? focus : null,
           ),
-          if (widget.enabled && phoneIds.isNotEmpty)
+          if (widget.enabled && queueStates.isNotEmpty)
             Positioned(
               top: 8,
               left: 8,
@@ -315,7 +327,10 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
               child: Align(
                 alignment: Alignment.topCenter,
                 child: SosWaitingQueue(
-                  calls: phoneIds.toList(growable: false),
+                  calls: queueIds,
+                  waitingCalls: queueStates,
+                  onOpen: (id) =>
+                      openCase(id.replaceFirst('operator_sos_', '')),
                   onSelect: focusCaller,
                   muted: muted,
                   onMute: toggleMute,
@@ -323,7 +338,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                 ),
               ),
             ),
-          if (widget.enabled && phoneIds.isEmpty)
+          if (widget.enabled && queueStates.isEmpty)
             Positioned(
               top: 8,
               right: 8,
