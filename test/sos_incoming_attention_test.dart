@@ -2,8 +2,33 @@ import 'package:alerta_ciudadana/ui/sos_incoming_attention.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:alerta_ciudadana/services/sos_alarm.dart';
 
 void main() {
+  test('Pasar del mapa a la ficha no cancela la alarma de la ficha', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel('trujillo360/proximity');
+    final sent = <bool>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          sent.add((call.arguments as Map)['enabled'] as bool);
+          return null;
+        });
+    final map = Object(), page = Object();
+    try {
+      await SosAlarm.update(map, true);
+      await SosAlarm.update(page, true);
+      await SosAlarm.update(map, false);
+      expect(sent.last, isTrue);
+      await SosAlarm.update(page, false);
+      expect(sent.last, isFalse);
+    } finally {
+      await SosAlarm.update(map, false);
+      await SosAlarm.update(page, false);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    }
+  });
   testWidgets(
     'Alarma se silencia, se renueva y se detiene al desaparecer la llamada',
     (tester) async {
@@ -12,8 +37,9 @@ void main() {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
         call,
       ) async {
-        if (call.method == 'sosIncomingAlarm')
+        if (call.method == 'sosIncomingAlarm') {
           enabled.add((call.arguments as Map)['enabled'] as bool);
+        }
         return null;
       });
       addTearDown(

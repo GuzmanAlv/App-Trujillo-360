@@ -81,8 +81,14 @@ class SosStatusBadge extends StatelessWidget {
 }
 
 class SosSupportFrame extends StatefulWidget {
-  const SosSupportFrame({super.key, required this.active, required this.child});
+  const SosSupportFrame({
+    super.key,
+    required this.active,
+    required this.child,
+    this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+  });
   final bool active;
+  final EdgeInsetsGeometry margin;
   final Widget child;
   @override
   State<SosSupportFrame> createState() => _SosSupportFrameState();
@@ -125,7 +131,7 @@ class _SosSupportFrameState extends State<SosSupportFrame>
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: animation,
     builder: (_, child) => Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: widget.margin,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         border: widget.active ? Border.all(color: Colors.red, width: 2) : null,

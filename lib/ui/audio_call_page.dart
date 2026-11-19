@@ -1,3 +1,4 @@
+import 'operator_call_bar.dart';
 import 'call_page_layout.dart';
 import 'sos_case_panel.dart';
 import '../services/active_call.dart';
@@ -253,6 +254,24 @@ class _AudioCallPageState extends State<AudioCallPage> {
     super.dispose();
   }
 
+  Future<void> toggleMicrophone() async {
+    try {
+      await room.localParticipant?.setMicrophoneEnabled(muted);
+      if (mounted) setState(() => muted = !muted);
+    } catch (e) {
+      showFailure(e);
+    }
+  }
+
+  Future<void> toggleSpeaker() async {
+    try {
+      await AudioManager.instance.setSpeakerOutputPreferred(!speaker);
+      if (mounted) setState(() => speaker = !speaker);
+    } catch (e) {
+      showFailure(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: allowPop,
@@ -263,6 +282,19 @@ class _AudioCallPageState extends State<AudioCallPage> {
       appBar: AppBar(title: const Text('Llamada SOS'), centerTitle: true),
       body: SafeArea(
         child: CallPageLayout(
+          compactControls: widget.operator
+              ? OperatorCallBar(
+                  message: message,
+                  muted: muted,
+                  speaker: speaker,
+                  finished: finished,
+                  closing: closing,
+                  connected: joined,
+                  onMute: toggleMicrophone,
+                  onSpeaker: toggleSpeaker,
+                  onHangUp: () => finish(),
+                )
+              : null,
           controls: DecoratedBox(
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,

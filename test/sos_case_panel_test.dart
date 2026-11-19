@@ -35,7 +35,11 @@ void main() {
     'Confirmación conserva GPS del teléfono y reintenta el mismo identificador',
     (tester) async {
       final sent = <Map<String, dynamic>>[];
-      final data = initial();
+      final data = {
+        ...initial(),
+        'place': 'Plaza de prueba',
+        'public_description': 'Incidente confirmado',
+      };
       Future<dynamic> request(
         String method,
         String path, {
@@ -64,19 +68,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await enter(tester, 'Referencia del lugar (opcional)', 'Plaza de prueba');
-      await enter(
-        tester,
-        'Descripción pública (opcional)',
-        'Incidente confirmado',
-      );
+      expect(field('Referencia del lugar (opcional)'), findsNothing);
+      expect(field('Descripción pública (opcional)'), findsNothing);
+      expect(find.text('Solicitar más patrullas'), findsNothing);
       await enter(
         tester,
         'Comentario interno · solo operadores',
         'Nota confidencial',
       );
-      await tester.ensureVisible(find.text('Confirmar incidente'));
-      await tester.tap(find.text('Confirmar incidente'));
+      await tester.ensureVisible(find.text('Confirmar SOS'));
+      await tester.tap(find.text('Confirmar SOS'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirmar'));
       await tester.pumpAndSettle();
@@ -117,7 +118,7 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Confirmar incidente'),
+              find.widgetWithText(FilledButton, 'Confirmar SOS'),
             )
             .onPressed,
         isNull,

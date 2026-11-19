@@ -1,5 +1,15 @@
 # Evaluación y atención del SOS
 
+## Evaluación simplificada y cabecera compacta
+
+La evaluación muestra el botón rojo «Tomar / abrir llamada» arriba de «Caso SOS», con un resplandor pequeño pulsante. Si ya terminó, conserva la devolución «Llamar al usuario». La alarma continúa en la ficha mientras el caso esté pendiente y se pausa al entrar a la llamada. Mapa y ficha coordinan la alarma por propietario para evitar que el mapa oculto cancele el sonido de la ficha; se mantienen la pausa al salir de la app y los controles de Android.
+
+El título tiene mayor peso y el estado ocupa el extremo derecho de la fila. Antes de confirmar, el formulario muestra únicamente tipo de incidente y comentario interno, con campos blancos y bordes redondeados. «Confirmar SOS» es rojo y «Descartar alarma» es gris. Se retiraron los campos de referencia/descripcion pública y el botón para solicitar patrullas de esta ficha; los datos históricos de esos campos se conservan. La atención posterior mantiene sus acciones de camino, llegada y cierre.
+
+Durante la llamada, desplazarse hacia el formulario reduce la cabecera «Atención SOS» a una barra fijada arriba, con micrófono, altavoz y colgar. El cambio visual reutiliza la misma conexión de audio. En una ventana corta (por ejemplo teclado visible) se utiliza directamente la barra compacta. La pantalla ciudadana conserva su presentación centrada.
+
+Esta mejora requiere instalar el APK actualizado; no añade migraciones ni rutas del backend. La integración con Google Routes y el regreso automático al mapa con una ruta quedan aplazados por decisión del usuario.
+
 ## Seguimiento del ciudadano y persistencia de pendientes
 
 La luz, sonido y pulsación del marcador del operador dependen de `decision=pending`, incluso después de aceptar y terminar una llamada. Atender, colgar o retroceder no verifica ni descarta el caso. La alerta se pausa mientras se conversa o se abre otra pantalla y regresa al mapa si el caso sigue pendiente. Confirmar o descartar quita esa alerta; las peticiones explícitas de apoyo conservan su aviso propio.

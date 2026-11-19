@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../services/sos_alarm.dart';
 
 class SosIncomingAttention extends StatefulWidget {
   const SosIncomingAttention({
@@ -10,9 +10,11 @@ class SosIncomingAttention extends StatefulWidget {
     required this.builder,
     this.enableSound = true,
     this.glowColor = const Color(0xffff0028),
+    this.enableGlow = true,
   });
   final bool active, enableSound;
   final Color glowColor;
+  final bool enableGlow;
   final Widget Function(bool muted, VoidCallback toggleMute) builder;
   @override
   State<SosIncomingAttention> createState() => _SosIncomingAttentionState();
@@ -20,7 +22,7 @@ class SosIncomingAttention extends StatefulWidget {
 
 class _SosIncomingAttentionState extends State<SosIncomingAttention>
     with SingleTickerProviderStateMixin {
-  static const channel = MethodChannel('trujillo360/proximity');
+  final alarmOwner = Object();
   late final animation = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -33,13 +35,7 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
         defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
-    try {
-      await channel.invokeMethod<void>('sosIncomingAlarm', {
-        'enabled': enabled,
-      });
-    } catch (_) {
-      /* Visual alert remains usable. */
-    }
+    await SosAlarm.update(alarmOwner, enabled);
   }
 
   void update() {
@@ -50,7 +46,9 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
     if (active) {
       lease = Timer.periodic(const Duration(seconds: 8), (_) => signal(true));
     }
-    if (widget.active && !MediaQuery.disableAnimationsOf(context)) {
+    if (widget.enableGlow &&
+        widget.active &&
+        !MediaQuery.disableAnimationsOf(context)) {
       if (!animation.isAnimating) animation.repeat(reverse: true);
     } else {
       animation.stop();
@@ -81,87 +79,91 @@ class _SosIncomingAttentionState extends State<SosIncomingAttention>
     super.dispose();
   }
 
+  void toggleMute() {
+    setState(() => muted = !muted);
+    update();
+  }
+
   @override
-  Widget build(BuildContext context) => Stack(
-    fit: StackFit.expand,
-    children: [
-      widget.builder(muted, () {
-        setState(() => muted = !muted);
-        update();
-      }),
-      if (widget.active)
-        Positioned.fill(
-          child: IgnorePointer(
-            child: AnimatedBuilder(
-              animation: animation,
-              builder: (context, child) {
-                final red = const Color(
-                  0xffff0028,
-                ).withValues(alpha: .28 + animation.value * .42);
-                return Stack(
-                  children: [
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 52,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [red, Colors.transparent],
+  Widget build(BuildContext context) => !widget.enableGlow
+      ? widget.builder(muted, toggleMute)
+      : Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.builder(muted, toggleMute),
+            if (widget.enableGlow && widget.active)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: animation,
+                    builder: (context, child) {
+                      final red = const Color(
+                        0xffff0028,
+                      ).withValues(alpha: .28 + animation.value * .42);
+                      return Stack(
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: 52,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [red, Colors.transparent],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: 52,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [red, Colors.transparent],
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            height: 52,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [red, Colors.transparent],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      left: 0,
-                      width: 52,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [red, Colors.transparent],
+                          Positioned(
+                            top: 0,
+                            bottom: 0,
+                            left: 0,
+                            width: 52,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [red, Colors.transparent],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      right: 0,
-                      width: 52,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.transparent, red],
+                          Positioned(
+                            top: 0,
+                            bottom: 0,
+                            right: 0,
+                            width: 52,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Colors.transparent, red],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-    ],
-  );
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+          ],
+        );
 }
