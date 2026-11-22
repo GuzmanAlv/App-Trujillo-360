@@ -575,14 +575,17 @@ class SosCasePanelState extends State<SosCasePanel>
                           (ModalRoute.isCurrentOf(context) ?? true),
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xffce2333),
+                          backgroundColor: ['ended', 'unanswered'].contains(d['call_state'])
+                              ? const Color(0xff16834a)
+                              : const Color(0xffce2333),
                           foregroundColor: Colors.white,
                           minimumSize: const Size.fromHeight(54),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        icon: const Icon(Icons.call),
+                        icon: Icon(['ended', 'unanswered'].contains(d['call_state'])
+                            ? Icons.call_rounded : Icons.call),
                         label: Text(
                           ['ended', 'unanswered'].contains(d['call_state'])
                               ? 'Llamar al usuario'

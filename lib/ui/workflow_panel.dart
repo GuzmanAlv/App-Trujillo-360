@@ -86,7 +86,7 @@ class _OperatorPortalState extends State<OperatorPortal> {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 3,
+    length: 2,
     child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.embedded,
@@ -97,7 +97,6 @@ class _OperatorPortalState extends State<OperatorPortal> {
                 isScrollable: true,
                 tabs: [
                   Tab(text: 'Ayuda'),
-                  Tab(text: 'Revisar reportes'),
                   Tab(text: 'Cámaras / IA'),
                 ],
               )
@@ -128,7 +127,6 @@ class _OperatorPortalState extends State<OperatorPortal> {
           : TabBarView(
               children: [
                 WorkflowPanel(operator: true, onDenied: check),
-                WorkflowPanel(operator: true, incidents: true, onDenied: check),
                 AiDetectionPanel(store: ai),
               ],
             ),

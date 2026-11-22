@@ -67,6 +67,16 @@ class _AudioCallPageState extends State<AudioCallPage> {
   }
 
   Future<void> begin() => session.begin();
+  Future<void> redial() async {
+    if (closing || !finished ||
+        !(await caseKey.currentState?.mayLeave() ?? true) || !mounted) {
+      return;
+    }
+    await Navigator.of(context).pushReplacement<void, void>(
+      MaterialPageRoute(builder: (_) => AudioCallPage(
+        callId: widget.callId, operator: true, callback: true)),
+    );
+  }
   Future<void> toggleMicrophone() => session.toggleMicrophone();
   Future<void> toggleSpeaker() => session.toggleSpeaker();
   Future<void> finish({bool exit = false}) async {
@@ -248,19 +258,22 @@ class _AudioCallPageState extends State<AudioCallPage> {
                     ),
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xffba303a),
+                      backgroundColor: widget.operator && finished
+                          ? const Color(0xff16834a)
+                          : const Color(0xffba303a),
                       foregroundColor: Colors.white,
                       minimumSize: const Size(200, 48),
                     ),
-                    onPressed: closing || (widget.operator && finished)
-                        ? null
+                    onPressed: closing ? null : widget.operator && finished
+                        ? redial
                         : () => finish(),
-                    icon: const Icon(Icons.call_end),
+                    icon: Icon(widget.operator && finished
+                        ? Icons.call_rounded : Icons.call_end),
                     label: Text(
                       closing
                           ? 'Cerrando…'
                           : widget.operator
-                          ? (finished ? 'Audio cerrado' : 'Finalizar llamada')
+                          ? (finished ? 'Volver a llamar' : 'Finalizar llamada')
                           : 'Finalizar y volver',
                     ),
                   ),
