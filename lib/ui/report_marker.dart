@@ -39,7 +39,7 @@ Future<Uint8List> renderPendingSosMarker(
   canvas.drawCircle(center, 17 + pulse * 2, Paint()..color = color);
   final icon =
       (patrol ? Icons.directions_car_filled : symbol) ??
-      (waitingCall ? Icons.phone_in_talk_rounded : Icons.warning_rounded);
+      (waitingCall ? Icons.sos : Icons.warning_rounded);
   final text = TextPainter(
     text: TextSpan(
       text: String.fromCharCode(icon.codePoint),

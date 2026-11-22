@@ -7,6 +7,8 @@ import 'sos_incoming_attention.dart';
 import 'sos_progress_feedback.dart';
 import '../services/active_call.dart';
 import 'dart:async';
+import 'dart:math' as math;
+import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -123,6 +125,10 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   Set<String> phoneIds = {}, urgentIds = {};
   int alertCount = 0;
   Map<String, bool> queueStates = {};
+  Map<String, int> queueMinutes = {};
+  String? accepting;
+  Position? lastPosition;
+  DateTime? positionAt;
   List<String> get queueIds => [
     ...queueStates.keys.where((id) => queueStates[id] == true),
     ...queueStates.keys.where((id) => queueStates[id] != true),
@@ -264,6 +270,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         urgentIds = {};
         alertCount = 0;
         queueStates = {};
+        queueMinutes = {};
+        accepting = null;
         focus = null;
         pulseTimer?.cancel();
         incidentIds = {};
@@ -296,6 +304,17 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     final ticket = ++generation;
     busy = true;
     try {
+      if (positionAt == null || DateTime.now().difference(positionAt!) > const Duration(seconds: 30)) {
+        positionAt = DateTime.now();
+        try {
+          if (await Geolocator.isLocationServiceEnabled() &&
+              await Geolocator.checkPermission() != LocationPermission.denied &&
+              await Geolocator.checkPermission() != LocationPermission.deniedForever) {
+            lastPosition = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(timeLimit: Duration(seconds: 5)));
+          }
+        } catch (_) { lastPosition = null; }
+      }
       final rows = await WorkflowClient.list('/operator/sos-map');
       final next = <Marker>{},
           ids = <String>{},
@@ -304,6 +323,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgent = <String>{};
       var alerts = 0;
       final nextQueue = <String, bool>{};
+      final nextMinutes = <String, int>{};
       final categories = <String, String>{};
       for (final row in rows) {
         final style = sosStyle(row);
@@ -360,8 +380,14 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           categories[markerId] = category;
         }
         final waiting = row['call_waiting'] == true;
-        if (waiting || row['decision'] == 'pending') {
+        if (row['available'] == true) {
           nextQueue[markerId] = waiting;
+          if (lastPosition != null) {
+            final meters = Geolocator.distanceBetween(lastPosition!.latitude,
+              lastPosition!.longitude, lat, lng);
+            // Road travel estimate; actual route is shown after confirmation.
+            nextMinutes[markerId] = math.max(1, (meters * 1.35 / 350).ceil());
+          }
         }
         final needsAttention = needsOperatorSosAlert(row);
         if (needsAttention) {
@@ -383,11 +409,15 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
             zIndexInt: 4,
             infoWindow: InfoWindow(
               title: waiting
-                  ? 'SOS · Esperando llamada'
+                  ? 'SOS · Ayuda solicitada'
                   : 'SOS · ${style.label}',
-              snippet: 'Abrir caso SOS',
+              snippet: row['decision'] == 'pending' && row['claimed_by_me'] != true
+                  ? 'Acepta este SOS en la tarjeta superior'
+                  : 'Abrir caso SOS',
             ),
-            onTap: () => openCase('${row['id']}'),
+            onTap: row['decision'] == 'pending' && row['claimed_by_me'] != true
+                ? null
+                : () => openCase('${row['id']}'),
           ),
         );
       }
@@ -404,6 +434,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgentIds = urgent;
           alertCount = alerts;
           queueStates = nextQueue;
+          queueMinutes = nextMinutes;
           incidentIds = ids;
           note = null;
         });
@@ -420,6 +451,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgentIds = {};
           alertCount = 0;
           queueStates = {};
+          queueMinutes = {};
           focus = null;
           pulseTimer?.cancel();
           incidentIds = {};
@@ -437,6 +469,29 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
       context,
     ).push<void>(MaterialPageRoute(builder: (_) => SosCasePage(caseId: id)));
     await refresh();
+  }
+
+  Future<void> acceptCase(String markerId) async {
+    if (accepting != null || !mounted) return;
+    final id = markerId.replaceFirst('operator_sos_', '');
+    setState(() => accepting = markerId);
+    try {
+      await WorkflowClient.request('POST', '/operator/sos-cases/$id/claim');
+      if (!mounted) return;
+      setState(() {
+        queueStates.remove(markerId);
+        queueMinutes.remove(markerId);
+      });
+      await openCase(id);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Este SOS ya fue tomado o no está disponible. Actualizando…')));
+      }
+    } finally {
+      if (mounted) setState(() => accepting = null);
+      await refresh();
+    }
   }
 
   @override
@@ -537,9 +592,9 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                                 quiet: duty.isNotEmpty,
                                 calls: queueIds,
                                 waitingCalls: queueStates,
-                                onOpen: (id) => openCase(
-                                  id.replaceFirst('operator_sos_', ''),
-                                ),
+                                minutes: queueMinutes,
+                                accepting: accepting,
+                                onOpen: acceptCase,
                                 onSelect: focusCaller,
                                 muted: muted,
                                 onMute: toggleMute,

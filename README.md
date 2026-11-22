@@ -24,6 +24,8 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Actualización: [solicitudes SOS directas para operadores](docs/sos-offers.md). Requiere migración 029, backend y APK nuevos.
+
 Actualización: [Mis Solicitudes y SOS cercanos a 1 km](docs/sos-only-requests.md). Requiere migración 028, backend y APK nuevos; esta pantalla ya no muestra reportes manuales.
 
 Actualización: [historial ciudadano, pestañas por rol y colores del mapa](docs/citizen-history-and-role-navigation.md). Requiere migración 027, backend y APK nuevos.

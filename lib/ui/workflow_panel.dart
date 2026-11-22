@@ -203,6 +203,7 @@ class _WorkflowPanelState extends State<WorkflowPanel>
           .where(
             (r) =>
                 !seen.contains('${r['id']}') &&
+                r['source'] != 'sos' &&
                 !['Cerrada', 'Descartada'].contains(r['stage']),
           )
           .length;
