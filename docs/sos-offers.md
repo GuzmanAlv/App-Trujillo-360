@@ -10,8 +10,9 @@ real se consulta después de confirmar el caso y puede tardar más por tráfico.
 llamadas y la evaluación. Solo el primer operador consigue tomarlo. Al resto se
 le retira en la siguiente actualización del mapa (cada seis segundos) o al
 actualizar manualmente. Si dos aceptan a la vez, el segundo recibe un aviso y
-recarga la bandeja. Los otros SOS siguen disponibles. El caso tomado abre la
-ficha de evaluación existente.
+recarga la bandeja. Los otros SOS siguen disponibles. Si la llamada sigue en
+espera, la misma pulsación abre la pantalla de atención y contesta el audio; si
+ya terminó, abre la ficha de evaluación para conservar el seguimiento.
 
 Requiere migraciones **029 y 030**, después de 028, backend y APK nuevos:
 

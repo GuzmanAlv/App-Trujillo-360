@@ -3,6 +3,7 @@ import '../services/operator_duty.dart';
 import '../services/reinforcements_store.dart';
 import 'reinforcement_controls.dart';
 import 'sos_waiting_queue.dart';
+import 'audio_call_page.dart';
 import 'sos_incoming_attention.dart';
 import 'sos_progress_feedback.dart';
 import '../services/active_call.dart';
@@ -473,6 +474,11 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
 
   Future<void> acceptCase(String markerId) async {
     if (accepting != null || !mounted) return;
+    if (ActiveCall.id.value != null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Finaliza la llamada actual antes de tomar otro SOS.')));
+      return;
+    }
     final id = markerId.replaceFirst('operator_sos_', '');
     setState(() => accepting = markerId);
     try {
@@ -482,7 +488,19 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         queueStates.remove(markerId);
         queueMinutes.remove(markerId);
       });
-      await openCase(id);
+      dynamic call;
+      try {
+        call = await WorkflowClient.request('GET', '/calls/$id');
+      } catch (_) {
+        // The SOS remains claimed even when its short call window has ended.
+      }
+      if (!mounted) return;
+      if (call is Map && call['state'] == 'waiting') {
+        await Navigator.of(context).push<void>(MaterialPageRoute(
+          builder: (_) => AudioCallPage(callId: id, operator: true)));
+      } else {
+        await openCase(id);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
