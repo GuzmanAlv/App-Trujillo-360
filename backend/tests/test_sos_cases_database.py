@@ -81,6 +81,7 @@ def test_case_lifecycle_and_privacy(database):
     with pytest.raises(psycopg.errors.RaiseException): update(op,0)
     rows=query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)
     assert any(str(row[0])==incident and row[6]==0 for row in rows)
+    assert any(str(row[0])==incident for row in query(other,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True))
     public=query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))
     assert public['description']=='Descripción pública' and 'NO PUBLICAR' not in str(public)
     assert 'caller_latitude' not in public and 'internal_note' not in public
@@ -102,8 +103,30 @@ def test_case_lifecycle_and_privacy(database):
         if action!='resolve':
             assert query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))['attention']==action
     assert len(result['events'])==3
-    assert query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)==[]
+    retained=query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)
+    assert len(retained)==1 and retained[0][5]=='closed'
+    for reader in (op,other):
+        assert any(str(row[0])==incident for row in query(reader,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True))
+    public=query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))
+    assert public['attention']=='resolved' and public['resolved_at']
+    assert 'internal_note' not in public and 'caller_latitude' not in public
+    # A long-running case gets seven days from resolution, not its initial report.
+    with psycopg.connect(database) as c:
+        c.execute("UPDATE trujillo.incidents SET occurred_at=now()-interval '8 days' WHERE id=%s",(incident,))
+    assert query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)
+    assert query(citizen,'SELECT * FROM trujillo.nearby_incidents(-8.12,-79.04,1000)',many=True)
+    assert query(citizen,'SELECT * FROM trujillo.incident_reports(%s)',(incident,),many=True)==[]
     assert query(op,"SELECT * FROM trujillo.incident_density(-9,-7,-80,-78,-1)",many=True)
+    with psycopg.connect(database) as c:
+        # Only the isolated test owner can move the clock column to test expiry.
+        c.execute('ALTER TABLE trujillo.incidents DISABLE TRIGGER track_incident_resolution')
+        c.execute("UPDATE trujillo.incidents SET resolved_at=now()-interval '7 days' WHERE id=%s",(incident,))
+        c.execute('ALTER TABLE trujillo.incidents ENABLE TRIGGER track_incident_resolution')
+        assert c.execute("SELECT trujillo.map_incident_visible('closed',0,false,now(),now(),false)").fetchone()[0] is False
+        assert c.execute("SELECT trujillo.map_incident_visible('discarded',3,false,now(),now(),true)").fetchone()[0] is False
+    assert query(citizen,'SELECT * FROM trujillo.map_incidents(-9,-7,-80,-78)',many=True)==[]
+    assert query(citizen,'SELECT * FROM trujillo.nearby_incidents(-8.12,-79.04,1000)',many=True)==[]
+    assert query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],),many=True)==[]
     with pytest.raises(psycopg.errors.RaiseException): update(op,4)
     with psycopg.connect(database) as c:
         assert c.execute('SELECT count(*) FROM trujillo.incidents').fetchone()[0]==1

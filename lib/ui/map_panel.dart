@@ -119,7 +119,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   }
 
   String iconKey(Incident incident) =>
-      '${incident.type}|${reportTime(incident.createdAt)}|${incident.attention}';
+      '${incident.type}|${reportTime(incident.createdAt)}|${incident.attention}|${incident.isResolved}';
 
   Future<void> prepareReportIcons() async {
     final generation = ++iconGeneration;
@@ -154,14 +154,19 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
         next[key] =
             reportIcons[key] ??
             BitmapDescriptor.bytes(
-              await renderReportMarker(
-                incident.type,
-                reportTime(incident.createdAt),
-                onScene: incident.attention == 'on_scene',
-              ),
+              incident.isResolved
+                  ? await renderActorMarker(
+                      ReportStyle.forCategory(incident.type).icon,
+                      ReportStyle.forCategory(incident.type).color,
+                    )
+                  : await renderReportMarker(
+                      incident.type,
+                      reportTime(incident.createdAt),
+                      onScene: incident.attention == 'on_scene',
+                    ),
               imagePixelRatio: 2,
-              width: 174,
-              height: 82,
+              width: incident.isResolved ? 48 : 174,
+              height: incident.isResolved ? 56 : 82,
             );
       } catch (_) {
         // Keep a category-colored marker if image rendering is unavailable.
@@ -409,9 +414,10 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                         Marker(
                           markerId: MarkerId(i.id),
                           position: LatLng(i.latitude, i.longitude),
-                          anchor:
-                              i.attention == 'en_route' &&
-                                  pulseIcons.containsKey(i.type)
+                          anchor: i.isResolved
+                              ? const Offset(.5, 55 / 56)
+                              : i.attention == 'en_route' &&
+                                    pulseIcons.containsKey(i.type)
                               ? const Offset(.5, 74 / 76)
                               : reportIcons.containsKey(iconKey(i))
                               ? const Offset(0.5, 78 / 82)
@@ -429,13 +435,22 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                                 },
                               ),
                           infoWindow: InfoWindow(
-                            title:
-                                '${i.type} · Reportado ${reportTime(i.createdAt)}',
-                            snippet: i.attention == 'on_scene'
+                            title: i.isResolved
+                                ? '${i.type} · Caso resuelto'
+                                : '${i.type} · Reportado ${reportTime(i.createdAt)}',
+                            snippet: i.isResolved
+                                ? 'Aquí ocurrió un incidente · ${reportDateTime(i.createdAt)}'
+                                : i.attention == 'on_scene'
                                 ? 'Unidad en la zona · ${i.place}'
                                 : i.place,
                           ),
-                          onTap: () => widget.onIncident?.call(i),
+                          onTap: () {
+                            if (i.isResolved) {
+                              controller?.showMarkerInfoWindow(MarkerId(i.id));
+                            } else {
+                              widget.onIncident?.call(i);
+                            }
+                          },
                         ),
                       if (displayedLocation != null && locationIcon != null)
                         Marker(

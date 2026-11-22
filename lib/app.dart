@@ -170,6 +170,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (roleOwner != user?.uid) {
       roleOwner = user?.uid;
       if (mounted) setState(() => citizenAllowed = false);
+      mapIncidents.clearSession();
     }
     if (OperatorDuty.owner != user?.uid) OperatorDuty.clear();
     sosArrival.configure(false);
@@ -212,18 +213,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (!allowed) OperatorDuty.clear();
         if (operatorAllowed != allowed || citizenAllowed != citizen) {
           setState(() {
-            if (!operatorAllowed && allowed && tab == 2) {
-              tab = 3;
-            }
-            if (operatorAllowed && !allowed && tab == 3) {
-              tab = 2;
-            } else if (operatorAllowed && !allowed && tab == 2) {
+            if (operatorAllowed != allowed && tab == 1) {
               tab = 0;
             }
             operatorAllowed = allowed;
             citizenAllowed = citizen;
             if (!allowed) sosRoute.clear();
           });
+          updateNearbyActivity();
         }
       }
     } catch (_) {
@@ -329,7 +326,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final NearbyReportsStore nearby = widget.nearby ?? NearbyReportsStore();
   late final MapIncidentsStore mapIncidents =
       widget.mapIncidents ?? MapIncidentsStore();
-  bool reportsNearbySelected = true;
+  bool reportsNearbySelected = false;
   bool foreground = true;
   StreamSubscription<Map<String, dynamic>>? pushOpens;
   StreamSubscription<void>? sosSettingsRoutes;
@@ -438,7 +435,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     sosArrival.configure(operatorAllowed && foreground);
     reinforcements.configure(operatorAllowed && foreground);
     nearby.setActive(
-      foreground && (tab == 0 || (tab == 1 && reportsNearbySelected)),
+      foreground &&
+          (tab == 0 || (!operatorAllowed && tab == 1 && reportsNearbySelected)),
     );
     mapIncidents.setActive(foreground && tab == 0);
     density.configure(enabled: foreground && tab == 0 && historical);
@@ -882,29 +880,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               ],
                             ),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              children: [
-                                filters(),
-                                const SizedBox(height: 16),
-                                Expanded(
-                                  child: ReportsPanel(
-                                    store: widget.store,
-                                    filter: filter,
-                                    onReport: details,
-                                    active: tab == 1,
-                                    nearby: nearby,
-                                    onSessionChanged: mapIncidents.clearSession,
-                                    onNearbySelected: (value) {
-                                      reportsNearbySelected = value;
-                                      updateNearbyActivity();
-                                    },
+                          if (!operatorAllowed)
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  filters(),
+                                  const SizedBox(height: 16),
+                                  Expanded(
+                                    child: ReportsPanel(
+                                      filter: filter,
+                                      active: tab == 1,
+                                      nearby: nearby,
+                                      onSessionChanged:
+                                          mapIncidents.clearSession,
+                                      onNearbySelected: (value) {
+                                        reportsNearbySelected = value;
+                                        updateNearbyActivity();
+                                      },
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
                           if (operatorAllowed)
                             const OperatorPortal(embedded: true),
                           settings(),
@@ -930,10 +928,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     icon: Icon(Icons.map_outlined),
                     label: 'Mapa',
                   ),
-                  NavigationDestination(
-                    icon: Icon(Icons.notifications_none),
-                    label: 'Reportes',
-                  ),
+                  if (!operatorAllowed)
+                    NavigationDestination(
+                      icon: Icon(Icons.notifications_none),
+                      label: 'Reportes',
+                    ),
                   if (operatorAllowed)
                     NavigationDestination(
                       icon: Icon(Icons.support_agent_outlined),

@@ -1,5 +1,14 @@
 # Continuar Trujillo 360 en otra laptop
 
+Actualización: [solo SOS en Mis Solicitudes y Cerca de mí](sos-only-requests.md).
+Requiere migración 028 y actualizar backend/APK. `/ready` incluye `nearby_sos_version: 1`.
+
+Actualización: [historial ciudadano y navegación por rol](citizen-history-and-role-navigation.md).
+Requiere migración 027 y actualizar backend/APK. `/ready` incluye `citizen_history_version: 1`.
+
+Actualización: [casos resueltos en el mapa y avisos de trayecto](resolved-map-and-progress-cues.md).
+Requiere migración 026, backend y APK nuevos. `/ready` incluye `resolved_map_version: 1`.
+
 Nueva actualización: [descarte y suspensión, mapa ampliado y controles](sos-suspension-and-map-controls.md).
 Requiere migración 025 y actualizar backend/APK. `/ready` incluye `sos_suspension_version: 1`.
 

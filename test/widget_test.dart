@@ -85,10 +85,16 @@ void main() {
       await tester.tap(find.text('Reportes'));
       await tester.pumpAndSettle();
       expect(find.text('Cerca de mí'), findsOneWidget);
-      expect(find.text('Activar ubicación'), findsOneWidget);
-      await tester.tap(find.text('Mis reportes'));
+      expect(find.text('Historial de SOS'), findsOneWidget);
+      await tester.tap(find.text('Cerca de mí'));
       await tester.pumpAndSettle();
-      expect(find.text('Inicia sesión para ver tus reportes.'), findsOneWidget);
+      expect(find.text('Activar ubicación'), findsOneWidget);
+      await tester.tap(find.text('Mis Solicitudes'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Inicia sesión para ver tu historial SOS.'),
+        findsOneWidget,
+      );
       expect(find.text('Robo · Mi reporte lejano'), findsNothing);
       expect(find.text('Robo · Reporte ajeno'), findsNothing);
       expect(find.byType(SegmentedButton<bool>), findsOneWidget);

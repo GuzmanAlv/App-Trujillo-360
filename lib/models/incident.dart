@@ -13,6 +13,8 @@ class Incident {
     this.remoteId,
     this.remoteStatus = 'pending',
     this.attention = 'none',
+    this.resolvedAt,
+    this.isSos = false,
     this.corroborationCount = 0,
     this.needsReview = false,
     this.photos = const [],
@@ -21,6 +23,16 @@ class Incident {
   final String id, type, place, description;
   final double latitude, longitude;
   final DateTime createdAt;
+  final DateTime? resolvedAt;
+  final bool isSos;
+  String get sosStatusLabel => isResolved
+      ? 'Resuelto'
+      : switch (attention) {
+          'en_route' => 'Unidad en camino',
+          'on_scene' => 'Personal en el lugar',
+          _ => 'Confirmado',
+        };
+  bool get isResolved => remoteStatus == 'closed' && resolvedAt != null;
   final String? ownerUid, remoteId;
   final String remoteStatus, attention;
   final int corroborationCount;
@@ -30,10 +42,13 @@ class Incident {
   bool get isCommunityVisible =>
       !needsReview &&
       (remoteStatus == 'verified' ||
+          isResolved ||
           (remoteStatus == 'corroborated' && corroborationCount >= 3));
   bool recentAt(DateTime now) =>
       !createdAt.isAfter(now) &&
-      now.difference(createdAt) < const Duration(days: 7);
+      !(resolvedAt ?? createdAt).isAfter(now) &&
+      now.difference(isResolved ? resolvedAt! : createdAt) <
+          const Duration(days: 7);
   String get deliveryLabel => remoteId != null
       ? (remoteStatus == 'corroborated'
             ? 'Corroborado por la comunidad'
@@ -66,6 +81,8 @@ class Incident {
     remoteId: serverId,
     remoteStatus: status,
     attention: attention,
+    resolvedAt: resolvedAt,
+    isSos: isSos,
     corroborationCount: count,
     needsReview: review,
     photos: photos,
@@ -83,6 +100,8 @@ class Incident {
     'remoteId': remoteId,
     'remoteStatus': remoteStatus,
     'attention': attention,
+    'resolvedAt': resolvedAt?.toIso8601String(),
+    'isSos': isSos,
     'corroborationCount': corroborationCount,
     'needsReview': needsReview,
     'photos': photos.map((photo) => photo.toJson()).toList(),
@@ -106,6 +125,8 @@ class Incident {
       remoteId: j['remoteId'] as String?,
       remoteStatus: j['remoteStatus'] as String? ?? 'pending',
       attention: j['attention'] as String? ?? 'none',
+      resolvedAt: DateTime.tryParse('${j['resolvedAt']}'),
+      isSos: j['isSos'] == true,
       corroborationCount:
           j['corroborationCount'] as int? ?? (j['remoteId'] == null ? 0 : 1),
       needsReview: j['needsReview'] as bool? ?? false,

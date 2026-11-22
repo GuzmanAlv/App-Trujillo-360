@@ -21,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val incomingAlarm by lazy { SosIncomingAlarm(this) }
     private val userSignals by lazy { SosUserSignals(this) }
+    private val progressSignals by lazy { SosProgressSignals(this) { incomingAlarm.active || userSignals.active } }
     private var callNotice: SosCallNotice? = null
     private var activityVisible = false
     private var channel: MethodChannel? = null
@@ -51,6 +52,10 @@ class MainActivity : FlutterActivity() {
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "sosProgressSignal" -> {
+                    progressSignals.update(if (activityVisible) call.argument<String>("mode") else null)
+                    result.success(null)
+                }
                 "sosCallNotice" -> {
                     if (call.argument<Boolean>("enabled") == true && activityVisible) {
                         if (callNotice == null) callNotice = SosCallNotice(this)
@@ -167,6 +172,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onPause() {
         activityVisible = false
+        progressSignals.stop()
         incomingAlarm.stop()
         userSignals.stop()
         callNotice?.stop()
@@ -174,6 +180,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        progressSignals.stop()
         callNotice?.dispose()
         incomingAlarm.stop()
         userSignals.stop()
