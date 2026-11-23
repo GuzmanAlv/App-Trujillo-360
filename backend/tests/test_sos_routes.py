@@ -12,6 +12,7 @@ from app import sos_routes
 client = TestClient(app)
 CASE = str(uuid4())
 PATH = f'/operator/sos-cases/{CASE}/route'
+PREVIEW_PATH = f'/operator/sos-cases/{CASE}/preview-route'
 ORIGIN = {'latitude': -8.12, 'longitude': -79.02}
 CONFIRMED = dict(can_edit=True, decision='confirmed', attention='none',
                  latitude=-8.11, longitude=-79.03, category='Auxilio')
@@ -55,6 +56,27 @@ def test_database_role_denial_cannot_call_google():
     with patch('app.sos_routes.execute', side_effect=HTTPException(403)), patch('app.sos_routes.requests.post') as google:
         assert client.post(PATH, json=ORIGIN).status_code == 403
         google.assert_not_called()
+
+
+def test_preview_uses_caller_location_without_claiming_the_sos():
+    login()
+    offer = dict(CONFIRMED, decision='pending', available=True,
+                 caller_latitude=-8.13, caller_longitude=-79.04)
+    with patch('app.sos_routes.execute', return_value=offer) as db, patch('app.sos_routes.compute_route', return_value={}) as compute:
+        assert client.post(PREVIEW_PATH, json=ORIGIN).status_code == 200
+        assert 'list_help(true)' in db.call_args.args[1]
+        assert 'claim_sos' not in db.call_args.args[1]
+        assert compute.call_args.args[2] == {'latitude': -8.13, 'longitude': -79.04}
+        assert compute.call_args.kwargs == {'preview': True}
+
+
+@pytest.mark.parametrize('offer, status', [({}, 409), ({'can_edit': False}, 403),
+    ({'can_edit': True, 'available': False, 'decision': 'pending'}, 409)])
+def test_preview_rejects_unavailable_offers_before_calling_google(offer, status):
+    login()
+    with patch('app.sos_routes.execute', return_value=offer), patch('app.sos_routes.compute_route') as compute:
+        assert client.post(PREVIEW_PATH, json=ORIGIN).status_code == status
+        compute.assert_not_called()
 
 
 @pytest.mark.parametrize('body', [

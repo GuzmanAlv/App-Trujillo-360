@@ -58,12 +58,14 @@ class WorkflowClient {
         }
         if (response.statusCode == 401 && attempt == 0) continue;
         if (response.statusCode != 200) {
-          if (path.endsWith('/route')) {
+          if (path.endsWith('/route') || path.endsWith('/preview-route')) {
             try {
               final error = jsonDecode(response.body);
               final detail = error is Map ? error['detail'] : null;
               final code = detail is Map ? detail['code'] : null;
               const routeErrors = {
+                'SOS_PREVIEW_UNAVAILABLE':
+                    'Este SOS ya no está disponible. Actualiza la lista.',
                 'REINFORCEMENT_CLOSED':
                     'La solicitud de refuerzos ya finalizó o caducó.',
                 'SOS_PRIORITY':

@@ -86,6 +86,30 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final density = DensityStore();
   final sosRoute = SosRouteController();
+  final sosPreview = SosRouteController();
+
+  Future<void> previewSos(String? id) async {
+    if (id == null) {
+      if (sosPreview.caseId != null) sosPreview.clear();
+      return;
+    }
+    if (sosPreview.caseId == id &&
+        (sosPreview.loading || sosPreview.points.isNotEmpty)) {
+      return;
+    }
+    final route = sosPreview.calculate(id, preview: true);
+    final generation = sosPreview.generation;
+    await route;
+    if (!mounted ||
+        generation != sosPreview.generation ||
+        sosPreview.error == null) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(sosPreview.error!)));
+  }
+
   final sosArrival = SosArrivalTracker();
   final reinforcements = ReinforcementsStore();
   void reinforcementsChanged() {
@@ -144,6 +168,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void routeRequested() {
     final value = SosNavigation.request.value;
     if (!mounted || value == null || currentReportOwner != value.owner) return;
+    sosPreview.clear();
     routeOwner = value.owner;
     setState(() {
       tab = 0;
@@ -169,6 +194,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> checkRole(User? user) async {
     if (roleOwner != user?.uid) {
       roleOwner = user?.uid;
+      sosPreview.clear();
       if (mounted) setState(() => citizenAllowed = false);
       mapIncidents.clearSession();
     }
@@ -211,6 +237,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         sosArrival.configure(allowed && foreground);
         reinforcements.configure(allowed && foreground);
         if (!allowed) OperatorDuty.clear();
+        if (!allowed && sosPreview.caseId != null) sosPreview.clear();
         if (operatorAllowed != allowed || citizenAllowed != citizen) {
           setState(() {
             if (operatorAllowed != allowed && tab == 1) {
@@ -486,6 +513,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     SosNavigation.caseChanges.removeListener(caseChanged);
     SosNavigation.mapRequested.removeListener(returnToMap);
     sosRoute.dispose();
+    sosPreview.dispose();
     sosArrival.dispose();
     reinforcements.dispose();
     density.dispose();
@@ -585,6 +613,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       mapIncidents,
       density,
       sosRoute,
+      sosPreview,
       ActiveCall.session,
       ActiveCall.presentation,
       reinforcements,
@@ -602,10 +631,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   loading: density.loading,
                   error: density.error,
                   onCategory: (value) => setState(() => filter = value),
-                  onPeriod: (value) => setState(() {
-                    historical = value;
-                    density.configure(enabled: value && foreground && tab == 0);
-                  }),
+                  onPeriod: (value) {
+                    if (value) previewSos(null);
+                    setState(() {
+                      historical = value;
+                      density.configure(
+                        enabled: value && foreground && tab == 0,
+                      );
+                    });
+                  },
                   onHour: (value) => setState(
                     () => density.configure(enabled: true, band: value),
                   ),
@@ -691,6 +725,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                             (ModalRoute.isCurrentOf(context) ??
                                                 true),
                                         builder: (myMarkers, myIncidentIds) => OperatorSosMapLayer(
+                                          onPreview: previewSos,
                                           reinforcements: reinforcements,
                                           onReinforcement: selectReinforcement,
                                           enabled:
@@ -758,36 +793,55 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                                       ),
                                                     ),
                                                 },
-                                                polylines:
-                                                    operatorAllowed &&
-                                                        sosRoute
-                                                            .points
-                                                            .isNotEmpty
-                                                    ? {
-                                                        Polyline(
-                                                          polylineId:
-                                                              const PolylineId(
-                                                                'sos_route',
-                                                              ),
-                                                          points:
-                                                              sosRoute.points,
-                                                          color:
-                                                              sosRoute
-                                                                  .isReinforcement
-                                                              ? ReinforcementControls
-                                                                    .orange
-                                                              : const Color(
-                                                                  0xff1769ce,
-                                                                ),
-                                                          width: 6,
-                                                        ),
-                                                      }
-                                                    : const {},
-                                                routeBounds: operatorAllowed
-                                                    ? sosRoute.bounds
-                                                    : null,
+                                                polylines: {
+                                                  if (operatorAllowed &&
+                                                      sosRoute
+                                                          .points
+                                                          .isNotEmpty)
+                                                    Polyline(
+                                                      polylineId:
+                                                          const PolylineId(
+                                                            'sos_route',
+                                                          ),
+                                                      points: sosRoute.points,
+                                                      color:
+                                                          sosRoute
+                                                              .isReinforcement
+                                                          ? ReinforcementControls
+                                                                .orange
+                                                          : const Color(
+                                                              0xff1769ce,
+                                                            ),
+                                                      width: 6,
+                                                    ),
+                                                  if (operatorAllowed &&
+                                                      !historical &&
+                                                      sosPreview
+                                                          .points
+                                                          .isNotEmpty)
+                                                    Polyline(
+                                                      polylineId:
+                                                          const PolylineId(
+                                                            'sos_preview',
+                                                          ),
+                                                      points: sosPreview.points,
+                                                      color: const Color(
+                                                        0xffc41728,
+                                                      ),
+                                                      zIndex: 1,
+                                                      width: 6,
+                                                    ),
+                                                },
+                                                routeBounds: !operatorAllowed
+                                                    ? null
+                                                    : !historical &&
+                                                          sosPreview.caseId !=
+                                                              null
+                                                    ? sosPreview.bounds
+                                                    : sosRoute.bounds,
                                                 routeRevision:
-                                                    sosRoute.revision,
+                                                    sosRoute.revision +
+                                                    sosPreview.revision,
                                                 focusTarget: sosFocus?.target,
                                                 focusRevision:
                                                     sosFocus?.revision ?? 0,

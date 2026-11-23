@@ -57,7 +57,11 @@ class SosRouteController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> calculate(String id, {bool reinforcement = false}) async {
+  Future<void> calculate(
+    String id, {
+    bool reinforcement = false,
+    bool preview = false,
+  }) async {
     if (_disposed) return;
     final ticket = ++generation;
     caseId = id;
@@ -75,6 +79,8 @@ class SosRouteController extends ChangeNotifier {
         'POST',
         reinforcement
             ? '/operator/reinforcements/$id/route'
+            : preview
+            ? '/operator/sos-cases/$id/preview-route'
             : '/operator/sos-cases/$id/route',
         body: {'latitude': gps.latitude, 'longitude': gps.longitude},
       );

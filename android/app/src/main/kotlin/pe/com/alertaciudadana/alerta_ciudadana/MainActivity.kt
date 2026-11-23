@@ -10,6 +10,8 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.Address
+import android.location.Geocoder
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
@@ -19,6 +21,41 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private val addressWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private fun lookupSosAddress(latitude: Double?, longitude: Double?, result: MethodChannel.Result) {
+        if (latitude == null || longitude == null || latitude !in -90.0..90.0 ||
+            longitude !in -180.0..180.0 || !Geocoder.isPresent()) {
+            result.success(null)
+            return
+        }
+        val geocoder = Geocoder(applicationContext, java.util.Locale.forLanguageTag("es-PE"))
+        fun respond(address: Address?) {
+            val street = address?.thoroughfare?.takeIf { it.isNotBlank() }
+            val label = if (street != null) {
+                listOfNotNull(street, address?.subThoroughfare?.takeIf { it.isNotBlank() }).joinToString(" ")
+            } else {
+                address?.subLocality ?: address?.locality
+            }
+            runOnUiThread { result.success(label) }
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                geocoder.getFromLocation(latitude, longitude, 1, object : Geocoder.GeocodeListener {
+                    override fun onGeocode(addresses: MutableList<Address>) = respond(addresses.firstOrNull())
+                    override fun onError(errorMessage: String?) = respond(null)
+                })
+            } catch (_: Exception) {
+                respond(null)
+            }
+        } else {
+            addressWorker.execute {
+                @Suppress("DEPRECATION")
+                val address = runCatching { geocoder.getFromLocation(latitude, longitude, 1)?.firstOrNull() }.getOrNull()
+                respond(address)
+            }
+        }
+    }
     private val incomingAlarm by lazy { SosIncomingAlarm(this) }
     private val userSignals by lazy { SosUserSignals(this) }
     private val progressSignals by lazy { SosProgressSignals(this) { incomingAlarm.active || userSignals.active } }
@@ -52,6 +89,7 @@ class MainActivity : FlutterActivity() {
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "sosAddress" -> lookupSosAddress(call.argument<Double>("latitude"), call.argument<Double>("longitude"), result)
                 "sosProgressSignal" -> {
                     progressSignals.update(if (activityVisible) call.argument<String>("mode") else null)
                     result.success(null)
@@ -180,6 +218,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        addressWorker.shutdownNow()
         progressSignals.stop()
         callNotice?.dispose()
         incomingAlarm.stop()
