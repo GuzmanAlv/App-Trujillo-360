@@ -18,6 +18,7 @@ def test_sos_notices_are_private_deduplicated_and_quiet_for_busy_operator(databa
     query(citizen,'SELECT trujillo.push_register_sos(%s,%s)',(citizen_device,'citizen-token-'+str(uuid4())))
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         query(other,'SELECT trujillo.push_register_sos(%s,%s)',(citizen_device,'attacker-token-'+str(uuid4())))
+    query(operator,"SELECT trujillo.operator_position(-8.12,-79.04,10,clock_timestamp())")
     query(operator,'SELECT trujillo.push_register(%s,%s,false,true,NULL,NULL,500,false)',(op_device,'operator-token-'+str(uuid4())))
     def claim():
         with psycopg.connect(database) as c:

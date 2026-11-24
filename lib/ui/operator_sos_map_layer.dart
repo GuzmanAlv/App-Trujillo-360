@@ -1,4 +1,5 @@
 import '../services/sos_alert_state.dart';
+import 'sos_overview_button.dart';
 import '../services/operator_duty.dart';
 import '../services/reinforcements_store.dart';
 import 'reinforcement_controls.dart';
@@ -13,6 +14,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/workflow_client.dart';
 import 'report_marker.dart';
@@ -30,10 +32,14 @@ class OperatorSosMapLayer extends StatefulWidget {
     required this.builder,
     required this.reinforcements,
     required this.onReinforcement,
+    required this.onPreview,
+    this.onOverview,
   });
   final bool enabled, active;
   final ReinforcementsStore reinforcements;
   final void Function(Map<String, dynamic>, bool) onReinforcement;
+  final ValueChanged<String?> onPreview;
+  final ValueChanged<LatLngBounds>? onOverview;
   final Widget Function(Set<Marker>, Set<String>, SosMapFocus?) builder;
   @override
   State<OperatorSosMapLayer> createState() => _OperatorSosMapLayerState();
@@ -136,17 +142,89 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   ];
   SosMapFocus? focus;
   int focusRevision = 0;
+  String? previewMarker;
+  final addresses = <LatLng, Future<String?>>{};
+
+  Future<String?> addressFor(String id) {
+    final point = baseMarkers
+        .firstWhere((m) => m.markerId.value == id)
+        .position;
+    return addresses.putIfAbsent(point, () async {
+      try {
+        return await const MethodChannel('trujillo360/proximity')
+            .invokeMethod<String>('sosAddress', {
+              'latitude': point.latitude,
+              'longitude': point.longitude,
+            })
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
   void focusCaller(String id) {
-    if (!widget.enabled || !queueStates.containsKey(id)) return;
+    if (!widget.enabled) return;
     final matching = baseMarkers.where((m) => m.markerId.value == id);
     if (matching.isEmpty) return;
-    setState(
-      () =>
-          focus = (target: matching.first.position, revision: ++focusRevision),
-    );
+    setState(() {
+      previewMarker = id;
+      focus = (target: matching.first.position, revision: ++focusRevision);
+    });
+    widget.onPreview(id.replaceFirst('operator_sos_', ''));
+  }
+
+  void clearPreview() {
+    if (previewMarker == null) return;
+    previewMarker = null;
+    focus = null;
+    widget.onPreview(null);
   }
 
   Set<Marker> baseMarkers = {};
+  Future<void> offerOutsideQueue(String id) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Solicitud SOS',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Puedes consultar o atender este SOS aunque esté fuera de tu radio de avisos.',
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(c);
+                  focusCaller(id);
+                },
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Ver ubicación y ruta'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(c);
+                  unawaited(acceptCase(id));
+                },
+                icon: const Icon(Icons.call),
+                label: const Text('Aceptar SOS'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Set<String> pendingIds = {};
   Future<void> preparePendingIcons() async {
     for (final phase in [0.0, .35, .75, 1.0, .75, .35]) {
@@ -273,6 +351,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         queueStates = {};
         queueMinutes = {};
         accepting = null;
+        previewMarker = null;
+        addresses.clear();
         focus = null;
         pulseTimer?.cancel();
         incidentIds = {};
@@ -305,16 +385,24 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     final ticket = ++generation;
     busy = true;
     try {
-      if (positionAt == null || DateTime.now().difference(positionAt!) > const Duration(seconds: 30)) {
+      if (positionAt == null ||
+          DateTime.now().difference(positionAt!) >
+              const Duration(seconds: 30)) {
         positionAt = DateTime.now();
         try {
           if (await Geolocator.isLocationServiceEnabled() &&
               await Geolocator.checkPermission() != LocationPermission.denied &&
-              await Geolocator.checkPermission() != LocationPermission.deniedForever) {
+              await Geolocator.checkPermission() !=
+                  LocationPermission.deniedForever) {
             lastPosition = await Geolocator.getCurrentPosition(
-              locationSettings: const LocationSettings(timeLimit: Duration(seconds: 5)));
+              locationSettings: const LocationSettings(
+                timeLimit: Duration(seconds: 5),
+              ),
+            );
           }
-        } catch (_) { lastPosition = null; }
+        } catch (_) {
+          lastPosition = null;
+        }
       }
       final rows = await WorkflowClient.list('/operator/sos-map');
       final next = <Marker>{},
@@ -324,6 +412,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgent = <String>{};
       var alerts = 0;
       final nextQueue = <String, bool>{};
+      final allAvailable = <String>{};
       final nextMinutes = <String, int>{};
       final categories = <String, String>{};
       for (final row in rows) {
@@ -382,11 +471,16 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         }
         final waiting = row['call_waiting'] == true;
         if (row['available'] == true) {
-          nextQueue[markerId] = waiting;
+          allAvailable.add(markerId);
+          if (row['alert_in_range'] == true) nextQueue[markerId] = waiting;
           if (lastPosition != null) {
-            final meters = Geolocator.distanceBetween(lastPosition!.latitude,
-              lastPosition!.longitude, lat, lng);
-            // Road travel estimate; actual route is shown after confirmation.
+            final meters = Geolocator.distanceBetween(
+              lastPosition!.latitude,
+              lastPosition!.longitude,
+              lat,
+              lng,
+            );
+            // Approximate ETA until the operator requests a route.
             nextMinutes[markerId] = math.max(1, (meters * 1.35 / 350).ceil());
           }
         }
@@ -412,12 +506,15 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
               title: waiting
                   ? 'SOS · Ayuda solicitada'
                   : 'SOS · ${style.label}',
-              snippet: row['decision'] == 'pending' && row['claimed_by_me'] != true
-                  ? 'Acepta este SOS en la tarjeta superior'
+              snippet:
+                  row['decision'] == 'pending' && row['claimed_by_me'] != true
+                  ? 'Ver o atender este SOS'
                   : 'Abrir caso SOS',
             ),
             onTap: row['decision'] == 'pending' && row['claimed_by_me'] != true
-                ? null
+                ? (row['available'] == true
+                      ? () => offerOutsideQueue(markerId)
+                      : null)
                 : () => openCase('${row['id']}'),
           ),
         );
@@ -426,6 +523,12 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           ticket == generation &&
           widget.enabled &&
           FirebaseAuth.instance.currentUser?.uid == uid) {
+        if (!allAvailable.contains(previewMarker)) clearPreview();
+        final points = next
+            .where((m) => nextQueue.containsKey(m.markerId.value))
+            .map((m) => m.position)
+            .toSet();
+        addresses.removeWhere((point, _) => !points.contains(point));
         setState(() {
           markers = next;
           baseMarkers = next;
@@ -443,6 +546,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
       }
     } catch (_) {
       if (mounted && ticket == generation) {
+        clearPreview();
         setState(() {
           markers = {};
           baseMarkers = {};
@@ -475,8 +579,11 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   Future<void> acceptCase(String markerId) async {
     if (accepting != null || !mounted) return;
     if (ActiveCall.id.value != null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Finaliza la llamada actual antes de tomar otro SOS.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Finaliza la llamada actual antes de tomar otro SOS.'),
+        ),
+      );
       return;
     }
     final id = markerId.replaceFirst('operator_sos_', '');
@@ -484,6 +591,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     try {
       await WorkflowClient.request('POST', '/operator/sos-cases/$id/claim');
       if (!mounted) return;
+      if (previewMarker == markerId) clearPreview();
       setState(() {
         queueStates.remove(markerId);
         queueMinutes.remove(markerId);
@@ -496,15 +604,23 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
       }
       if (!mounted) return;
       if (call is Map && call['state'] == 'waiting') {
-        await Navigator.of(context).push<void>(MaterialPageRoute(
-          builder: (_) => AudioCallPage(callId: id, operator: true)));
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => AudioCallPage(callId: id, operator: true),
+          ),
+        );
       } else {
         await openCase(id);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Este SOS ya fue tomado o no está disponible. Actualizando…')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Este SOS ya fue tomado o no está disponible. Actualizando…',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => accepting = null);
@@ -614,6 +730,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                                 accepting: accepting,
                                 onOpen: acceptCase,
                                 onSelect: focusCaller,
+                                addressFor: addressFor,
+                                selected: previewMarker,
                                 muted: muted,
                                 onMute: toggleMute,
                                 onRefresh: busy ? null : refresh,
@@ -635,11 +753,29 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                         widget.reinforcements.others.isNotEmpty)
                       Positioned(
                         right: 12,
-                        bottom: 100,
+                        bottom: 160,
                         child: ReinforcementControls.button(
                           context,
                           widget.reinforcements,
                           widget.onReinforcement,
+                        ),
+                      ),
+                    if (widget.enabled)
+                      Positioned(
+                        right: 12,
+                        bottom: 100,
+                        child: SosOverviewButton(
+                          count: baseMarkers.length,
+                          onPressed: baseMarkers.isEmpty
+                              ? null
+                              : () {
+                                  final bounds = sosOverviewBounds(
+                                    baseMarkers.map((m) => m.position),
+                                  );
+                                  if (bounds != null) {
+                                    widget.onOverview?.call(bounds);
+                                  }
+                                },
                         ),
                       ),
                     if (widget.enabled &&

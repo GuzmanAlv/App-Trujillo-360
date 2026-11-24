@@ -3,6 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 void main() {
+  test(
+    'Detecta desvíos sin confundir el centro de una calle con un desvío',
+    () {
+      const line = [LatLng(-8.1, -79.03), LatLng(-8.1, -79.02)];
+      expect(distanceFromRoute(const LatLng(-8.1, -79.025), line), lessThan(1));
+      expect(
+        distanceFromRoute(const LatLng(-8.101, -79.025), line),
+        greaterThan(100),
+      );
+    },
+  );
   test('Decodifica la geometría de calles de Google sin inventar puntos', () {
     final points = decodeRoutePolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@');
     expect(points, const [

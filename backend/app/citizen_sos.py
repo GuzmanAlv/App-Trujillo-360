@@ -1,6 +1,6 @@
 from uuid import UUID
 from fastapi import APIRouter,Depends,Response,HTTPException,Query
-from pydantic import BaseModel,ConfigDict,Field
+from pydantic import BaseModel,ConfigDict,Field,AwareDatetime
 from psycopg.types.json import Jsonb
 from app.auth import identity
 from app.workflows import execute
@@ -15,6 +15,19 @@ class SosContribution(BaseModel):
     photos: list[PhotoInput]=Field(default_factory=list,max_length=3)
 
 def private(response): response.headers['Cache-Control']='private, no-store'
+
+class LivePosition(BaseModel):
+    model_config=ConfigDict(extra='forbid',allow_inf_nan=False)
+    latitude:float=Field(ge=-90,le=90)
+    longitude:float=Field(ge=-180,le=180)
+    accuracy:float=Field(ge=0,le=50)
+    observed_at:AwareDatetime
+
+@router.post('/my-sos/{case_id}/position')
+def update_position(case_id:UUID,data:LivePosition,response:Response,claims=Depends(identity)):
+    private(response)
+    return execute(claims,'SELECT trujillo.sos_live_position(%s,%s,%s,%s,%s)',
+        (case_id,data.latitude,data.longitude,data.accuracy,data.observed_at))
 
 @router.get('/my-sos')
 def own_cases(response:Response,claims=Depends(identity)):

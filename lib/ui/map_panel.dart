@@ -189,7 +189,8 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
     super.didUpdateWidget(oldWidget);
     configureMarkerPulse();
     if (widget.routeBounds != null &&
-        widget.routeRevision != oldWidget.routeRevision) {
+        (widget.routeRevision != oldWidget.routeRevision ||
+            widget.routeBounds != oldWidget.routeBounds)) {
       centerRequested = false;
       controller?.animateCamera(
         CameraUpdate.newLatLngBounds(widget.routeBounds!, 44),

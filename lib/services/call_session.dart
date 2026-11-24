@@ -13,12 +13,16 @@ class CallSession extends ChangeNotifier {
     required this.operator,
     this.callback = false,
     this.answer = false,
+    this.redial = false,
+    this.readStatus,
     Room? room,
   }) : room = room ?? Room();
   final String callId;
-  final bool operator, callback, answer;
+  final bool operator, callback, answer, redial;
   final Room room;
+  final Future<dynamic> Function()? readStatus;
   Timer? poll;
+  Timer? verificationDeadline;
   StreamSubscription<User?>? auth;
   String message = 'Preparando llamada…';
   String? failure;
@@ -66,6 +70,7 @@ class CallSession extends ChangeNotifier {
 
   void roomChanged() {
     if (!mounted || finished || !joined) return;
+    if (room.connectionState == ConnectionState.disconnected) joined = false;
     setState(
       () => message = room.connectionState == ConnectionState.connected
           ? (room.remoteParticipants.isEmpty
@@ -87,7 +92,9 @@ class CallSession extends ChangeNotifier {
       if (!mounted || finished) return;
       await WorkflowClient.request(
         'POST',
-        '$path/${callback
+        '$path/${redial
+            ? 'redial'
+            : callback
             ? 'callback'
             : answer
             ? 'answer'
@@ -125,8 +132,17 @@ class CallSession extends ChangeNotifier {
     if (checking || finished) return;
     checking = true;
     try {
-      final data = await WorkflowClient.request('GET', path);
+      final data = readStatus != null
+          ? await readStatus!()
+          : await WorkflowClient.request(
+              'GET',
+              path,
+              timeout: const Duration(seconds: 8),
+            );
       if (!mounted || finished) return;
+      verificationDeadline?.cancel();
+      verificationDeadline = null;
+      if (joined) setState(() => failure = null);
       if (['ended', 'unanswered'].contains(data['state'])) {
         await notice(false);
         finished = true;
@@ -178,16 +194,36 @@ class CallSession extends ChangeNotifier {
         });
       }
     } catch (e) {
-      // Stop audio if we cannot confirm that the private session is still active.
-      await room.disconnect();
-      joined = false;
-      showFailure(e);
+      if (!mounted || finished) return;
+      if (e is WorkflowFailure && !e.temporary) {
+        verificationDeadline?.cancel();
+        finished = true;
+        poll?.cancel();
+        await closeCallResources([() => room.disconnect()]);
+        joined = false;
+        showFailure(e);
+      } else {
+        setState(() => failure = 'Reconectando con el servidor…');
+        verificationDeadline ??= Timer(const Duration(seconds: 60), () async {
+          verificationDeadline = null;
+          if (!mounted || finished) return;
+          await closeCallResources([() => room.disconnect()]);
+          if (!mounted || finished) return;
+          joined = false;
+          showFailure(
+            StateError(
+              'No se pudo verificar la llamada durante un minuto. Reintentando conexión.',
+            ),
+          );
+        });
+      }
     } finally {
       checking = false;
     }
   }
 
   Future<bool> finish() async {
+    verificationDeadline?.cancel();
     unawaited(notice(false));
     if (closing) return false;
     setState(() => closing = true);
@@ -224,6 +260,7 @@ class CallSession extends ChangeNotifier {
     if (_disposed) return;
     unawaited(notice(false));
     _disposed = true;
+    verificationDeadline?.cancel();
     finished = true;
     poll?.cancel();
     auth?.cancel();

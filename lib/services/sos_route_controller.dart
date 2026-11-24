@@ -1,4 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'location_service.dart';
 import 'workflow_client.dart';
@@ -32,12 +35,102 @@ List<LatLng> decodeRoutePolyline(String encoded) {
   return points;
 }
 
-class SosRouteController extends ChangeNotifier {
+/// Distance to a segment (not just its vertices), in meters, near the route.
+double distanceFromRoute(LatLng point, List<LatLng> line) {
+  var best = double.infinity;
+  final scale = math.cos(point.latitude * math.pi / 180);
+  for (var i = 1; i < line.length; i++) {
+    final ax = (line[i - 1].longitude - point.longitude) * 111320 * scale;
+    final ay = (line[i - 1].latitude - point.latitude) * 111320;
+    final bx = (line[i].longitude - point.longitude) * 111320 * scale;
+    final by = (line[i].latitude - point.latitude) * 111320;
+    final dx = bx - ax, dy = by - ay, length = dx * dx + dy * dy;
+    final t = length == 0
+        ? 0.0
+        : (-(ax * dx + ay * dy) / length).clamp(0.0, 1.0);
+    best = math.min(
+      best,
+      math.sqrt(math.pow(ax + t * dx, 2) + math.pow(ay + t * dy, 2)),
+    );
+  }
+  return best;
+}
+
+class SosRouteController extends ChangeNotifier with WidgetsBindingObserver {
+  bool _observing = false;
+  Timer? _tracking;
+  bool _foreground = true, _checking = false, _preview = false;
+  DateTime? _lastCalculation;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) unawaited(_follow());
+  }
+
+  Future<void> _follow() async {
+    final id = caseId, ticket = generation;
+    if (id == null ||
+        loading ||
+        _checking ||
+        !_foreground ||
+        _disposed ||
+        _preview ||
+        isReinforcement) {
+      return;
+    }
+    _checking = true;
+    try {
+      final gps = await LocationService().current();
+      final target = await WorkflowClient.request(
+        'GET',
+        '/operator/sos-cases/$id/navigation-target',
+      );
+      if (_disposed ||
+          ticket != generation ||
+          id != caseId ||
+          gps.accuracy > 30) {
+        return;
+      }
+      final here = LatLng(gps.latitude, gps.longitude);
+      final to = LatLng(
+        (target['latitude'] as num).toDouble(),
+        (target['longitude'] as num).toDouble(),
+      );
+      double distance(LatLng a, LatLng b) => Geolocator.distanceBetween(
+        a.latitude,
+        a.longitude,
+        b.latitude,
+        b.longitude,
+      );
+      if (origin == null ||
+          destination == null ||
+          distance(to, destination!) >= 20 ||
+          distanceFromRoute(here, points) >= 40 ||
+          distance(here, origin!) >= 100 ||
+          _lastCalculation == null ||
+          DateTime.now().difference(_lastCalculation!) >=
+              const Duration(minutes: 2)) {
+        await calculate(id, automatic: true, gps: gps);
+      }
+    } catch (e) {
+      if (e is WorkflowFailure && [403, 404, 409].contains(e.status)) {
+        _tracking?.cancel();
+      }
+      // Keep the last successful route while connectivity recovers.
+    } finally {
+      _checking = false;
+    }
+  }
+
   String? caseId, error, calculatedAt;
   bool isReinforcement = false;
   Future<void> recalculate() async {
     if (caseId != null) {
-      await calculate(caseId!, reinforcement: isReinforcement);
+      await calculate(
+        caseId!,
+        reinforcement: isReinforcement,
+        preview: _preview,
+      );
     }
   }
 
@@ -47,6 +140,7 @@ class SosRouteController extends ChangeNotifier {
   bool loading = false, _disposed = false;
   int generation = 0, revision = 0;
   void clear() {
+    _tracking?.cancel();
     generation++;
     caseId = null;
     points = [];
@@ -57,24 +151,42 @@ class SosRouteController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> calculate(String id, {bool reinforcement = false}) async {
+  Future<void> calculate(
+    String id, {
+    bool reinforcement = false,
+    bool preview = false,
+    bool automatic = false,
+    Position? gps,
+  }) async {
     if (_disposed) return;
+    if (!_observing) {
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
+    }
+    final same =
+        caseId == id && _preview == preview && isReinforcement == reinforcement;
     final ticket = ++generation;
     caseId = id;
     isReinforcement = reinforcement;
+    _preview = preview;
+    _tracking?.cancel();
     loading = true;
     error = null;
-    points = [];
-    origin = null;
-    destination = null;
+    if (!same) {
+      points = [];
+      origin = null;
+      destination = null;
+    }
     notifyListeners();
     try {
-      final gps = await LocationService().current();
+      gps ??= await LocationService().current();
       if (_disposed || ticket != generation) return;
       final result = await WorkflowClient.request(
         'POST',
         reinforcement
             ? '/operator/reinforcements/$id/route'
+            : preview
+            ? '/operator/sos-cases/$id/preview-route'
             : '/operator/sos-cases/$id/route',
         body: {'latitude': gps.latitude, 'longitude': gps.longitude},
       );
@@ -89,7 +201,8 @@ class SosRouteController extends ChangeNotifier {
         (result['destination']['longitude'] as num).toDouble(),
       );
       calculatedAt = result['calculated_at'] as String?;
-      revision++;
+      _lastCalculation = DateTime.now();
+      if (!automatic) revision++;
     } catch (e) {
       if (!_disposed && ticket == generation) {
         error = e is StateError
@@ -101,6 +214,12 @@ class SosRouteController extends ChangeNotifier {
     } finally {
       if (!_disposed && ticket == generation) {
         loading = false;
+        if (!preview && !reinforcement) {
+          _tracking = Timer.periodic(
+            const Duration(seconds: 20),
+            (_) => _follow(),
+          );
+        }
         notifyListeners();
       }
     }
@@ -134,6 +253,8 @@ class SosRouteController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _tracking?.cancel();
+    if (_observing) WidgetsBinding.instance.removeObserver(this);
     generation++;
     super.dispose();
   }

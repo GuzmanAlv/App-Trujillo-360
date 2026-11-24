@@ -29,17 +29,44 @@ def route(case_id:UUID,origin:RouteOrigin,response:Response,claims=Depends(ident
     case=execute(claims,'SELECT trujillo.sos_case_read(%s)',(case_id,))
     if not case.get('can_edit'):raise HTTPException(403,'Caso asignado a otro operador')
     if case['decision']!='confirmed' or case['attention']=='resolved':failure(409,'ROUTE_CLOSED')
-    destination={'latitude':case['latitude'],'longitude':case['longitude']}
+    target=execute(claims,'SELECT trujillo.sos_navigation_target(%s)',(case_id,))
+    destination={k:target[k] for k in ('latitude','longitude')}
     return compute_route(case_id, origin, destination, claims, case['category'])
 
-def compute_route(case_id, origin, destination, claims, category):
+@router.get('/{case_id}/navigation-target')
+def navigation_target(case_id:UUID,response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims,'SELECT trujillo.sos_navigation_target(%s)',(case_id,))
+
+@router.post('/{case_id}/preview-route')
+def preview_route(case_id: UUID, origin: RouteOrigin, response: Response, claims=Depends(identity)):
+    response.headers['Cache-Control'] = 'private, no-store'
+    case = execute(claims, '''SELECT coalesce((
+        SELECT trujillo.sos_case_read((h->>'id')::uuid)
+            || trujillo.sos_offer_status((h->>'id')::uuid)
+        FROM trujillo.operator_sos_map_data() h
+        WHERE (h->>'id')::uuid=%s
+        ), '{}'::jsonb)''', (case_id,))
+    if not case:
+        failure(409, 'SOS_PREVIEW_UNAVAILABLE')
+    if not case.get('can_edit'):
+        raise HTTPException(403, 'SOS no disponible para este operador')
+    if not case.get('available') or case['decision'] != 'pending':
+        failure(409, 'SOS_PREVIEW_UNAVAILABLE')
+    destination = {'latitude': case['caller_latitude'], 'longitude': case['caller_longitude']}
+    return compute_route(case_id, origin, destination, claims, case['category'], preview=True)
+
+
+def compute_route(case_id, origin, destination, claims, category, *, preview=False):
     key=os.getenv('GOOGLE_ROUTES_API_KEY','').strip()
     if not key:failure(503,'ROUTES_NOT_CONFIGURED')
     # Small per-process throttle, after authorization. No coordinate or response cache.
-    now=time.monotonic();identity_key=(claims['sub'],str(case_id))
+    now = time.monotonic()
+    identity_key = (claims['sub'], str(case_id), preview)
     with _lock:
         for old in [k for k,v in _recent.items() if now-v>60]:_recent.pop(old,None)
-        if identity_key in _recent and now-_recent[identity_key]<10:failure(429,'ROUTES_RATE_LIMIT')
+        if identity_key in _recent and now - _recent[identity_key] < (2 if preview else 10):
+            failure(429, 'ROUTES_RATE_LIMIT')
         if len(_recent)>=1024:_recent.pop(next(iter(_recent)))
         _recent[identity_key]=now
     body={'origin':{'location':{'latLng':origin.model_dump()}},

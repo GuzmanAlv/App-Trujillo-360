@@ -111,11 +111,71 @@ class SosCasePanelState extends State<SosCasePanel>
     with WidgetsBindingObserver {
   bool foreground = true;
   Timer? callPoll;
+  Timer? positionPoll;
+  bool pollingPosition = false;
+  Future<void> refreshPosition() async {
+    if (!mounted ||
+        !foreground ||
+        stale ||
+        pollingPosition ||
+        data?['can_track'] != true ||
+        data?['decision'] != 'confirmed' ||
+        data?['attention'] == 'resolved') {
+      return;
+    }
+    pollingPosition = true;
+    try {
+      final result = await request('GET', '$path/navigation-target');
+      if (mounted && !stale && data != null) {
+        setState(() => data!['live_position'] = result);
+      }
+    } catch (_) {
+      // Keep unsaved evaluation fields and the last known position.
+    } finally {
+      pollingPosition = false;
+    }
+  }
+
   bool pollingCall = false;
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (mounted) {
       setState(() => foreground = state == AppLifecycleState.resumed);
+    }
+  }
+
+  Timer? leasePoll;
+  bool renewingLease = false;
+  Future<void> refreshLease() async {
+    if (!mounted ||
+        stale ||
+        !foreground ||
+        renewingLease ||
+        widget.request != null ||
+        data?['decision'] != 'pending' ||
+        data?['can_edit'] != true) {
+      return;
+    }
+    renewingLease = true;
+    try {
+      final lease = await WorkflowClient.request(
+        'POST',
+        '$path/heartbeat',
+        timeout: const Duration(seconds: 8),
+      );
+      if (mounted &&
+          !stale &&
+          data?['decision'] == 'pending' &&
+          lease['owned'] != true) {
+        setState(() {
+          stale = true;
+          error = 'La reserva venció. Vuelve al mapa para aceptar el SOS.';
+        });
+      }
+    } catch (_) {
+      // The stored lease expires if connectivity cannot be recovered.
+    } finally {
+      renewingLease = false;
     }
   }
 
@@ -241,6 +301,16 @@ class SosCasePanelState extends State<SosCasePanel>
   void initState() {
     super.initState();
     OperatorDuty.cases.addListener(dutyChanged);
+    if (widget.request == null) {
+      positionPoll = Timer.periodic(
+        const Duration(seconds: 12),
+        (_) => refreshPosition(),
+      );
+      leasePoll = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => refreshLease(),
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
     if (widget.request == null && widget.showCallButton) {
       callPoll = Timer.periodic(
@@ -505,6 +575,8 @@ class SosCasePanelState extends State<SosCasePanel>
     OperatorDuty.cases.removeListener(dutyChanged);
     WidgetsBinding.instance.removeObserver(this);
     callPoll?.cancel();
+    leasePoll?.cancel();
+    positionPoll?.cancel();
     session?.cancel();
     for (final c in [
       place,
@@ -575,7 +647,8 @@ class SosCasePanelState extends State<SosCasePanel>
                           (ModalRoute.isCurrentOf(context) ?? true),
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: ['ended', 'unanswered'].contains(d['call_state'])
+                          backgroundColor:
+                              ['ended', 'unanswered'].contains(d['call_state'])
                               ? const Color(0xff16834a)
                               : const Color(0xffce2333),
                           foregroundColor: Colors.white,
@@ -584,8 +657,11 @@ class SosCasePanelState extends State<SosCasePanel>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        icon: Icon(['ended', 'unanswered'].contains(d['call_state'])
-                            ? Icons.call_rounded : Icons.call),
+                        icon: Icon(
+                          ['ended', 'unanswered'].contains(d['call_state'])
+                              ? Icons.call_rounded
+                              : Icons.call,
+                        ),
                         label: Text(
                           ['ended', 'unanswered'].contains(d['call_state'])
                               ? 'Llamar al usuario'
@@ -648,15 +724,26 @@ class SosCasePanelState extends State<SosCasePanel>
                       Marker(
                         markerId: const MarkerId('citizen_sos'),
                         position: LatLng(
-                          (d['caller_latitude'] as num).toDouble(),
-                          (d['caller_longitude'] as num).toDouble(),
+                          (d['live_position']?['latitude'] ??
+                                  d['caller_latitude'] as num)
+                              .toDouble(),
+                          (d['live_position']?['longitude'] ??
+                                  d['caller_longitude'] as num)
+                              .toDouble(),
                         ),
                         icon:
                             citizenIcon ??
                             BitmapDescriptor.defaultMarkerWithHue(
                               BitmapDescriptor.hueRed,
                             ),
-                        infoWindow: const InfoWindow(title: 'Ciudadano · SOS'),
+                        infoWindow: InfoWindow(
+                          title: 'Ciudadano · SOS',
+                          snippet: d['live_position']?['stale'] == true
+                              ? 'Última posición conocida · esperando GPS'
+                              : d['live_position']?['live'] == true
+                              ? 'Posición actual del dispositivo'
+                              : 'Ubicación registrada del SOS',
+                        ),
                       ),
                       if (operatorPoint != null)
                         Marker(
@@ -694,8 +781,12 @@ class SosCasePanelState extends State<SosCasePanel>
                     OutlinedButton.icon(
                       onPressed: () => setState(
                         () => focusPoint = LatLng(
-                          (d['caller_latitude'] as num).toDouble(),
-                          (d['caller_longitude'] as num).toDouble(),
+                          (d['live_position']?['latitude'] ??
+                                  d['caller_latitude'] as num)
+                              .toDouble(),
+                          (d['live_position']?['longitude'] ??
+                                  d['caller_longitude'] as num)
+                              .toDouble(),
                         ),
                       ),
                       icon: const Icon(
@@ -771,6 +862,37 @@ class SosCasePanelState extends State<SosCasePanel>
                   runSpacing: 8,
                   children: [
                     if (!confirmed && d['decision'] != 'discarded') ...[
+                      TextButton(
+                        onPressed: !editable
+                            ? null
+                            : () async {
+                                if (!await confirm(
+                                  '¿Liberar el SOS para que otro operador pueda atenderlo?',
+                                )) {
+                                  return;
+                                }
+                                if (!mounted) return;
+                                setState(() => busy = true);
+                                try {
+                                  await request('POST', '$path/release');
+                                  final call = ActiveCall.session.value;
+                                  if (call?.callId == widget.caseId &&
+                                      !call!.finished) {
+                                    await call.finish();
+                                  }
+                                  if (context.mounted) {
+                                    Navigator.of(context).maybePop();
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    setState(() => error = readable(e));
+                                  }
+                                } finally {
+                                  if (mounted) setState(() => busy = false);
+                                }
+                              },
+                        child: const Text('Liberar SOS para otro operador'),
+                      ),
                       FilledButton(
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xffc12635),

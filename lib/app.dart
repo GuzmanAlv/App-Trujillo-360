@@ -1,3 +1,7 @@
+import 'services/operator_presence.dart';
+import 'services/operator_route_recovery.dart';
+import 'services/citizen_sos_tracker.dart';
+import 'services/pending_sos.dart';
 import 'ui/map_filters_drawer.dart';
 import 'services/sos_navigation.dart';
 import 'services/operator_duty.dart';
@@ -86,6 +90,35 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final density = DensityStore();
   final sosRoute = SosRouteController();
+  final sosPreview = SosRouteController();
+
+  Future<void> previewSos(String? id) async {
+    if (id == null) {
+      if (sosPreview.caseId != null) sosPreview.clear();
+      return;
+    }
+    if (sosPreview.caseId == id &&
+        (sosPreview.loading || sosPreview.points.isNotEmpty)) {
+      return;
+    }
+    final route = sosPreview.calculate(id, preview: true);
+    final generation = sosPreview.generation;
+    await route;
+    if (!mounted ||
+        generation != sosPreview.generation ||
+        sosPreview.error == null) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(sosPreview.error!)));
+  }
+
+  final operatorPresence = OperatorPresence();
+  final routeRecovery = OperatorRouteRecovery();
+  LatLngBounds? sosOverview;
+  int sosOverviewRevision = 0;
+  final citizenSos = CitizenSosTracker();
   final sosArrival = SosArrivalTracker();
   final reinforcements = ReinforcementsStore();
   void reinforcementsChanged() {
@@ -97,6 +130,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void dutyPriorityChanged() {
+    final uid = currentReportOwner;
+    if (mounted && uid != null && OperatorDuty.owner == uid) {
+      final id = routeRecovery.recover(
+        uid,
+        OperatorDuty.cases.value,
+        sosRoute.caseId,
+      );
+      if (id != null) {
+        routeOwner = uid;
+        sosPreview.clear();
+        setState(() {
+          historical = false;
+          sosOverview = null;
+        });
+        unawaited(sosRoute.calculate(id));
+      }
+    }
+
     if (sosRoute.isReinforcement &&
         OperatorDuty.cases.value.any((r) => r['attention'] == 'en_route')) {
       sosRoute.clear();
@@ -144,6 +195,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void routeRequested() {
     final value = SosNavigation.request.value;
     if (!mounted || value == null || currentReportOwner != value.owner) return;
+    sosOverview = null;
+    sosPreview.clear();
     routeOwner = value.owner;
     setState(() {
       tab = 0;
@@ -161,30 +214,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool citizenAllowed = false;
   String? roleOwner;
   bool sosSending = false;
-  String? pendingSosId;
-  String? pendingSosOwner;
-  double? pendingSosLatitude, pendingSosLongitude;
+  String sosProgress = 'Enviando…';
   Timer? expiryTimer;
 
   Future<void> checkRole(User? user) async {
     if (roleOwner != user?.uid) {
+      operatorPresence.configure(null);
+      routeRecovery.reset();
+      sosOverview = null;
+      citizenSos.configure(null);
       roleOwner = user?.uid;
+      sosPreview.clear();
       if (mounted) setState(() => citizenAllowed = false);
       mapIncidents.clearSession();
     }
-    if (OperatorDuty.owner != user?.uid) OperatorDuty.clear();
-    sosArrival.configure(false);
+    if (OperatorDuty.owner != user?.uid) {
+      sosArrival.configure(false);
+      OperatorDuty.clear();
+    }
     reinforcements.configure(false);
     final ticket = ++roleGeneration;
     if (user?.uid != routeOwner) {
       routeOwner = null;
       sosRoute.clear();
-    }
-    if (user?.uid != pendingSosOwner) {
-      pendingSosId = null;
-      pendingSosOwner = null;
-      pendingSosLatitude = null;
-      pendingSosLongitude = null;
     }
     density.clear();
     density.schedule();
@@ -208,9 +260,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ['operator', 'admin'].contains(profile['role']);
         final citizen =
             profile['status'] == 'active' && profile['role'] == 'citizen';
-        sosArrival.configure(allowed && foreground);
+        operatorPresence.configure(allowed ? user.uid : null);
+        citizenSos.configure(citizen ? user.uid : null);
+        sosArrival.configure(allowed);
         reinforcements.configure(allowed && foreground);
         if (!allowed) OperatorDuty.clear();
+        if (!allowed && sosPreview.caseId != null) sosPreview.clear();
         if (operatorAllowed != allowed || citizenAllowed != citizen) {
           setState(() {
             if (operatorAllowed != allowed && tab == 1) {
@@ -244,6 +299,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> sendSos() async {
     if (sosSending) return;
+    final ongoing = ActiveCall.session.value;
+    if (ongoing != null && !ongoing.finished) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              AudioCallPage(callId: ongoing.callId, operator: ongoing.operator),
+        ),
+      );
+      return;
+    }
     if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -253,47 +319,79 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     final owner = FirebaseAuth.instance.currentUser!.uid;
-    setState(() => sosSending = true);
+    setState(() {
+      sosSending = true;
+      sosProgress = 'Preparando SOS…';
+    });
     try {
-      if (pendingSosId == null) {
-        final position = await LocationService().current();
-        if (FirebaseAuth.instance.currentUser?.uid != owner) {
-          throw StateError('La sesión cambió. Vuelve a intentarlo.');
-        }
-        pendingSosId = ReportSender.requestId();
-        pendingSosOwner = owner;
-        pendingSosLatitude = position.latitude;
-        pendingSosLongitude = position.longitude;
-      }
-      if (FirebaseAuth.instance.currentUser?.uid != owner) {
-        throw StateError('La sesión cambió. Vuelve a intentarlo.');
-      }
-      final response = await WorkflowClient.request(
-        'POST',
-        '/sos',
-        body: {
-          'request_id': pendingSosId,
-          'latitude': pendingSosLatitude,
-          'longitude': pendingSosLongitude,
-        },
-      );
-      if (response is! Map ||
-          response['request_id'] != pendingSosId ||
-          response['source'] != 'sos') {
-        throw StateError('No se confirmó el SOS. Vuelve a intentarlo.');
-      }
-      pendingSosId = null;
-      pendingSosOwner = null;
-      pendingSosLatitude = null;
-      pendingSosLongitude = null;
-      await PushService.instance.ensureSosDevice(requestPermission: true);
-      if (mounted) {
+      await citizenSos.refresh();
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != owner) return;
+      final activeCase = citizenSos.caseId;
+      if (activeCase != null) {
         await Navigator.push<void>(
           context,
           MaterialPageRoute(
-            builder: (_) => AudioCallPage(callId: response['id'] as String),
+            builder: (_) => AudioCallPage(callId: activeCase, redial: true),
           ),
         );
+        return;
+      }
+      var pending = await PendingSos.read(owner);
+      if (pending == null) {
+        if (mounted) setState(() => sosProgress = 'Buscando ubicación…');
+        final gps = await LocationService().current();
+        final point = LatLng(gps.latitude, gps.longitude);
+        if (!mounted) return;
+        pending = {
+          'request_id': ReportSender.requestId(),
+          'latitude': point.latitude,
+          'longitude': point.longitude,
+        };
+        await PendingSos.save(owner, pending);
+      }
+      if (FirebaseAuth.instance.currentUser?.uid != owner) {
+        throw StateError(
+          'La sesión cambió. El SOS pendiente se conserva para su cuenta.',
+        );
+      }
+      Map response;
+      if (pending['received_id'] is String) {
+        response = {'id': pending['received_id']};
+      } else {
+        if (mounted) setState(() => sosProgress = 'Confirmando envío…');
+        response = Map.from(
+          await WorkflowClient.request('POST', '/sos', body: pending) as Map,
+        );
+        if ((response['request_id'] != pending['request_id'] &&
+                response['existing_active'] != true) ||
+            response['source'] != 'sos' ||
+            response['id'] is! String) {
+          throw StateError(
+            'Respuesta incompleta. El SOS se conserva para reintentar sin duplicarlo.',
+          );
+        }
+        pending['received_id'] = response['id'];
+        await PendingSos.save(owner, pending);
+      }
+      if (FirebaseAuth.instance.currentUser?.uid != owner || !mounted) return;
+      setState(() => sosProgress = 'SOS recibido');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SOS recibido. Preparando conexión de audio.'),
+        ),
+      );
+      unawaited(PushService.instance.ensureSosDevice(requestPermission: true));
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AudioCallPage(
+            callId: response['id'] as String,
+            redial: response['existing_active'] == true,
+          ),
+        ),
+      );
+      if (ActiveCall.session.value?.finished != false) {
+        await PendingSos.clear(owner);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -313,7 +411,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ? error.message
                   : error is StateError
                   ? error.message.toString()
-                  : 'No se confirmó el SOS. Vuelve a intentarlo.',
+                  : 'No recibimos confirmación. Tu solicitud queda pendiente en el teléfono. Reintenta con la misma cuenta.',
             ),
           ),
         );
@@ -345,6 +443,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final key = '${data['event_id']}';
     if (!openedPush.add(key)) return;
     PushService.instance.pending = null;
+    if (data['assigned_call'] == 'true' && operatorAllowed) {
+      returnToMap();
+      return;
+    }
     if (data['kind'] == 'reinforcement') {
       final owner = currentReportOwner;
       try {
@@ -432,7 +534,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void updateNearbyActivity() {
-    sosArrival.configure(operatorAllowed && foreground);
+    citizenSos.configure(citizenAllowed ? roleOwner : null);
+    sosArrival.configure(operatorAllowed);
     reinforcements.configure(operatorAllowed && foreground);
     nearby.setActive(
       foreground &&
@@ -486,6 +589,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     SosNavigation.caseChanges.removeListener(caseChanged);
     SosNavigation.mapRequested.removeListener(returnToMap);
     sosRoute.dispose();
+    sosPreview.dispose();
+    operatorPresence.dispose();
+    citizenSos.dispose();
     sosArrival.dispose();
     reinforcements.dispose();
     density.dispose();
@@ -585,6 +691,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       mapIncidents,
       density,
       sosRoute,
+      sosPreview,
       ActiveCall.session,
       ActiveCall.presentation,
       reinforcements,
@@ -602,10 +709,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   loading: density.loading,
                   error: density.error,
                   onCategory: (value) => setState(() => filter = value),
-                  onPeriod: (value) => setState(() {
-                    historical = value;
-                    density.configure(enabled: value && foreground && tab == 0);
-                  }),
+                  onPeriod: (value) {
+                    if (value) previewSos(null);
+                    setState(() {
+                      historical = value;
+                      density.configure(
+                        enabled: value && foreground && tab == 0,
+                      );
+                    });
+                  },
                   onHour: (value) => setState(
                     () => density.configure(enabled: true, band: value),
                   ),
@@ -681,6 +793,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     fit: StackFit.expand,
                                     children: [
                                       CitizenSosMapLayer(
+                                        onActiveCases: (rows) =>
+                                            citizenSos.replace(roleOwner, rows),
                                         onCasesChanged: () =>
                                             unawaited(mapIncidents.refresh()),
                                         enabled:
@@ -691,6 +805,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                             (ModalRoute.isCurrentOf(context) ??
                                                 true),
                                         builder: (myMarkers, myIncidentIds) => OperatorSosMapLayer(
+                                          onOverview: (bounds) => setState(() {
+                                            sosOverview = bounds;
+                                            sosOverviewRevision++;
+                                          }),
+                                          onPreview: (id) {
+                                            if (sosOverview != null) {
+                                              setState(
+                                                () => sosOverview = null,
+                                              );
+                                            }
+                                            previewSos(id);
+                                          },
                                           reinforcements: reinforcements,
                                           onReinforcement: selectReinforcement,
                                           enabled:
@@ -758,36 +884,59 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                                       ),
                                                     ),
                                                 },
-                                                polylines:
-                                                    operatorAllowed &&
-                                                        sosRoute
-                                                            .points
-                                                            .isNotEmpty
-                                                    ? {
-                                                        Polyline(
-                                                          polylineId:
-                                                              const PolylineId(
-                                                                'sos_route',
-                                                              ),
-                                                          points:
-                                                              sosRoute.points,
-                                                          color:
-                                                              sosRoute
-                                                                  .isReinforcement
-                                                              ? ReinforcementControls
-                                                                    .orange
-                                                              : const Color(
-                                                                  0xff1769ce,
-                                                                ),
-                                                          width: 6,
-                                                        ),
-                                                      }
-                                                    : const {},
-                                                routeBounds: operatorAllowed
-                                                    ? sosRoute.bounds
-                                                    : null,
+                                                polylines: {
+                                                  if (operatorAllowed &&
+                                                      sosRoute
+                                                          .points
+                                                          .isNotEmpty)
+                                                    Polyline(
+                                                      polylineId:
+                                                          const PolylineId(
+                                                            'sos_route',
+                                                          ),
+                                                      points: sosRoute.points,
+                                                      color:
+                                                          sosRoute
+                                                              .isReinforcement
+                                                          ? ReinforcementControls
+                                                                .orange
+                                                          : const Color(
+                                                              0xff1769ce,
+                                                            ),
+                                                      width: 6,
+                                                    ),
+                                                  if (operatorAllowed &&
+                                                      !historical &&
+                                                      sosPreview
+                                                          .points
+                                                          .isNotEmpty)
+                                                    Polyline(
+                                                      polylineId:
+                                                          const PolylineId(
+                                                            'sos_preview',
+                                                          ),
+                                                      points: sosPreview.points,
+                                                      color: const Color(
+                                                        0xffc41728,
+                                                      ),
+                                                      zIndex: 1,
+                                                      width: 6,
+                                                    ),
+                                                },
+                                                routeBounds:
+                                                    sosOverview ??
+                                                    (!operatorAllowed
+                                                        ? null
+                                                        : !historical &&
+                                                              sosPreview
+                                                                      .caseId !=
+                                                                  null
+                                                        ? sosPreview.bounds
+                                                        : sosRoute.bounds),
                                                 routeRevision:
-                                                    sosRoute.revision,
+                                                    sosRoute.revision +
+                                                    sosPreview.revision +
+                                                    sosOverviewRevision,
                                                 focusTarget: sosFocus?.target,
                                                 focusRevision:
                                                     sosFocus?.revision ?? 0,
@@ -839,10 +988,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                         right: 12,
                                         bottom: 12,
                                         child: MapBottomControls(
+                                          citizenSos: citizenSos,
                                           operator: operatorAllowed,
                                           showSos: citizenAllowed,
                                           route: sosRoute,
                                           sending: sosSending,
+                                          sendingLabel: sosProgress,
                                           onSos: sendSos,
                                         ),
                                       ),

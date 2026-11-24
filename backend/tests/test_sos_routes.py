@@ -12,6 +12,7 @@ from app import sos_routes
 client = TestClient(app)
 CASE = str(uuid4())
 PATH = f'/operator/sos-cases/{CASE}/route'
+PREVIEW_PATH = f'/operator/sos-cases/{CASE}/preview-route'
 ORIGIN = {'latitude': -8.12, 'longitude': -79.02}
 CONFIRMED = dict(can_edit=True, decision='confirmed', attention='none',
                  latitude=-8.11, longitude=-79.03, category='Auxilio')
@@ -57,6 +58,27 @@ def test_database_role_denial_cannot_call_google():
         google.assert_not_called()
 
 
+def test_preview_uses_caller_location_without_claiming_the_sos():
+    login()
+    offer = dict(CONFIRMED, decision='pending', available=True,
+                 caller_latitude=-8.13, caller_longitude=-79.04)
+    with patch('app.sos_routes.execute', return_value=offer) as db, patch('app.sos_routes.compute_route', return_value={}) as compute:
+        assert client.post(PREVIEW_PATH, json=ORIGIN).status_code == 200
+        assert 'operator_sos_map_data()' in db.call_args.args[1]
+        assert 'claim_sos' not in db.call_args.args[1]
+        assert compute.call_args.args[2] == {'latitude': -8.13, 'longitude': -79.04}
+        assert compute.call_args.kwargs == {'preview': True}
+
+
+@pytest.mark.parametrize('offer, status', [({}, 409), ({'can_edit': False}, 403),
+    ({'can_edit': True, 'available': False, 'decision': 'pending'}, 409)])
+def test_preview_rejects_unavailable_offers_before_calling_google(offer, status):
+    login()
+    with patch('app.sos_routes.execute', return_value=offer), patch('app.sos_routes.compute_route') as compute:
+        assert client.post(PREVIEW_PATH, json=ORIGIN).status_code == status
+        compute.assert_not_called()
+
+
 @pytest.mark.parametrize('body', [
     {**ORIGIN, 'destination': {'latitude': 0, 'longitude': 0}},
     {**ORIGIN, 'latitude': 91}, {**ORIGIN, 'longitude': -181},
@@ -74,7 +96,8 @@ def test_missing_configuration_preserves_case(monkeypatch):
     with patch('app.sos_routes.execute', return_value=CONFIRMED) as db, patch('app.sos_routes.requests.post') as google:
         response = client.post(PATH, json=ORIGIN)
         assert response.json()['detail']['code'] == 'ROUTES_NOT_CONFIGURED'
-        assert db.call_args.args[1] == 'SELECT trujillo.sos_case_read(%s)'
+        assert db.call_args_list[0].args[1] == 'SELECT trujillo.sos_case_read(%s)'
+        assert all('SELECT trujillo.' in call.args[1] for call in db.call_args_list)
         google.assert_not_called()
 
 
@@ -118,3 +141,11 @@ def test_timeout_never_exposes_credentials():
         response = client.post(PATH, json=ORIGIN)
         assert response.status_code == 503
         assert 'test-secret' not in response.text
+
+
+def test_route_follows_private_live_destination_not_recorded_incident():
+    login()
+    target={'latitude':-8.16,'longitude':-79.08,'live':True}
+    with patch('app.sos_routes.execute', side_effect=[CONFIRMED,target]), patch('app.sos_routes.compute_route',return_value={}) as compute:
+        assert client.post(PATH,json=ORIGIN).status_code==200
+        assert compute.call_args.args[2]=={'latitude':-8.16,'longitude':-79.08}

@@ -15,6 +15,7 @@ def test_private_reinforcements_priority_and_on_scene_false_alarm(database):
             c.execute('SET LOCAL ROLE trujillo_api')
             cur=c.execute(sql,args)
             return cur.fetchall() if many else cur.fetchone()[0]
+    query(operator,"SELECT trujillo.operator_position(-8.12,-79.04,10,clock_timestamp())")
     query(operator,'SELECT trujillo.push_register(%s,%s,false,true,NULL,NULL,500,false)',(uuid4(),'operator-token-'+str(uuid4())))
     request_id=uuid4()
     def request(user=requester,rid=request_id):

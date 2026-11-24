@@ -18,9 +18,11 @@ class CitizenSosMapLayer extends StatefulWidget {
     required this.active,
     required this.builder,
     this.onCasesChanged,
+    this.onActiveCases,
   });
   final bool enabled, active;
   final VoidCallback? onCasesChanged;
+  final ValueChanged<List<Map<String, dynamic>>>? onActiveCases;
   final Widget Function(Set<Marker>, Set<String>) builder;
   @override
   State<CitizenSosMapLayer> createState() => _CitizenSosMapLayerState();
@@ -145,14 +147,12 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
           CitizenArrivalAlerts.instance.clear();
         }
         setState(() => cases = rows);
+        widget.onActiveCases?.call(rows);
         if (previous != next) widget.onCasesChanged?.call();
         configurePulse();
       }
     } catch (_) {
-      if (mounted && ticket == generation) {
-        setState(() => cases = []);
-        pulse?.cancel();
-      }
+      // Preserve the active SOS during temporary loss of connectivity.
     } finally {
       if (ticket == generation) busy = false;
     }

@@ -3,6 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('La llamada de un ciudadano asignado permite responder', (
+    tester,
+  ) async {
+    String? accepted;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => IncomingCallView(
+          queue: const [
+            {'id': 'assigned-case', 'assigned': true},
+          ],
+          onAccept: (id) => accepted = id,
+          onHide: (_) {},
+          child: child!,
+        ),
+        home: const Scaffold(body: Text('Mapa')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Tu ciudadano te llama'), findsOneWidget);
+    await tester.tap(find.text('Tomar llamada'));
+    expect(accepted, 'assigned-case');
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Las llamadas SOS al operador no muestran una tarjeta flotante', (
     tester,
   ) async {

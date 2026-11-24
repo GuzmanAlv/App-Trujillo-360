@@ -40,6 +40,19 @@ def start(call_id: UUID, response: Response, claims=Depends(identity)):
     result.pop('participant', None)
     return result
 
+@router.post('/{call_id}/redial')
+def redial(call_id:UUID,response:Response,claims=Depends(identity)):
+    private(response)
+    configuration()
+    result=execute(claims,'SELECT trujillo.citizen_call_operator(%s)',(call_id,))
+    result.pop('participant',None)
+    return result
+
+@router.get('/incoming/assigned')
+def assigned_calls(response:Response,claims=Depends(identity)):
+    private(response)
+    return execute(claims,'SELECT trujillo.assigned_incoming_calls()',many=True)
+
 @router.get('/{call_id}')
 def status(call_id: UUID, response: Response, claims=Depends(identity)):
     private(response)

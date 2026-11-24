@@ -1,5 +1,96 @@
 # Continuar Trujillo 360 en otra laptop
 
+## Avisos por radio y recuperación de rutas (033)
+
+Aplicar después de 032, antes de desplegar backend e instalar el APK nuevo:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_operator_sos_zones.py --apply
+cd ..
+```
+
+`/ready` incluye `operator_sos_zones_version: 1`. El operador vuelve a calcular
+la ruta de su SOS confirmado en camino al iniciar sesión o recuperar su asignación.
+La consulta periódica no deshace «Quitar ruta» mientras continúe la misma sesión.
+
+Los avisos de nuevos SOS (FCM, sonido, vibración, tarjetas y luz roja) usan un radio
+fijo de **15 km desde el GPS reciente del operador**. Su ubicación se actualiza
+aproximadamente cada 30 segundos, con notificación de ubicación en Android mientras
+esté conectado como operador. Se requiere precisión de 100 m o mejor; la posición
+caduca a los 10 minutos. Sin GPS válido no hay alarmas automáticas; el mapa sigue
+mostrando todos los casos. Android puede interrumpir ubicación al forzar el cierre
+o por restricciones de batería. La llamada de un ciudadano al operador ya asignado
+continúa avisando a ese operador aunque esté fuera del radio.
+
+El botón rojo de la esquina inferior derecha muestra el número de **SOS activos**
+de la plataforma (incluye pendientes y confirmados, excluye resueltos/descartados).
+Al tocarlo, el mapa encuadra todos. El listado no está limitado a los 200 de la
+bandeja antigua. Un marcador lejano permite consultar o aceptar voluntariamente el
+SOS; no genera tarjetas ni alarmas por proximidad. Los incidentes resueltos siguen
+su historial público de siete días y no aumentan este contador.
+
+Prueba física: iniciar/cerrar sesión con caso en camino; dos operadores a menos y
+más de 15 km; un tercero sin permiso GPS; confirmar mapas/contador en todos, avisos
+solo en el cercano, pulsar un marcador lejano y volver a abrir la app bloqueada.
+No se han aplicado estas migraciones ni desplegado automáticamente.
+
+## SOS activo y ruta en movimiento (032)
+
+Después de la migración 031, aplicar antes de desplegar backend y generar el APK:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_sos_live_navigation.py --apply
+cd ..
+```
+
+`/ready` debe mostrar `sos_live_navigation_version: 1`. Un SOS confirmado activo
+reemplaza el botón del ciudadano por «Llamar al operador» y acceso a fotos/Mi caso SOS.
+El servidor devuelve el caso existente ante otro envío; no crea uno adicional.
+La llamada reabre el audio del mismo caso con su operador asignado.
+
+El ciudadano comparte GPS automático con notificación de ubicación en Android
+mientras el caso siga activo; se detiene al cerrar o cambiar de cuenta. Posiciones
+con precisión mayor de 50 m o antigüedad mayor de 30 s se rechazan. Solo el operador
+asignado ve la posición actual; el punto del incidente público no se desplaza.
+Si el GPS deja de actualizarse por 60 s, se conserva la última posición conocida
+y se impide confirmar la llegada automáticamente hasta recibir GPS reciente.
+Antes del primer GPS, se usa el lugar registrado del incidente.
+
+El mapa del operador comprueba cambios cada 20 s en primer plano y recalcula
+al desviarse 40 m, avanzar 100 m, moverse el destino 20 m o pasar dos minutos.
+Conserva la última ruta si falla la red. Routes puede incorporar cierres conocidos
+por Google; no detecta automáticamente una calle cerrada que Google desconozca.
+La llegada utiliza el mismo destino actualizado. Verificar con dos celulares:
+llamada al asignado, desplazamiento ciudadano, desvío del operador, pantalla
+bloqueada, cierre del caso y detención de ubicación. Las restricciones de batería
+o la detención forzada de Android pueden interrumpir el seguimiento.
+
+## Recuperación de SOS y llegada en segundo plano
+
+La mejora requiere la migración 031, backend y APK nuevos. Aplicar antes de
+desplegar desde la raíz del proyecto:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_sos_reliability.py --apply
+cd ..
+```
+
+`/ready` debe incluir `sos_reliability_version: 1`. Las reservas pendientes duran
+dos minutos sin actividad del operador y vuelven a ofrecerse al consultar la bandeja.
+La ficha permite liberarlas voluntariamente. Confirmados en camino/en zona conservan
+su asignación. El audio tolera fallos transitorios de verificación durante un minuto.
+El SOS guarda su identificador y recibo por cuenta para reintentar tras reiniciar.
+El SOS toma el GPS del dispositivo. Si falla, se debe activar ubicación y reintentar; no permite marcar manualmente otro punto.
+
+Android inicia un servicio de ubicación con notificación al confirmar el SOS y lo
+detiene al llegar o cerrar la atención. Permitir ubicación precisa y comprobar en
+dos teléfonos el bloqueo de pantalla y cambio a otra app. La detención forzada o
+restricciones del fabricante pueden detener el servicio. No se ha verificado esta
+versión físicamente en un celular. No se aplican migraciones ni despliegues automáticamente.
+
 Actualización: [solo SOS en Mis Solicitudes y Cerca de mí](sos-only-requests.md).
 Requiere migración 028 y actualizar backend/APK. `/ready` incluye `nearby_sos_version: 1`.
 
