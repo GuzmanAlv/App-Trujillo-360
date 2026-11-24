@@ -86,7 +86,7 @@ class _OperatorPortalState extends State<OperatorPortal> {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 2,
+    length: 3,
     child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.embedded,
@@ -94,9 +94,9 @@ class _OperatorPortalState extends State<OperatorPortal> {
         title: widget.embedded ? null : const Text('Seguridad ciudadana'),
         bottom: allowed
             ? const TabBar(
-                isScrollable: true,
                 tabs: [
-                  Tab(text: 'Ayuda'),
+                  Tab(text: 'Confirmados'),
+                  Tab(text: 'Descartados'),
                   Tab(text: 'Cámaras / IA'),
                 ],
               )
@@ -126,7 +126,16 @@ class _OperatorPortalState extends State<OperatorPortal> {
             )
           : TabBarView(
               children: [
-                WorkflowPanel(operator: true, onDenied: check),
+                WorkflowPanel(
+                  operator: true,
+                  sosDecision: 'confirmed',
+                  onDenied: check,
+                ),
+                WorkflowPanel(
+                  operator: true,
+                  sosDecision: 'discarded',
+                  onDenied: check,
+                ),
                 AiDetectionPanel(store: ai),
               ],
             ),
@@ -139,9 +148,11 @@ class WorkflowPanel extends StatefulWidget {
     super.key,
     this.operator = false,
     this.incidents = false,
+    this.sosDecision,
     this.onDenied,
   });
   final bool operator, incidents;
+  final String? sosDecision;
   final VoidCallback? onDenied;
   @override
   State<WorkflowPanel> createState() => _WorkflowPanelState();
@@ -290,7 +301,15 @@ class _WorkflowPanelState extends State<WorkflowPanel>
   Widget build(BuildContext context) {
     final visibleRows = widget.incidents
         ? rows.where((r) => r['status'] == incidentGroup).toList()
-        : rows;
+        : widget.sosDecision == null
+        ? rows
+        : rows
+              .where(
+                (r) =>
+                    r['source'] == 'sos' &&
+                    (r['sos_case'] as Map?)?['decision'] == widget.sosDecision,
+              )
+              .toList();
     final pendingCount = rows.where((r) => r['status'] == 'pending').length;
     final communityCount = rows
         .where((r) => r['status'] == 'corroborated')
@@ -351,6 +370,10 @@ class _WorkflowPanelState extends State<WorkflowPanel>
                               'No hay incidentes verificados por un operador.',
                             _ => 'No hay reportes pendientes de revisión.',
                           }
+                        : widget.sosDecision == 'confirmed'
+                        ? 'No hay SOS confirmados.'
+                        : widget.sosDecision == 'discarded'
+                        ? 'No hay SOS descartados.'
                         : 'No hay casos para mostrar.',
                   ),
                 )
@@ -365,7 +388,6 @@ class _WorkflowPanelState extends State<WorkflowPanel>
                       sos['decision'] = 'discarded';
                     }
                     if (r['stage'] == 'Cerrada') sos['attention'] = 'resolved';
-                    final style = sosStyle(sos);
                     return SosSupportFrame(
                       active:
                           widget.operator && sos['support_requested'] == true,
@@ -376,29 +398,32 @@ class _WorkflowPanelState extends State<WorkflowPanel>
                             widget.incidents
                                 ? Icons.fact_check_outlined
                                 : r['source'] == 'sos'
-                                ? style.icon
+                                ? sos['decision'] == 'discarded'
+                                      ? Icons.close_rounded
+                                      : Icons.check_rounded
                                 : Icons.sos,
                             color: r['source'] == 'sos'
-                                ? style.color
+                                ? sos['decision'] == 'discarded'
+                                      ? Colors.red.shade700
+                                      : Colors.green.shade700
                                 : r['priority'] == 'Alta'
                                 ? Colors.red
                                 : const Color(0xff087f68),
                           ),
                           title: Text(
                             r['source'] == 'sos'
-                                ? 'SOS · Ubicación compartida'
+                                ? 'SOS · ${sos['category'] ?? r['category'] ?? 'Auxilio'}'
                                 : '${r['category']} · ${r['place'] ?? 'Incidente'}',
                           ),
                           subtitle: Text(
                             widget.incidents
                                 ? '${r['status']} · ${r['corroboration_count']} aportes · ${workflowTime(r['occurred_at'])}'
+                                : r['source'] == 'sos'
+                                ? '${('${sos['place'] ?? ''}').trim().isNotEmpty ? sos['place'] : 'Dirección no registrada'}\n${workflowTime(r['received_at'])}'
                                 : 'Urgencia ${r['priority']} · ${r['stage']}\n${workflowTime(r['received_at'])}',
                           ),
                           trailing: widget.operator && r['source'] == 'sos'
-                              ? SizedBox(
-                                  width: 140,
-                                  child: SosStatusBadge(data: sos),
-                                )
+                              ? null
                               : const Icon(Icons.chevron_right),
                           onTap: () async {
                             await Navigator.push<void>(
