@@ -29,8 +29,14 @@ def route(case_id:UUID,origin:RouteOrigin,response:Response,claims=Depends(ident
     case=execute(claims,'SELECT trujillo.sos_case_read(%s)',(case_id,))
     if not case.get('can_edit'):raise HTTPException(403,'Caso asignado a otro operador')
     if case['decision']!='confirmed' or case['attention']=='resolved':failure(409,'ROUTE_CLOSED')
-    destination={'latitude':case['latitude'],'longitude':case['longitude']}
+    target=execute(claims,'SELECT trujillo.sos_navigation_target(%s)',(case_id,))
+    destination={k:target[k] for k in ('latitude','longitude')}
     return compute_route(case_id, origin, destination, claims, case['category'])
+
+@router.get('/{case_id}/navigation-target')
+def navigation_target(case_id:UUID,response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims,'SELECT trujillo.sos_navigation_target(%s)',(case_id,))
 
 @router.post('/{case_id}/preview-route')
 def preview_route(case_id: UUID, origin: RouteOrigin, response: Response, claims=Depends(identity)):
@@ -38,9 +44,8 @@ def preview_route(case_id: UUID, origin: RouteOrigin, response: Response, claims
     case = execute(claims, '''SELECT coalesce((
         SELECT trujillo.sos_case_read((h->>'id')::uuid)
             || trujillo.sos_offer_status((h->>'id')::uuid)
-        FROM trujillo.list_help(true) h
-        WHERE (h->>'id')::uuid=%s AND h->>'source'='sos'
-            AND h->>'stage' NOT IN ('Cerrada','Descartada')
+        FROM trujillo.operator_sos_map_data() h
+        WHERE (h->>'id')::uuid=%s
         ), '{}'::jsonb)''', (case_id,))
     if not case:
         failure(409, 'SOS_PREVIEW_UNAVAILABLE')

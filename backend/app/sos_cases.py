@@ -13,16 +13,7 @@ router = APIRouter(prefix='/operator')
 def map_cases(response: Response, claims=Depends(identity)):
     """Same authorized queue as Ayuda; publish only marker fields to operators."""
     response.headers['Cache-Control'] = 'private, no-store'
-    return execute(claims, '''SELECT jsonb_build_object(
-        'id',h->>'id','latitude',c->'latitude','longitude',c->'longitude',
-        'decision',c->'decision','attention',c->'attention','category',c->'category','can_track',c->'can_track',
-        'support_requested',c->'support_requested','incident_id',c->'incident_id')
-        || trujillo.sos_offer_status((h->>'id')::uuid)
-        || trujillo.sos_map_call_status((h->>'id')::uuid)
-        FROM trujillo.list_help(true) h
-        CROSS JOIN LATERAL (SELECT trujillo.sos_case_read((h->>'id')::uuid) AS c) details
-        WHERE h->>'source'='sos' AND h->>'stage' NOT IN ('Cerrada','Descartada')
-        AND ((c->>'decision')<>'pending' OR (c->>'can_edit')::boolean)''', many=True)
+    return execute(claims, 'SELECT trujillo.operator_sos_map_data()', many=True)
 
 @router.post('/sos-cases/{case_id}/claim')
 def claim(case_id: UUID, response: Response, claims=Depends(identity)):
@@ -34,6 +25,22 @@ class ArrivalPosition(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     accuracy: float = Field(ge=0)
+
+class OperatorPosition(ArrivalPosition):
+    observed_at: AwareDatetime
+    accuracy: float = Field(ge=0,le=100)
+
+@router.post('/position')
+def position(data:OperatorPosition,response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims,'SELECT trujillo.operator_position(%s,%s,%s,%s)',
+        (data.latitude,data.longitude,data.accuracy,data.observed_at))
+
+@router.delete('/position')
+def clear_position(response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    execute(claims,'SELECT trujillo.clear_operator_position()')
+    return {'cleared':True}
 
 @router.post('/sos-cases/{case_id}/heartbeat')
 def heartbeat(case_id: UUID, response: Response, claims=Depends(identity)):

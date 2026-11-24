@@ -1,4 +1,5 @@
 import '../services/sos_alert_state.dart';
+import 'sos_overview_button.dart';
 import '../services/operator_duty.dart';
 import '../services/reinforcements_store.dart';
 import 'reinforcement_controls.dart';
@@ -32,11 +33,13 @@ class OperatorSosMapLayer extends StatefulWidget {
     required this.reinforcements,
     required this.onReinforcement,
     required this.onPreview,
+    this.onOverview,
   });
   final bool enabled, active;
   final ReinforcementsStore reinforcements;
   final void Function(Map<String, dynamic>, bool) onReinforcement;
   final ValueChanged<String?> onPreview;
+  final ValueChanged<LatLngBounds>? onOverview;
   final Widget Function(Set<Marker>, Set<String>, SosMapFocus?) builder;
   @override
   State<OperatorSosMapLayer> createState() => _OperatorSosMapLayerState();
@@ -161,7 +164,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   }
 
   void focusCaller(String id) {
-    if (!widget.enabled || !queueStates.containsKey(id)) return;
+    if (!widget.enabled) return;
     final matching = baseMarkers.where((m) => m.markerId.value == id);
     if (matching.isEmpty) return;
     setState(() {
@@ -179,6 +182,49 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   }
 
   Set<Marker> baseMarkers = {};
+  Future<void> offerOutsideQueue(String id) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Solicitud SOS',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Puedes consultar o atender este SOS aunque esté fuera de tu radio de avisos.',
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(c);
+                  focusCaller(id);
+                },
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Ver ubicación y ruta'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(c);
+                  unawaited(acceptCase(id));
+                },
+                icon: const Icon(Icons.call),
+                label: const Text('Aceptar SOS'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Set<String> pendingIds = {};
   Future<void> preparePendingIcons() async {
     for (final phase in [0.0, .35, .75, 1.0, .75, .35]) {
@@ -366,6 +412,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgent = <String>{};
       var alerts = 0;
       final nextQueue = <String, bool>{};
+      final allAvailable = <String>{};
       final nextMinutes = <String, int>{};
       final categories = <String, String>{};
       for (final row in rows) {
@@ -424,7 +471,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         }
         final waiting = row['call_waiting'] == true;
         if (row['available'] == true) {
-          nextQueue[markerId] = waiting;
+          allAvailable.add(markerId);
+          if (row['alert_in_range'] == true) nextQueue[markerId] = waiting;
           if (lastPosition != null) {
             final meters = Geolocator.distanceBetween(
               lastPosition!.latitude,
@@ -460,11 +508,13 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                   : 'SOS · ${style.label}',
               snippet:
                   row['decision'] == 'pending' && row['claimed_by_me'] != true
-                  ? 'Acepta este SOS en la tarjeta superior'
+                  ? 'Ver o atender este SOS'
                   : 'Abrir caso SOS',
             ),
             onTap: row['decision'] == 'pending' && row['claimed_by_me'] != true
-                ? null
+                ? (row['available'] == true
+                      ? () => offerOutsideQueue(markerId)
+                      : null)
                 : () => openCase('${row['id']}'),
           ),
         );
@@ -473,7 +523,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           ticket == generation &&
           widget.enabled &&
           FirebaseAuth.instance.currentUser?.uid == uid) {
-        if (!nextQueue.containsKey(previewMarker)) clearPreview();
+        if (!allAvailable.contains(previewMarker)) clearPreview();
         final points = next
             .where((m) => nextQueue.containsKey(m.markerId.value))
             .map((m) => m.position)
@@ -703,11 +753,29 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                         widget.reinforcements.others.isNotEmpty)
                       Positioned(
                         right: 12,
-                        bottom: 100,
+                        bottom: 160,
                         child: ReinforcementControls.button(
                           context,
                           widget.reinforcements,
                           widget.onReinforcement,
+                        ),
+                      ),
+                    if (widget.enabled)
+                      Positioned(
+                        right: 12,
+                        bottom: 100,
+                        child: SosOverviewButton(
+                          count: baseMarkers.length,
+                          onPressed: baseMarkers.isEmpty
+                              ? null
+                              : () {
+                                  final bounds = sosOverviewBounds(
+                                    baseMarkers.map((m) => m.position),
+                                  );
+                                  if (bounds != null) {
+                                    widget.onOverview?.call(bounds);
+                                  }
+                                },
                         ),
                       ),
                     if (widget.enabled &&

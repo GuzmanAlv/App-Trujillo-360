@@ -1,3 +1,4 @@
+import 'package:alerta_ciudadana/services/citizen_sos_tracker.dart';
 import 'package:alerta_ciudadana/services/active_call.dart';
 import 'package:alerta_ciudadana/services/call_session.dart';
 import 'package:alerta_ciudadana/services/sos_route_controller.dart';
@@ -17,6 +18,52 @@ class TestRoom extends Fake implements lk.Room {
 }
 
 void main() {
+  testWidgets(
+    'SOS confirmado reemplaza el botón y deja acceso a llamada y fotos',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final tracker = CitizenSosTracker()
+        ..value = [
+          {'id': 'active-case'},
+        ];
+      final route = SosRouteController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: MapBottomControls(
+                    operator: false,
+                    route: route,
+                    citizenSos: tracker,
+                    onSos: () => fail('No debe crear otro SOS'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(HoldSosButton), findsNothing);
+      expect(find.text('Llamar al operador'), findsOneWidget);
+      expect(find.byTooltip('Mi caso SOS · agregar foto'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      tracker.value = [];
+      await tester.pump();
+      expect(find.byType(HoldSosButton), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      tracker.dispose();
+      route.dispose();
+    },
+  );
+
   testWidgets('El descarte ofrece tres decisiones y exige un motivo nuevo', (
     tester,
   ) async {

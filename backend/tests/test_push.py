@@ -61,6 +61,13 @@ def test_payload_does_not_include_private_case_details():
     assert 'latitude' not in payload['data'] and 'description' not in payload['data']
     assert payload['android']['notification']['tag']=='event'
 
+def test_assigned_redial_uses_call_channel_and_short_lifetime():
+    payload=message(dict(token='test',kind='operator',target_id='case',account_uid='uid',job_id='event',
+        title='Llamada',body='Responder',assigned_call=True,quiet=False))['message']
+    assert payload['android']['notification']['channel_id']=='trujillo_sos_calls'
+    assert payload['android']['ttl']=='90s'
+    assert payload['data']['assigned_call']=='true'
+
 def test_citizen_alert_uses_incident_category_without_claiming_live_distance():
     payload=message(dict(token='test',kind='citizen',target_id='target',account_uid='uid',job_id='event',title='Incidente confirmado en tu zona',body='Robo. Toca para consultar el detalle.'))['message']
     assert payload['notification']['title']=='🚨 Alerta: Robo en tu zona'

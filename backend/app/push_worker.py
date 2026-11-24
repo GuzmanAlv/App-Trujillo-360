@@ -39,6 +39,8 @@ def message(job):
     data['event_id'] = str(job['job_id'])
     if 'incident' in job:
         data['incident'] = job['incident']
+    if job.get('assigned_call') is True:
+        data['assigned_call'] = 'true'
     if job.get('quiet') is True:
         data['quiet'] = 'true'
     title, body = job['title'], job['body']
@@ -50,11 +52,11 @@ def message(job):
                 'Se confirmó un reporte cerca de tu zona configurada. ') + 'Toca para ver los detalles.'
     channel = ('trujillo_sos_quiet' if job.get('quiet') is True else
                'trujillo_sos_arrival' if job['kind']=='sos_arrival' else
-               'trujillo_sos_calls' if job['kind']=='sos_callback' else 'trujillo_push')
+               'trujillo_sos_calls' if job['kind']=='sos_callback' or job.get('assigned_call') is True else 'trujillo_push')
     return {'message': {
         'token':job['token'], 'notification':{'title':title,'body':body},
         'data': data,
-        'android': {'priority':'high', 'ttl':'90s' if job['kind']=='sos_callback' else '300s', 'notification':{
+        'android': {'priority':'high', 'ttl':'90s' if job['kind']=='sos_callback' or job.get('assigned_call') is True else '300s', 'notification':{
             'channel_id':channel, 'icon':'ic_notification', 'color':'#F57C00' if job['kind']=='reinforcement' else '#D32F2F',
             'tag':'arrival_'+str(job['target_id']) if job['kind']=='sos_arrival' else str(job['job_id']), 'visibility':'PRIVATE', 'click_action':'FLUTTER_NOTIFICATION_CLICK'}},
     }}

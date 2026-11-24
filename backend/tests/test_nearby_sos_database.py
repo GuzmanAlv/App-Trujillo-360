@@ -7,8 +7,9 @@ from test_sos_cases_database import database
 
 def test_nearby_sos_includes_own_and_others_but_not_legacy_private_or_expired(database):
     owner,other,operator=[uuid4() for _ in range(3)]
+    past,far,discarded=[uuid4() for _ in range(3)]
     with psycopg.connect(database) as c:
-        for uid,role in [(owner,'citizen'),(other,'citizen'),(operator,'operator')]:
+        for uid,role in [(owner,'citizen'),(other,'citizen'),(past,'citizen'),(far,'citizen'),(discarded,'citizen'),(operator,'operator')]:
             c.execute("INSERT INTO trujillo.users(id,auth_provider,auth_subject,display_name,role) VALUES(%s,'firebase',%s,'Test',%s)",(uid,str(uid),role))
         legacy=c.execute("INSERT INTO trujillo.incidents(category,location,occurred_at,status,was_public) VALUES('Robo',extensions.ST_SetSRID(extensions.ST_MakePoint(-79,-8.1),4326)::extensions.geography,now(),'verified',true) RETURNING id").fetchone()[0]
     def query(uid,sql,args=()):
@@ -25,10 +26,10 @@ def test_nearby_sos_includes_own_and_others_but_not_legacy_private_or_expired(da
         return confirmed['incident_id']
     own=case(owner,-8.1)
     foreign=case(other,-8.103)
-    resolved=case(other,-8.105,'resolve')
-    case(other,-8.12)
-    case(other,-8.101,'discard')
-    query(other,'SELECT trujillo.submit_sos(%s,-8.1,-79)',(uuid4(),))
+    resolved=case(past,-8.105,'resolve')
+    case(far,-8.12)
+    case(discarded,-8.101,'discard')
+    query(discarded,'SELECT trujillo.submit_sos(%s,-8.1,-79)',(uuid4(),))
     for reader in (owner,other,operator):
         rows=query(reader,'SELECT trujillo.nearby_sos(-8.1,-79)')
         assert {r['id'] for r in rows}=={own,foreign,resolved}

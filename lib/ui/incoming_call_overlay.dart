@@ -81,9 +81,12 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
         roleChecked = DateTime.now();
       }
       final returns = await WorkflowClient.list('/calls/incoming/return');
+      final assigned = allowed
+          ? await WorkflowClient.list('/calls/incoming/assigned')
+          : <Map<String, dynamic>>[];
 
       if (mounted && uid == owner) {
-        setState(() => incoming = returns);
+        setState(() => incoming = [...returns, ...assigned]);
       }
     } catch (_) {
       if (mounted) setState(() => incoming = []);
@@ -186,7 +189,9 @@ class IncomingCallView extends StatelessWidget {
       child: Stack(
         children: [
           child,
-          if (queue.isNotEmpty && queue.first['callback'] == true)
+          if (queue.isNotEmpty &&
+              (queue.first['callback'] == true ||
+                  queue.first['assigned'] == true))
             Positioned(
               top: 0,
               left: 12,
@@ -218,7 +223,7 @@ class IncomingCallView extends StatelessWidget {
                                   child: Text(
                                     queue.first['callback'] == true
                                         ? 'El operador te llama'
-                                        : 'SOS Alerta',
+                                        : 'Tu ciudadano te llama',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,

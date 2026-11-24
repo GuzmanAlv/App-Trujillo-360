@@ -13,11 +13,12 @@ class CallSession extends ChangeNotifier {
     required this.operator,
     this.callback = false,
     this.answer = false,
+    this.redial = false,
     this.readStatus,
     Room? room,
   }) : room = room ?? Room();
   final String callId;
-  final bool operator, callback, answer;
+  final bool operator, callback, answer, redial;
   final Room room;
   final Future<dynamic> Function()? readStatus;
   Timer? poll;
@@ -91,7 +92,9 @@ class CallSession extends ChangeNotifier {
       if (!mounted || finished) return;
       await WorkflowClient.request(
         'POST',
-        '$path/${callback
+        '$path/${redial
+            ? 'redial'
+            : callback
             ? 'callback'
             : answer
             ? 'answer'

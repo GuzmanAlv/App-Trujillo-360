@@ -124,13 +124,17 @@ def ready():
                 raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.sos_offer_status(uuid)') IS NOT NULL").fetchone()[0]:
                 raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.operator_sos_map_data()') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_navigation_target(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.release_sos_claim(uuid)') IS NOT NULL").fetchone()[0]:
                 raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError) as error:
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1, 'sos_cases_version':2, 'citizen_sos_version':1, 'sos_arrival_version':1, 'sos_notifications_version':1, 'reinforcements_version':1, 'sos_suspension_version':1, 'resolved_map_version':1, 'citizen_history_version':1, 'nearby_sos_version':1, 'sos_offers_version':2, 'sos_reliability_version':1}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1, 'sos_cases_version':2, 'citizen_sos_version':1, 'sos_arrival_version':1, 'sos_notifications_version':1, 'reinforcements_version':1, 'sos_suspension_version':1, 'resolved_map_version':1, 'citizen_history_version':1, 'nearby_sos_version':1, 'sos_offers_version':2, 'sos_reliability_version':1, 'sos_live_navigation_version':1, 'operator_sos_zones_version':1}
 
 
 @app.get('/me')

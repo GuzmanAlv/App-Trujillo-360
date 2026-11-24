@@ -111,6 +111,31 @@ class SosCasePanelState extends State<SosCasePanel>
     with WidgetsBindingObserver {
   bool foreground = true;
   Timer? callPoll;
+  Timer? positionPoll;
+  bool pollingPosition = false;
+  Future<void> refreshPosition() async {
+    if (!mounted ||
+        !foreground ||
+        stale ||
+        pollingPosition ||
+        data?['can_track'] != true ||
+        data?['decision'] != 'confirmed' ||
+        data?['attention'] == 'resolved') {
+      return;
+    }
+    pollingPosition = true;
+    try {
+      final result = await request('GET', '$path/navigation-target');
+      if (mounted && !stale && data != null) {
+        setState(() => data!['live_position'] = result);
+      }
+    } catch (_) {
+      // Keep unsaved evaluation fields and the last known position.
+    } finally {
+      pollingPosition = false;
+    }
+  }
+
   bool pollingCall = false;
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -277,6 +302,10 @@ class SosCasePanelState extends State<SosCasePanel>
     super.initState();
     OperatorDuty.cases.addListener(dutyChanged);
     if (widget.request == null) {
+      positionPoll = Timer.periodic(
+        const Duration(seconds: 12),
+        (_) => refreshPosition(),
+      );
       leasePoll = Timer.periodic(
         const Duration(seconds: 30),
         (_) => refreshLease(),
@@ -547,6 +576,7 @@ class SosCasePanelState extends State<SosCasePanel>
     WidgetsBinding.instance.removeObserver(this);
     callPoll?.cancel();
     leasePoll?.cancel();
+    positionPoll?.cancel();
     session?.cancel();
     for (final c in [
       place,
@@ -694,15 +724,26 @@ class SosCasePanelState extends State<SosCasePanel>
                       Marker(
                         markerId: const MarkerId('citizen_sos'),
                         position: LatLng(
-                          (d['caller_latitude'] as num).toDouble(),
-                          (d['caller_longitude'] as num).toDouble(),
+                          (d['live_position']?['latitude'] ??
+                                  d['caller_latitude'] as num)
+                              .toDouble(),
+                          (d['live_position']?['longitude'] ??
+                                  d['caller_longitude'] as num)
+                              .toDouble(),
                         ),
                         icon:
                             citizenIcon ??
                             BitmapDescriptor.defaultMarkerWithHue(
                               BitmapDescriptor.hueRed,
                             ),
-                        infoWindow: const InfoWindow(title: 'Ciudadano · SOS'),
+                        infoWindow: InfoWindow(
+                          title: 'Ciudadano · SOS',
+                          snippet: d['live_position']?['stale'] == true
+                              ? 'Última posición conocida · esperando GPS'
+                              : d['live_position']?['live'] == true
+                              ? 'Posición actual del dispositivo'
+                              : 'Ubicación registrada del SOS',
+                        ),
                       ),
                       if (operatorPoint != null)
                         Marker(
@@ -740,8 +781,12 @@ class SosCasePanelState extends State<SosCasePanel>
                     OutlinedButton.icon(
                       onPressed: () => setState(
                         () => focusPoint = LatLng(
-                          (d['caller_latitude'] as num).toDouble(),
-                          (d['caller_longitude'] as num).toDouble(),
+                          (d['live_position']?['latitude'] ??
+                                  d['caller_latitude'] as num)
+                              .toDouble(),
+                          (d['live_position']?['longitude'] ??
+                                  d['caller_longitude'] as num)
+                              .toDouble(),
                         ),
                       ),
                       icon: const Icon(

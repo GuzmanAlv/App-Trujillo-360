@@ -15,9 +15,10 @@ class AudioCallPage extends StatefulWidget {
     this.operator = false,
     this.callback = false,
     this.answer = false,
+    this.redial = false,
   });
   final String callId;
-  final bool operator, callback, answer;
+  final bool operator, callback, answer, redial;
   @override
   State<AudioCallPage> createState() => _AudioCallPageState();
 }
@@ -48,6 +49,7 @@ class _AudioCallPageState extends State<AudioCallPage> {
             operator: widget.operator,
             callback: widget.callback,
             answer: widget.answer,
+            redial: widget.redial,
           );
     session.minimized = false;
     session.addListener(changed);
@@ -68,15 +70,23 @@ class _AudioCallPageState extends State<AudioCallPage> {
 
   Future<void> begin() => session.begin();
   Future<void> redial() async {
-    if (closing || !finished ||
-        !(await caseKey.currentState?.mayLeave() ?? true) || !mounted) {
+    if (closing ||
+        !finished ||
+        !(await caseKey.currentState?.mayLeave() ?? true) ||
+        !mounted) {
       return;
     }
     await Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute(builder: (_) => AudioCallPage(
-        callId: widget.callId, operator: true, callback: true)),
+      MaterialPageRoute(
+        builder: (_) => AudioCallPage(
+          callId: widget.callId,
+          operator: true,
+          callback: true,
+        ),
+      ),
     );
   }
+
   Future<void> toggleMicrophone() => session.toggleMicrophone();
   Future<void> toggleSpeaker() => session.toggleSpeaker();
   Future<void> finish({bool exit = false}) async {
@@ -264,11 +274,16 @@ class _AudioCallPageState extends State<AudioCallPage> {
                       foregroundColor: Colors.white,
                       minimumSize: const Size(200, 48),
                     ),
-                    onPressed: closing ? null : widget.operator && finished
+                    onPressed: closing
+                        ? null
+                        : widget.operator && finished
                         ? redial
                         : () => finish(),
-                    icon: Icon(widget.operator && finished
-                        ? Icons.call_rounded : Icons.call_end),
+                    icon: Icon(
+                      widget.operator && finished
+                          ? Icons.call_rounded
+                          : Icons.call_end,
+                    ),
                     label: Text(
                       closing
                           ? 'Cerrando…'

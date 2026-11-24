@@ -135,9 +135,9 @@ def test_case_lifecycle_and_privacy(database):
 
 
 def test_concurrent_confirmations_pending_discard_and_suspension(database):
-    citizen, op1, op2 = [uuid4() for _ in range(3)]
+    citizen, op1, op2, second_citizen = [uuid4() for _ in range(4)]
     with psycopg.connect(database) as c:
-        for uid,role in [(citizen,'citizen'),(op1,'operator'),(op2,'operator')]:
+        for uid,role in [(citizen,'citizen'),(second_citizen,'citizen'),(op1,'operator'),(op2,'operator')]:
             c.execute("INSERT INTO trujillo.users(id,auth_provider,auth_subject,display_name,role) VALUES(%s,'firebase',%s,'Test',%s)",(uid,str(uid),role))
     def query(user,sql,args=(),many=False):
         with psycopg.connect(database) as c:
@@ -164,8 +164,8 @@ def test_concurrent_confirmations_pending_discard_and_suspension(database):
     with psycopg.connect(database) as c:
         assert c.execute('SELECT count(*) FROM trujillo.sos_cases WHERE id=%s AND incident_id=%s',(case,incident)).fetchone()[0]==1
     with pytest.raises(psycopg.errors.RaiseException): update(winner,1,{**data,'action':'pending'})
-    other_case=new_case()
-    query(citizen,"SELECT trujillo.call_action(%s,'start')",(other_case,))
+    other_case=query(second_citizen,'SELECT trujillo.submit_sos(%s,-8.11,-79.03)',(uuid4(),))['id']
+    query(second_citizen,"SELECT trujillo.call_action(%s,'start')",(other_case,))
     with psycopg.connect(database) as c:
         c.execute("UPDATE trujillo.call_sessions SET expires_at=now()-interval '1 second' WHERE id=%s",(other_case,))
     assert query(op1,"SELECT trujillo.call_action(%s,'status')",(other_case,))['state']=='unanswered'
@@ -180,3 +180,73 @@ def test_concurrent_confirmations_pending_discard_and_suspension(database):
     with psycopg.connect(database) as c:
         c.execute("UPDATE trujillo.users SET status='suspended',suspension_reason='Test' WHERE id=%s",(winner,))
     with pytest.raises(psycopg.errors.InsufficientPrivilege): query(winner,'SELECT trujillo.sos_case_read(%s)',(case,))
+
+
+def test_active_sos_live_navigation_and_assigned_redial(database):
+    citizen, op, other = [uuid4() for _ in range(3)]
+    with psycopg.connect(database) as c:
+        for uid,role in [(citizen,'citizen'),(op,'operator'),(other,'operator')]:
+            c.execute("INSERT INTO trujillo.users(id,auth_provider,auth_subject,display_name,role) VALUES(%s,'firebase',%s,'Test',%s)",(uid,str(uid),role))
+    def query(user,sql,args=(),many=False):
+        with psycopg.connect(database) as c:
+            c.execute("SELECT set_config('app.firebase_uid',%s,true)",(str(user),))
+            c.execute('SET LOCAL ROLE trujillo_api')
+            cur=c.execute(sql,args)
+            return cur.fetchall() if many else cur.fetchone()[0]
+    submit='SELECT trujillo.submit_sos(%s,-8.11,-79.03)'
+    first_request=uuid4()
+    case=query(citizen,submit,(first_request,))['id']
+    query(citizen,"SELECT trujillo.call_action(%s,'start')",(case,))
+    query(op,"SELECT trujillo.call_action(%s,'accept')",(case,))
+    query(citizen,"SELECT trujillo.call_action(%s,'end')",(case,))
+    data=dict(action='confirm',category='Robo',latitude=-8.11,longitude=-79.03,
+              place='',public_description='',internal_note='',outcome='')
+    result=query(op,'SELECT trujillo.sos_case_update(%s,%s,0,%s)',(case,uuid4(),Jsonb(data)))
+    incident=result['incident_id']
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        duplicate=list(pool.map(lambda _:query(citizen,submit,(uuid4(),)),range(2)))
+    assert all(r['id']==case and r['existing_active'] for r in duplicate)
+    assert query(citizen,submit,(first_request,))['id']==case
+    sql='SELECT trujillo.sos_live_position(%s,%s,%s,%s,clock_timestamp())'
+    query(citizen,sql,(case,-8.12,-79.04,10))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):query(other,sql,(case,-8.13,-79.05,10))
+    with pytest.raises(psycopg.errors.InvalidParameterValue):query(citizen,sql,(case,-8.13,-79.05,200))
+    target=query(op,'SELECT trujillo.sos_navigation_target(%s)',(case,))
+    assert target['live'] and target['latitude']==-8.12
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):query(other,'SELECT trujillo.sos_navigation_target(%s)',(case,))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):query(citizen,'SELECT trujillo.sos_navigation_target(%s)',(case,))
+    assert query(other,'SELECT trujillo.sos_case_read(%s)',(case,)).get('live_position') is None
+    assert query(op,'SELECT trujillo.sos_case_read(%s)',(case,))['live_position']['latitude']==-8.12
+    public=query(citizen,'SELECT trujillo.public_case_fields(%s::uuid[])',([incident],))
+    assert 'live_position' not in public
+    # The recorded incident location is never moved by tracking GPS.
+    with psycopg.connect(database) as c:
+        assert c.execute('SELECT latitude FROM trujillo.sos_cases WHERE id=%s',(case,)).fetchone()[0]==-8.11
+    for recipient in (op,other):
+        query(recipient,'SELECT trujillo.push_register(%s,%s,false,true,NULL,NULL,500,false)',(uuid4(),'redial-test-'+str(uuid4())))
+    result=query(citizen,'SELECT trujillo.citizen_call_operator(%s)',(case,))
+    assert result['state']=='waiting'
+    with psycopg.connect(database) as c:
+        c.execute('SET LOCAL ROLE trujillo_api')
+        job=c.execute('SELECT trujillo.push_claim()').fetchone()[0]
+        assert job['assigned_call'] is True and job['account_uid']==str(op) and job['quiet'] is False
+        assert 'latitude' not in job
+        c.execute("SELECT trujillo.push_finish(%s,%s,'sent')",(job['job_id'],job['lease']))
+        assert c.execute('SELECT trujillo.push_claim()').fetchone()[0] is None
+    assert query(op,'SELECT trujillo.assigned_incoming_calls()')['id']==case
+    assert query(other,'SELECT trujillo.assigned_incoming_calls()',many=True)==[]
+    with pytest.raises(psycopg.errors.RaiseException):query(other,"SELECT trujillo.call_action(%s,'accept')",(case,))
+    query(op,"SELECT trujillo.call_action(%s,'accept')",(case,))
+    assert query(citizen,"SELECT trujillo.call_action(%s,'status')",(case,))['can_join']
+    query(op,"SELECT trujillo.call_action(%s,'end')",(case,))
+    # Arrival follows the live citizen, not the original incident point.
+    assert query(op,'SELECT trujillo.sos_arrival_check(%s,-8.11,-79.03,10,clock_timestamp())',(case,))['reason']=='outside'
+    arrive(database,query,op,case,-8.12,-79.04)
+    with psycopg.connect(database) as c:
+        c.execute("UPDATE trujillo.sos_live_positions SET observed_at=now()-interval '2 minutes' WHERE case_id=%s",(case,))
+    target=query(op,'SELECT trujillo.sos_navigation_target(%s)',(case,))
+    assert not target['live'] and target['stale'] and target['latitude']==-8.12
+    query(op,'SELECT trujillo.sos_case_update(%s,%s,2,%s)',(case,uuid4(),Jsonb({**data,'action':'resolve','outcome':'Atención finalizada'})))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):query(citizen,'SELECT trujillo.citizen_call_operator(%s)',(case,))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):query(citizen,sql,(case,-8.12,-79.04,10))
+    assert query(citizen,submit,(uuid4(),))['id']!=case
