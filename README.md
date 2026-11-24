@@ -76,7 +76,6 @@ Para Android, conecta un teléfono con depuración USB, autoriza el equipo y sel
 - Servicio de GPS y seguimiento en primer plano. Requiere consentimiento y ubicación habilitada; se detiene al pasar la app a segundo plano.
 - Google Maps integrado, desactivado hasta configurar una clave. Sin clave se muestra un aviso y puedes probar reportes con coordenadas manuales.
 - Paquetes instalados: google_maps_flutter, geolocator, shared_preferences, http, web_socket_channel, firebase_core y firebase_messaging.
-
 Los reportes de esta primera versión NO se publican a otros usuarios. SharedPreferences es almacenamiento de demostración, no una base segura de evidencias: usa datos de prueba.
 
 ## Activar Google Maps en Android
