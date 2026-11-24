@@ -89,6 +89,24 @@ class MainActivity : FlutterActivity() {
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "sosArrivalTracking" -> {
+                    val intent = Intent(this, SosArrivalService::class.java)
+                    if (call.argument<Boolean>("enabled") == true) {
+                        if (!activityVisible) {
+                            result.success(false)
+                        } else {
+                            try {
+                                if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+                                result.success(true)
+                            } catch (_: RuntimeException) {
+                                result.success(false)
+                            }
+                        }
+                    } else {
+                        stopService(intent)
+                        result.success(true)
+                    }
+                }
                 "sosAddress" -> lookupSosAddress(call.argument<Double>("latitude"), call.argument<Double>("longitude"), result)
                 "sosProgressSignal" -> {
                     progressSignals.update(if (activityVisible) call.argument<String>("mode") else null)

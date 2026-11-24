@@ -119,6 +119,41 @@ class SosCasePanelState extends State<SosCasePanel>
     }
   }
 
+  Timer? leasePoll;
+  bool renewingLease = false;
+  Future<void> refreshLease() async {
+    if (!mounted ||
+        stale ||
+        !foreground ||
+        renewingLease ||
+        widget.request != null ||
+        data?['decision'] != 'pending' ||
+        data?['can_edit'] != true) {
+      return;
+    }
+    renewingLease = true;
+    try {
+      final lease = await WorkflowClient.request(
+        'POST',
+        '$path/heartbeat',
+        timeout: const Duration(seconds: 8),
+      );
+      if (mounted &&
+          !stale &&
+          data?['decision'] == 'pending' &&
+          lease['owned'] != true) {
+        setState(() {
+          stale = true;
+          error = 'La reserva venció. Vuelve al mapa para aceptar el SOS.';
+        });
+      }
+    } catch (_) {
+      // The stored lease expires if connectivity cannot be recovered.
+    } finally {
+      renewingLease = false;
+    }
+  }
+
   Future<void> refreshCall() async {
     if (!mounted ||
         stale ||
@@ -241,6 +276,12 @@ class SosCasePanelState extends State<SosCasePanel>
   void initState() {
     super.initState();
     OperatorDuty.cases.addListener(dutyChanged);
+    if (widget.request == null) {
+      leasePoll = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => refreshLease(),
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
     if (widget.request == null && widget.showCallButton) {
       callPoll = Timer.periodic(
@@ -505,6 +546,7 @@ class SosCasePanelState extends State<SosCasePanel>
     OperatorDuty.cases.removeListener(dutyChanged);
     WidgetsBinding.instance.removeObserver(this);
     callPoll?.cancel();
+    leasePoll?.cancel();
     session?.cancel();
     for (final c in [
       place,
@@ -575,7 +617,8 @@ class SosCasePanelState extends State<SosCasePanel>
                           (ModalRoute.isCurrentOf(context) ?? true),
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: ['ended', 'unanswered'].contains(d['call_state'])
+                          backgroundColor:
+                              ['ended', 'unanswered'].contains(d['call_state'])
                               ? const Color(0xff16834a)
                               : const Color(0xffce2333),
                           foregroundColor: Colors.white,
@@ -584,8 +627,11 @@ class SosCasePanelState extends State<SosCasePanel>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        icon: Icon(['ended', 'unanswered'].contains(d['call_state'])
-                            ? Icons.call_rounded : Icons.call),
+                        icon: Icon(
+                          ['ended', 'unanswered'].contains(d['call_state'])
+                              ? Icons.call_rounded
+                              : Icons.call,
+                        ),
                         label: Text(
                           ['ended', 'unanswered'].contains(d['call_state'])
                               ? 'Llamar al usuario'
@@ -771,6 +817,37 @@ class SosCasePanelState extends State<SosCasePanel>
                   runSpacing: 8,
                   children: [
                     if (!confirmed && d['decision'] != 'discarded') ...[
+                      TextButton(
+                        onPressed: !editable
+                            ? null
+                            : () async {
+                                if (!await confirm(
+                                  '¿Liberar el SOS para que otro operador pueda atenderlo?',
+                                )) {
+                                  return;
+                                }
+                                if (!mounted) return;
+                                setState(() => busy = true);
+                                try {
+                                  await request('POST', '$path/release');
+                                  final call = ActiveCall.session.value;
+                                  if (call?.callId == widget.caseId &&
+                                      !call!.finished) {
+                                    await call.finish();
+                                  }
+                                  if (context.mounted) {
+                                    Navigator.of(context).maybePop();
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    setState(() => error = readable(e));
+                                  }
+                                } finally {
+                                  if (mounted) setState(() => busy = false);
+                                }
+                              },
+                        child: const Text('Liberar SOS para otro operador'),
+                      ),
                       FilledButton(
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xffc12635),

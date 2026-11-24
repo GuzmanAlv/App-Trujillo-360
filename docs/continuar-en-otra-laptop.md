@@ -1,5 +1,29 @@
 # Continuar Trujillo 360 en otra laptop
 
+## Recuperación de SOS y llegada en segundo plano
+
+La mejora requiere la migración 031, backend y APK nuevos. Aplicar antes de
+desplegar desde la raíz del proyecto:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_sos_reliability.py --apply
+cd ..
+```
+
+`/ready` debe incluir `sos_reliability_version: 1`. Las reservas pendientes duran
+dos minutos sin actividad del operador y vuelven a ofrecerse al consultar la bandeja.
+La ficha permite liberarlas voluntariamente. Confirmados en camino/en zona conservan
+su asignación. El audio tolera fallos transitorios de verificación durante un minuto.
+El SOS guarda su identificador y recibo por cuenta para reintentar tras reiniciar.
+Si falla el GPS se ofrece revisar una posición reciente o marcar un punto.
+
+Android inicia un servicio de ubicación con notificación al confirmar el SOS y lo
+detiene al llegar o cerrar la atención. Permitir ubicación precisa y comprobar en
+dos teléfonos el bloqueo de pantalla y cambio a otra app. La detención forzada o
+restricciones del fabricante pueden detener el servicio. No se ha verificado esta
+versión físicamente en un celular. No se aplican migraciones ni despliegues automáticamente.
+
 Actualización: [solo SOS en Mis Solicitudes y Cerca de mí](sos-only-requests.md).
 Requiere migración 028 y actualizar backend/APK. `/ready` incluye `nearby_sos_version: 1`.
 

@@ -3,9 +3,15 @@ import 'package:flutter/material.dart';
 
 /// A release, pointer cancellation or app interruption cancels the hold.
 class HoldSosButton extends StatefulWidget {
-  const HoldSosButton({super.key, required this.onComplete, this.busy = false});
+  const HoldSosButton({
+    super.key,
+    required this.onComplete,
+    this.busy = false,
+    this.busyLabel = 'Enviando…',
+  });
   final VoidCallback onComplete;
   final bool busy;
+  final String busyLabel;
   @override
   State<HoldSosButton> createState() => _HoldSosButtonState();
 }
@@ -103,7 +109,7 @@ class _HoldSosButtonState extends State<HoldSosButton>
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    widget.busy ? 'Enviando…' : 'Mantén 3 s',
+                    widget.busy ? widget.busyLabel : 'Mantén 3 s',
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     maxLines: 2,
                     textAlign: TextAlign.center,

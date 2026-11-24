@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,13 @@ import '../core/config.dart';
 import '../models/incident.dart';
 import 'report_sender.dart';
 
+class WorkflowFailure extends StateError {
+  WorkflowFailure(super.message, {this.status});
+  final int? status;
+  bool get temporary =>
+      status == null || status == 408 || status == 429 || status! >= 500;
+}
+
 class WorkflowClient {
   static Future<dynamic> request(
     String method,
@@ -14,6 +22,7 @@ class WorkflowClient {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     bool bytes = false,
+    Duration? timeout,
   }) async {
     if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null) {
       throw StateError('Inicia sesión con Google en Configuración.');
@@ -34,7 +43,9 @@ class WorkflowClient {
     final client = http.Client();
     try {
       for (var attempt = 0; attempt < 2; attempt++) {
-        final token = await user.getIdToken(attempt == 1);
+        final token = await user
+            .getIdToken(attempt == 1)
+            .timeout(const Duration(seconds: 10));
         if (token == null) throw StateError('Sesión vencida.');
         final req =
             http.Request(
@@ -51,7 +62,8 @@ class WorkflowClient {
             await (() async => http.Response.fromStream(
               await client.send(req),
             ))().timeout(
-              AppConfig.backendRequestTimeout(const Duration(seconds: 30)),
+              timeout ??
+                  AppConfig.backendRequestTimeout(const Duration(seconds: 30)),
             );
         if (FirebaseAuth.instance.currentUser?.uid != user.uid) {
           throw StateError('La sesión cambió. Vuelve a abrir la pantalla.');
@@ -90,7 +102,7 @@ class WorkflowClient {
               /* Use the regular HTTP message. */
             }
           }
-          throw StateError(switch (response.statusCode) {
+          throw WorkflowFailure(switch (response.statusCode) {
             401 => 'Sesión vencida. Vuelve a ingresar.',
             403 =>
               path == '/me'
@@ -106,12 +118,24 @@ class WorkflowClient {
                   : 'El identificador ya fue usado con otros datos.',
             422 => 'Revisa los datos o el estado del caso.',
             _ =>
-              'Servidor no disponible. No se confirmó ningún cambio. Vuelve a intentar.',
-          });
+              'El servidor no confirmó la respuesta. Revisa el resultado o reintenta con la misma solicitud.',
+          }, status: response.statusCode);
         }
         return bytes ? response.bodyBytes : jsonDecode(response.body);
       }
       throw StateError('Sesión vencida.');
+    } on TimeoutException {
+      throw WorkflowFailure(
+        'El servidor tardó demasiado en responder. Puedes reintentar.',
+      );
+    } on http.ClientException {
+      throw WorkflowFailure(
+        'Se interrumpió la conexión. Comprueba internet y reintenta.',
+      );
+    } on FormatException {
+      throw WorkflowFailure(
+        'El servidor devolvió una respuesta incompleta. Puedes reintentar.',
+      );
     } finally {
       client.close();
     }

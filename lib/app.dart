@@ -1,3 +1,5 @@
+import 'package:geolocator/geolocator.dart';
+import 'services/pending_sos.dart';
 import 'ui/map_filters_drawer.dart';
 import 'services/sos_navigation.dart';
 import 'services/operator_duty.dart';
@@ -186,9 +188,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool citizenAllowed = false;
   String? roleOwner;
   bool sosSending = false;
-  String? pendingSosId;
-  String? pendingSosOwner;
-  double? pendingSosLatitude, pendingSosLongitude;
+  String sosProgress = 'Enviando…';
   Timer? expiryTimer;
 
   Future<void> checkRole(User? user) async {
@@ -198,19 +198,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) setState(() => citizenAllowed = false);
       mapIncidents.clearSession();
     }
-    if (OperatorDuty.owner != user?.uid) OperatorDuty.clear();
-    sosArrival.configure(false);
+    if (OperatorDuty.owner != user?.uid) {
+      sosArrival.configure(false);
+      OperatorDuty.clear();
+    }
     reinforcements.configure(false);
     final ticket = ++roleGeneration;
     if (user?.uid != routeOwner) {
       routeOwner = null;
       sosRoute.clear();
-    }
-    if (user?.uid != pendingSosOwner) {
-      pendingSosId = null;
-      pendingSosOwner = null;
-      pendingSosLatitude = null;
-      pendingSosLongitude = null;
     }
     density.clear();
     density.schedule();
@@ -234,7 +230,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ['operator', 'admin'].contains(profile['role']);
         final citizen =
             profile['status'] == 'active' && profile['role'] == 'citizen';
-        sosArrival.configure(allowed && foreground);
+        sosArrival.configure(allowed);
         reinforcements.configure(allowed && foreground);
         if (!allowed) OperatorDuty.clear();
         if (!allowed && sosPreview.caseId != null) sosPreview.clear();
@@ -271,6 +267,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> sendSos() async {
     if (sosSending) return;
+    final ongoing = ActiveCall.session.value;
+    if (ongoing != null && !ongoing.finished) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              AudioCallPage(callId: ongoing.callId, operator: ongoing.operator),
+        ),
+      );
+      return;
+    }
     if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -280,47 +287,126 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     final owner = FirebaseAuth.instance.currentUser!.uid;
-    setState(() => sosSending = true);
+    setState(() {
+      sosSending = true;
+      sosProgress = 'Preparando SOS…';
+    });
     try {
-      if (pendingSosId == null) {
-        final position = await LocationService().current();
-        if (FirebaseAuth.instance.currentUser?.uid != owner) {
-          throw StateError('La sesión cambió. Vuelve a intentarlo.');
+      var pending = await PendingSos.read(owner);
+      if (pending == null) {
+        if (mounted) setState(() => sosProgress = 'Buscando ubicación…');
+        LatLng? point;
+        try {
+          final gps = await LocationService().current().timeout(
+            const Duration(seconds: 8),
+          );
+          point = LatLng(gps.latitude, gps.longitude);
+        } catch (_) {
+          if (!mounted) return;
+          Position? cached;
+          try {
+            cached = await Geolocator.getLastKnownPosition().timeout(
+              const Duration(seconds: 2),
+            );
+          } catch (_) {}
+          if (!mounted) return;
+          final recent =
+              cached != null &&
+              DateTime.now().difference(cached.timestamp).abs() <
+                  const Duration(minutes: 2) &&
+              cached.accuracy <= 100;
+          LatLng? selected = recent
+              ? LatLng(cached.latitude, cached.longitude)
+              : null;
+          point = await showDialog<LatLng>(
+            context: context,
+            builder: (dialogContext) => StatefulBuilder(
+              builder: (context, update) => AlertDialog(
+                title: const Text('Indica dónde necesitas ayuda'),
+                content: SizedBox(
+                  width: 340,
+                  height: 300,
+                  child: Column(
+                    children: [
+                      Text(
+                        recent
+                            ? 'Revisa la ubicación reciente o toca el mapa para corregirla.'
+                            : 'No pudimos obtener el GPS. Toca el mapa para indicar la ubicación.',
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: MapPanel(
+                          selected: selected,
+                          onPick: (value) => update(() => selected = value),
+                          zoomControls: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Cancelar'),
+                  ),
+                  FilledButton(
+                    onPressed: selected == null
+                        ? null
+                        : () => Navigator.pop(dialogContext, selected),
+                    child: const Text('Usar esta ubicación'),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
-        pendingSosId = ReportSender.requestId();
-        pendingSosOwner = owner;
-        pendingSosLatitude = position.latitude;
-        pendingSosLongitude = position.longitude;
+        if (point == null || !mounted) return;
+        pending = {
+          'request_id': ReportSender.requestId(),
+          'latitude': point.latitude,
+          'longitude': point.longitude,
+        };
+        await PendingSos.save(owner, pending);
       }
       if (FirebaseAuth.instance.currentUser?.uid != owner) {
-        throw StateError('La sesión cambió. Vuelve a intentarlo.');
-      }
-      final response = await WorkflowClient.request(
-        'POST',
-        '/sos',
-        body: {
-          'request_id': pendingSosId,
-          'latitude': pendingSosLatitude,
-          'longitude': pendingSosLongitude,
-        },
-      );
-      if (response is! Map ||
-          response['request_id'] != pendingSosId ||
-          response['source'] != 'sos') {
-        throw StateError('No se confirmó el SOS. Vuelve a intentarlo.');
-      }
-      pendingSosId = null;
-      pendingSosOwner = null;
-      pendingSosLatitude = null;
-      pendingSosLongitude = null;
-      await PushService.instance.ensureSosDevice(requestPermission: true);
-      if (mounted) {
-        await Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AudioCallPage(callId: response['id'] as String),
-          ),
+        throw StateError(
+          'La sesión cambió. El SOS pendiente se conserva para su cuenta.',
         );
+      }
+      Map response;
+      if (pending['received_id'] is String) {
+        response = {'id': pending['received_id']};
+      } else {
+        if (mounted) setState(() => sosProgress = 'Confirmando envío…');
+        response = Map.from(
+          await WorkflowClient.request('POST', '/sos', body: pending) as Map,
+        );
+        if (response['request_id'] != pending['request_id'] ||
+            response['source'] != 'sos' ||
+            response['id'] is! String) {
+          throw StateError(
+            'Respuesta incompleta. El SOS se conserva para reintentar sin duplicarlo.',
+          );
+        }
+        pending['received_id'] = response['id'];
+        await PendingSos.save(owner, pending);
+      }
+      if (FirebaseAuth.instance.currentUser?.uid != owner || !mounted) return;
+      setState(() => sosProgress = 'SOS recibido');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SOS recibido. Preparando conexión de audio.'),
+        ),
+      );
+      unawaited(PushService.instance.ensureSosDevice(requestPermission: true));
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AudioCallPage(callId: response['id'] as String),
+        ),
+      );
+      if (ActiveCall.session.value?.finished != false) {
+        await PendingSos.clear(owner);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -340,7 +426,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ? error.message
                   : error is StateError
                   ? error.message.toString()
-                  : 'No se confirmó el SOS. Vuelve a intentarlo.',
+                  : 'No recibimos confirmación. Tu solicitud queda pendiente en el teléfono. Reintenta con la misma cuenta.',
             ),
           ),
         );
@@ -459,7 +545,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void updateNearbyActivity() {
-    sosArrival.configure(operatorAllowed && foreground);
+    sosArrival.configure(operatorAllowed);
     reinforcements.configure(operatorAllowed && foreground);
     nearby.setActive(
       foreground &&
@@ -897,6 +983,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                           showSos: citizenAllowed,
                                           route: sosRoute,
                                           sending: sosSending,
+                                          sendingLabel: sosProgress,
                                           onSos: sendSos,
                                         ),
                                       ),

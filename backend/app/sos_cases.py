@@ -35,6 +35,17 @@ class ArrivalPosition(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     accuracy: float = Field(ge=0)
 
+@router.post('/sos-cases/{case_id}/heartbeat')
+def heartbeat(case_id: UUID, response: Response, claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims, "SELECT jsonb_build_object('owned',trujillo.renew_sos_claim(%s))", (case_id,))
+
+@router.post('/sos-cases/{case_id}/release')
+def release(case_id: UUID, response: Response, claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    execute(claims, 'SELECT trujillo.release_sos_claim(%s)', (case_id,))
+    return {'released': True}
+
 class CaseUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True, allow_inf_nan=False)
     request_id: UUID

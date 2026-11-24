@@ -15,8 +15,10 @@ class MapBottomControls extends StatelessWidget {
     required this.onSos,
     this.sending = false,
     this.showSos = true,
+    this.sendingLabel = 'Enviando…',
   });
   final bool operator, sending, showSos;
+  final String sendingLabel;
   final SosRouteController route;
   final VoidCallback onSos;
   @override
@@ -54,6 +56,7 @@ class MapBottomControls extends StatelessWidget {
                   child: HoldSosButton(
                     key: const ValueKey('map-sos-button'),
                     busy: sending,
+                    busyLabel: sendingLabel,
                     onComplete: onSos,
                   ),
                 ),
