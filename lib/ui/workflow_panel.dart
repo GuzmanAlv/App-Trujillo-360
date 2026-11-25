@@ -3,10 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../data/ai_detection_store.dart';
 import '../services/workflow_client.dart';
 import '../services/nearby_reports_client.dart';
-import 'ai_detection_panel.dart';
+import 'ai_review_panel.dart';
 import 'map_panel.dart';
 import 'community_photo_view.dart';
 
@@ -24,7 +23,6 @@ class OperatorPortal extends StatefulWidget {
 }
 
 class _OperatorPortalState extends State<OperatorPortal> {
-  final ai = AiDetectionStore();
   bool allowed = false, busy = true;
   String? error;
   int generation = 0;
@@ -77,7 +75,6 @@ class _OperatorPortalState extends State<OperatorPortal> {
   void dispose() {
     generation++;
     session?.cancel();
-    ai.dispose();
     super.dispose();
   }
 
@@ -126,7 +123,7 @@ class _OperatorPortalState extends State<OperatorPortal> {
               children: [
                 WorkflowPanel(operator: true, onDenied: check),
                 WorkflowPanel(operator: true, incidents: true, onDenied: check),
-                AiDetectionPanel(store: ai),
+                const AiReviewPanel(),
               ],
             ),
     ),

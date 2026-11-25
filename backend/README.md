@@ -1,5 +1,13 @@
 # Backend de Trujillo 360
 
+Simulación con segundo Android y RTX: [preparación y pruebas](../docs/camera-simulation.md).
+La nueva versión requiere `ai_version: 2`; ejecutar `migrate.py` antes de reiniciar.
+
+IA: candidatos persistentes, permisos por cámara y revisión de operadores en
+`/operator/ai/candidates`. Ejecutar `python migrate.py` para aplicar también
+`017_ai_candidates.sql`; consultar [integración de IA](../docs/ai-integration.md).
+No incluye todavía inferencia de video ni publicación automática de alertas.
+
 Para mantenerlo activo en Windows y reconectar el celular por USB, consultar
 [servidor local persistente](../docs/local-server.md).
 

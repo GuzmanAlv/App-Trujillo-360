@@ -9,6 +9,8 @@ from app.reports import router as reports_router
 from app.workflows import router as workflows_router
 from app.push import router as push_router
 from app.push_worker import PushWorker
+from app.ai import router as ai_router
+from app.ai_simulation import router as ai_simulation_router
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -49,6 +51,8 @@ app = FastAPI(title='Trujillo 360 API', version='0.1.0', lifespan=lifespan,
 app.include_router(reports_router)
 app.include_router(workflows_router)
 app.include_router(push_router)
+app.include_router(ai_router)
+app.include_router(ai_simulation_router)
 
 
 @app.middleware('http')
@@ -88,11 +92,14 @@ def ready():
             sos_version=conn.execute('SELECT max(version) FROM trujillo.sos_migrations').fetchone()[0]
             if sos_version != 1:
                 raise RuntimeError('Migración pendiente')
+            ai_version=conn.execute('SELECT max(version) FROM trujillo.ai_migrations').fetchone()[0]
+            if ai_version != 2:
+                raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError) as error:
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'ai_version':ai_version}
 
 
 @app.get('/me')
