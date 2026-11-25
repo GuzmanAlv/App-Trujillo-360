@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
   if (d['decision'] == 'discarded') {
     return (
       label: 'Descartado',
-      color: Colors.grey,
+      color: Colors.red.shade700,
       icon: Icons.cancel_outlined,
     );
   }
@@ -28,7 +28,7 @@ import 'package:flutter/material.dart';
     ),
     'resolved' => (
       label: 'Resuelto',
-      color: Colors.grey.shade700,
+      color: Colors.green.shade700,
       icon: Icons.task_alt,
     ),
     _ =>

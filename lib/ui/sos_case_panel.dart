@@ -4,7 +4,6 @@ import '../services/operator_duty.dart';
 import '../services/active_call.dart';
 import '../services/sos_alert_state.dart';
 import 'citizen_sos_page.dart';
-import 'report_marker.dart';
 import 'sos_status.dart';
 import 'sos_discard_dialog.dart';
 import 'audio_call_page.dart';
@@ -206,54 +205,6 @@ class SosCasePanelState extends State<SosCasePanel>
   final internal = TextEditingController(), outcome = TextEditingController();
   final latitude = TextEditingController(), longitude = TextEditingController();
   String category = 'Auxilio';
-  LatLng? operatorPoint, focusPoint;
-  bool locating = false;
-  BitmapDescriptor? citizenIcon, operatorIcon;
-  Future<void> prepareActors() async {
-    final citizen = await renderActorMarker(Icons.person, Colors.red.shade700);
-    final police = await renderActorMarker(
-      Icons.local_police,
-      Colors.blue.shade700,
-    );
-    if (mounted) {
-      setState(() {
-        citizenIcon = BitmapDescriptor.bytes(
-          citizen,
-          imagePixelRatio: 2,
-          width: 48,
-          height: 56,
-        );
-        operatorIcon = BitmapDescriptor.bytes(
-          police,
-          imagePixelRatio: 2,
-          width: 48,
-          height: 56,
-        );
-      });
-    }
-  }
-
-  Future<void> locateOperator() async {
-    setState(() => locating = true);
-    try {
-      final gps = await LocationService().current();
-      if (mounted) {
-        setState(() {
-          operatorPoint = LatLng(gps.latitude, gps.longitude);
-          focusPoint = operatorPoint;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => error = 'No se pudo obtener tu ubicación. Revisa los permisos.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => locating = false);
-    }
-  }
-
   String? error, notice;
   bool busy = false, stale = false, dirty = false;
   Map<String, dynamic>? retryBody;
@@ -330,7 +281,6 @@ class SosCasePanelState extends State<SosCasePanel>
       });
     }
     unawaited(load());
-    unawaited(prepareActors());
   }
 
   bool? lastAlert;
@@ -714,51 +664,22 @@ class SosCasePanelState extends State<SosCasePanel>
                   ],
                 ),
                 const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    place.text.trim().isEmpty
+                        ? 'Dirección del incidente no registrada'
+                        : 'Dirección del incidente: ${place.text.trim()}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
                 SizedBox(
                   height: 300,
                   child: MapPanel(
                     zoomControls: true,
                     selected: point,
-                    focusTarget: focusPoint,
-                    extraMarkers: {
-                      Marker(
-                        markerId: const MarkerId('citizen_sos'),
-                        position: LatLng(
-                          (d['live_position']?['latitude'] ??
-                                  d['caller_latitude'] as num)
-                              .toDouble(),
-                          (d['live_position']?['longitude'] ??
-                                  d['caller_longitude'] as num)
-                              .toDouble(),
-                        ),
-                        icon:
-                            citizenIcon ??
-                            BitmapDescriptor.defaultMarkerWithHue(
-                              BitmapDescriptor.hueRed,
-                            ),
-                        infoWindow: InfoWindow(
-                          title: 'Ciudadano · SOS',
-                          snippet: d['live_position']?['stale'] == true
-                              ? 'Última posición conocida · esperando GPS'
-                              : d['live_position']?['live'] == true
-                              ? 'Posición actual del dispositivo'
-                              : 'Ubicación registrada del SOS',
-                        ),
-                      ),
-                      if (operatorPoint != null)
-                        Marker(
-                          markerId: const MarkerId('operator_sos'),
-                          position: operatorPoint!,
-                          icon:
-                              operatorIcon ??
-                              BitmapDescriptor.defaultMarkerWithHue(
-                                BitmapDescriptor.hueAzure,
-                              ),
-                          infoWindow: const InfoWindow(
-                            title: 'Operador · mi ubicación',
-                          ),
-                        ),
-                    },
                     onPick: editable
                         ? (p) {
                             setState(() {
@@ -773,11 +694,6 @@ class SosCasePanelState extends State<SosCasePanel>
                 Wrap(
                   spacing: 8,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: locating ? null : locateOperator,
-                      icon: const Icon(Icons.local_police, color: Colors.blue),
-                      label: const Text('Mi ubicación'),
-                    ),
                     if (confirmed && editable)
                       OutlinedButton.icon(
                         icon: const Icon(Icons.swap_horiz),
@@ -819,23 +735,6 @@ class SosCasePanelState extends State<SosCasePanel>
                           }
                         },
                       ),
-                    OutlinedButton.icon(
-                      onPressed: () => setState(
-                        () => focusPoint = LatLng(
-                          (d['live_position']?['latitude'] ??
-                                  d['caller_latitude'] as num)
-                              .toDouble(),
-                          (d['live_position']?['longitude'] ??
-                                  d['caller_longitude'] as num)
-                              .toDouble(),
-                        ),
-                      ),
-                      icon: const Icon(
-                        Icons.person_pin_circle,
-                        color: Colors.red,
-                      ),
-                      label: const Text('Ciudadano SOS'),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -870,19 +769,8 @@ class SosCasePanelState extends State<SosCasePanel>
                       : null,
                 ),
 
-                field(
-                  internal,
-                  'Comentario interno · solo operadores',
-                  2000,
-                  lines: 3,
-                ),
                 if (confirmed)
-                  field(
-                    outcome,
-                    'Resultado de la atención · interno',
-                    1000,
-                    lines: 2,
-                  ),
+                  field(outcome, 'Resultado de la atención', 1000, lines: 2),
                 if (dirty) const Text('Hay cambios pendientes de confirmar.'),
                 if (busy) const LinearProgressIndicator(),
                 if (error != null)
@@ -993,7 +881,7 @@ class SosCasePanelState extends State<SosCasePanel>
                           '${caseActionLabel('${event['action']}')} · ${caseTime(event['at'])}',
                         ),
                         subtitle: Text(
-                          '${event['snapshot']['internal_note']}\n${event['snapshot']['outcome']}\n${event['arrival_position'] == null ? '' : 'Llegada con ubicación del dispositivo registrada'}',
+                          '${event['snapshot']['outcome']}\n${event['arrival_position'] == null ? '' : 'Llegada con ubicación del dispositivo registrada'}',
                         ),
                       ),
                   ],
