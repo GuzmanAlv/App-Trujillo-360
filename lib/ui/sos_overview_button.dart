@@ -38,16 +38,15 @@ class SosOverviewButton extends StatelessWidget {
     child: Badge(
       label: Text('$count'),
       backgroundColor: const Color(0xffa20d20),
-      child: Material(
-        elevation: 4,
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        child: IconButton(
-          tooltip: 'Todos los SOS activos · $count',
-          onPressed: onPressed,
-          icon: const Icon(Icons.emergency, color: Color(0xffd4162a)),
-          iconSize: 28,
-          padding: const EdgeInsets.all(12),
+      child: FloatingActionButton.small(
+        heroTag: null,
+        backgroundColor: Colors.white,
+        tooltip: 'Todos los SOS activos · $count',
+        onPressed: onPressed,
+        child: const Icon(
+          Icons.warning_amber_rounded,
+          color: Color(0xffd4162a),
+          size: 24,
         ),
       ),
     ),

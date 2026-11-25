@@ -1,5 +1,35 @@
 # Continuar Trujillo 360 en otra laptop
 
+## SOS pendiente visible al ciudadano (035)
+
+Aplicar después de 034, antes de desplegar backend e instalar el APK nuevo:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_citizen_pending_sos.py --apply
+cd ..
+```
+
+`/ready` incluye `citizen_pending_sos_version: 1`. La ruta privada `/my-sos/map`
+lista los SOS pendientes y confirmados del usuario. El SOS sin respuesta queda
+visible con un marcador SOS rojo animado en el GPS registrado al solicitar ayuda
+(y no en un punto promedio ni en el GPS actual si se movió). Un aviso compacto
+indica «SOS recibido · esperando atención». El pin y el aviso persisten mientras
+esté pendiente, también al volver a abrir la app con la cuenta correspondiente.
+No se publica en el mapa de otros ciudadanos ni anuncia envío de una unidad.
+
+Al confirmar, el marcador se transforma al tipo de incidente y conserva el flujo
+normal de atención. Solo los confirmados reemplazan el botón SOS por llamada al
+operador/cámara; los reintentos de un pendiente reutilizan el mismo caso según
+034. El detalle pendiente explica que la solicitud sigue activa y deshabilita
+aportes hasta confirmar; `/my-sos` mantiene su contrato de confirmados para el
+seguimiento de ubicación. Resolver/descartar retira el pin activo.
+
+El botón del contador del operador usa `FloatingActionButton.small`, como el GPS,
+y un triángulo rojo. La cabecera de su bandeja es más compacta, con triángulo
+blanco y controles de sonido/actualización conservados. Verificar el cambio con
+SOS sin contestar, vuelta al mapa, cierre/reinicio, confirmación y cuentas distintas.
+
 ## Escalamiento, transferencias y límites SOS (034)
 
 Aplicar después de 033 y antes de desplegar backend/APK:

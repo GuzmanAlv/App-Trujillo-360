@@ -44,23 +44,42 @@ class SosWaitingQueue extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
+              key: const ValueKey('sos-queue-header'),
               color: quiet ? const Color(0xffa7313b) : const Color(0xffc41728),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: Row(
                 children: [
-                  const Icon(Icons.emergency, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'SOS disponibles · ${calls.length}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
                     ),
                   ),
                   if (!quiet)
                     IconButton(
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(32, 32),
+                        maximumSize: const Size(32, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 32,
+                        height: 32,
+                      ),
+                      padding: EdgeInsets.zero,
+                      iconSize: 18,
                       tooltip: muted
                           ? 'Activar sonido y vibración'
                           : 'Silenciar sonido y vibración',
@@ -69,6 +88,17 @@ class SosWaitingQueue extends StatelessWidget {
                       icon: Icon(muted ? Icons.volume_off : Icons.volume_up),
                     ),
                   IconButton(
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(32, 32),
+                      maximumSize: const Size(32, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
+                    ),
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
                     tooltip: 'Actualizar casos SOS',
                     onPressed: onRefresh,
                     color: Colors.white,

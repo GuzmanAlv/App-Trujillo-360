@@ -9,8 +9,13 @@ import '../services/workflow_client.dart';
 import '../services/report_sender.dart';
 import 'report_style.dart';
 
-String citizenSosMessage(String attention, {String? assignmentState}) =>
-    assignmentState == 'searching' || assignmentState == 'offered'
+String citizenSosMessage(
+  String attention, {
+  String? assignmentState,
+  String? decision,
+}) => decision == 'pending'
+    ? 'SOS recibido · esperando atención.'
+    : assignmentState == 'searching' || assignmentState == 'offered'
     ? 'Estamos buscando otra unidad disponible para tu SOS. Tu solicitud sigue abierta.'
     : switch (attention) {
         'en_route' => 'La policía se encuentra en camino. Mantente en calma.',
@@ -186,9 +191,17 @@ class _CitizenSosPageState extends State<CitizenSosPage> {
                 Text(
                   citizenSosMessage(
                     '${data!['attention']}',
+                    decision: data!['decision'] as String?,
                     assignmentState: data!['assignment_state'] as String?,
                   ),
                 ),
+                if (data!['decision'] == 'pending')
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Tu solicitud sigue activa aunque nadie haya contestado. Todavía está pendiente de atención de un operador.',
+                    ),
+                  ),
                 if ('${data!['description']}'.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -200,8 +213,10 @@ class _CitizenSosPageState extends State<CitizenSosPage> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 ),
                 if (data?['can_contribute'] == false)
-                  const Text(
-                    'El plazo para agregar información a este caso ha terminado.',
+                  Text(
+                    data?['decision'] == 'pending'
+                        ? 'Podrás agregar fotos y detalles cuando el operador confirme el caso.'
+                        : 'El plazo para agregar información a este caso ha terminado.',
                   ),
                 const Text(
                   'Puedes aportar detalles o fotos al operador. No es necesario para recibir atención.',

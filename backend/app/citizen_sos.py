@@ -34,6 +34,11 @@ def own_cases(response:Response,claims=Depends(identity)):
     private(response)
     return execute(claims,'SELECT trujillo.citizen_sos_cases()',many=True)
 
+@router.get('/my-sos/map')
+def own_map_cases(response:Response,claims=Depends(identity)):
+    private(response)
+    return execute(claims,'SELECT trujillo.citizen_sos_map_cases()',many=True)
+
 @router.get('/incidents/nearby-sos')
 def nearby_sos(response:Response,latitude:float=Query(ge=-90,le=90,allow_inf_nan=False),longitude:float=Query(ge=-180,le=180,allow_inf_nan=False),claims=Depends(identity)):
     private(response)
@@ -47,7 +52,7 @@ def own_history(response:Response,limit:int=Query(default=50,ge=1,le=100),offset
 @router.get('/my-sos/{case_id}')
 def own_case(case_id:UUID,response:Response,claims=Depends(identity)):
     private(response)
-    rows=execute(claims,'SELECT trujillo.citizen_sos_cases(%s)',(case_id,),many=True)
+    rows=execute(claims,'SELECT trujillo.citizen_sos_map_cases(%s)',(case_id,),many=True)
     if not rows: raise HTTPException(404,'Caso no disponible')
     return rows[0]
 

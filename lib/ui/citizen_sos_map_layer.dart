@@ -98,17 +98,19 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
     busy = true;
     final ticket = ++generation;
     try {
-      final rows = await WorkflowClient.list('/my-sos');
+      final rows = await WorkflowClient.list('/my-sos/map');
       for (final row in rows) {
         final category = '${row['category']}';
         final style = ReportStyle.forCategory(category);
-        if (!icons.containsKey(category)) {
+        final pending = row['decision'] == 'pending';
+        final iconKey = pending ? 'SOS_PENDING' : category;
+        if (!icons.containsKey(iconKey)) {
           final frames = <BitmapDescriptor>[];
           for (final phase in [0.0, .35, .75, 1.0, .75, .35]) {
             final bytes = await renderPendingSosMarker(
               phase,
-              symbol: style.icon,
-              color: style.color,
+              symbol: pending ? Icons.sos : style.icon,
+              color: pending ? const Color(0xffd4162a) : style.color,
             );
             if (!mounted || ticket != generation) return;
             frames.add(
@@ -120,7 +122,7 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
               ),
             );
           }
-          icons[category] = frames;
+          icons[iconKey] = frames;
         }
       }
       if (mounted &&
@@ -147,7 +149,10 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
           CitizenArrivalAlerts.instance.clear();
         }
         setState(() => cases = rows);
-        widget.onActiveCases?.call(rows);
+        // Only confirmed cases replace the citizen's SOS button with a callback.
+        widget.onActiveCases?.call(
+          rows.where((r) => r['decision'] == 'confirmed').toList(),
+        );
         if (previous != next) widget.onCasesChanged?.call();
         configurePulse();
       }
@@ -182,6 +187,7 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
     final ids = <String>{};
     for (final row in rows) {
       final category = '${row['category']}';
+      final pending = row['decision'] == 'pending';
       if (row['incident_id'] is String) ids.add(row['incident_id'] as String);
       markers.add(
         Marker(
@@ -191,22 +197,29 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
             (row['longitude'] as num).toDouble(),
           ),
           icon:
-              icons[category]?[frame] ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+              icons[pending ? 'SOS_PENDING' : category]?[frame] ??
+              BitmapDescriptor.defaultMarkerWithHue(
+                pending ? BitmapDescriptor.hueRed : BitmapDescriptor.hueOrange,
+              ),
           anchor: const Offset(.5, 74 / 76),
           zIndexInt: 5,
           infoWindow: InfoWindow(
-            title: 'Mi SOS · $category',
-            snippet: 'Ver caso y agregar información',
+            title: pending ? 'Mi SOS · Pendiente' : 'Mi SOS · $category',
+            snippet: pending
+                ? 'Solicitud recibida. Esperando atención.'
+                : 'Ver caso y agregar información',
           ),
           onTap: () => open('${row['id']}'),
         ),
       );
     }
     // Real dispatch takes precedence over confirmed-but-not-dispatched cases.
-    final dispatch = rows.where((r) => r['attention'] == 'en_route');
+    final confirmed = rows.where((r) => r['decision'] == 'confirmed');
+    final dispatch = confirmed.where((r) => r['attention'] == 'en_route');
     final current = dispatch.isNotEmpty
         ? dispatch.first
+        : confirmed.isNotEmpty
+        ? confirmed.first
         : rows.isEmpty
         ? null
         : rows.first;
@@ -217,7 +230,7 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
             ? 'citizen'
             : null,
         child: SosIncomingAttention(
-          active: widget.enabled && widget.active && rows.isNotEmpty,
+          active: widget.enabled && widget.active && confirmed.isNotEmpty,
           enableSound: false,
           glowColor: const Color(0xffff8800),
           builder: (muted, toggle) => Stack(
@@ -273,25 +286,35 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 480),
                       child: Material(
-                        color: const Color(0xffffb454),
+                        color: current['decision'] == 'pending'
+                            ? const Color(0xffffe5e8)
+                            : const Color(0xffffb454),
                         elevation: 4,
                         borderRadius: BorderRadius.circular(18),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => open('${current['id']}'),
                           child: Padding(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
                             child: Row(
                               children: [
-                                const Icon(
-                                  Icons.local_police,
-                                  color: Color(0xff6d3100),
+                                Icon(
+                                  current['decision'] == 'pending'
+                                      ? Icons.sos
+                                      : Icons.local_police,
+                                  color: current['decision'] == 'pending'
+                                      ? const Color(0xffa20d20)
+                                      : const Color(0xff6d3100),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     citizenSosMessage(
                                       '${current['attention']}',
+                                      decision: current['decision'] as String?,
                                       assignmentState:
                                           current['assignment_state']
                                               as String?,
