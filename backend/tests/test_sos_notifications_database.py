@@ -46,6 +46,7 @@ def test_sos_notices_are_private_deduplicated_and_quiet_for_busy_operator(databa
     # Stale callbacks must not ring after the citizen answers.
     query(citizen,"SELECT trujillo.call_action(%s,'answer')",(case,))
     query(operator,"SELECT trujillo.call_action(%s,'end')",(case,))
+    with psycopg.connect(database) as c:c.execute("UPDATE trujillo.sos_rate_events SET created_at=now()-interval '20 seconds' WHERE actor_id=%s",(operator,))
     query(operator,"SELECT trujillo.call_action(%s,'callback')",(case,))
     query(citizen,"SELECT trujillo.call_action(%s,'answer')",(case,))
     assert claim()['skipped'] is True

@@ -13,6 +13,7 @@ from app.reports import router as reports_router
 from app.workflows import router as workflows_router
 from app.push import router as push_router
 from app.push_worker import PushWorker
+from app.sos_dispatch_worker import SosDispatchWorker
 from app.calls import router as calls_router
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -45,8 +46,11 @@ def readiness_failure_reason(error):
 @asynccontextmanager
 async def lifespan(app):
     worker = PushWorker()
+    dispatch = SosDispatchWorker()
     worker.start()
+    dispatch.start()
     yield
+    dispatch.close()
     worker.close()
 
 app = FastAPI(title='Trujillo 360 API', version='0.1.0', lifespan=lifespan,
@@ -124,6 +128,10 @@ def ready():
                 raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.sos_offer_status(uuid)') IS NOT NULL").fetchone()[0]:
                 raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.citizen_sos_map_cases(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_dispatch_tick()') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.operator_sos_map_data()') IS NOT NULL").fetchone()[0]:
                 raise RuntimeError('Migración pendiente')
             if not conn.execute("SELECT to_regprocedure('trujillo.sos_navigation_target(uuid)') IS NOT NULL").fetchone()[0]:
@@ -134,7 +142,7 @@ def ready():
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1, 'sos_cases_version':2, 'citizen_sos_version':1, 'sos_arrival_version':1, 'sos_notifications_version':1, 'reinforcements_version':1, 'sos_suspension_version':1, 'resolved_map_version':1, 'citizen_history_version':1, 'nearby_sos_version':1, 'sos_offers_version':2, 'sos_reliability_version':1, 'sos_live_navigation_version':1, 'operator_sos_zones_version':1}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'calls_version':1, 'sos_cases_version':2, 'citizen_sos_version':1, 'sos_arrival_version':1, 'sos_notifications_version':1, 'reinforcements_version':1, 'sos_suspension_version':1, 'resolved_map_version':1, 'citizen_history_version':1, 'nearby_sos_version':1, 'sos_offers_version':2, 'sos_reliability_version':1, 'sos_live_navigation_version':1, 'operator_sos_zones_version':1, 'sos_dispatch_version':1, 'citizen_pending_sos_version':1}
 
 
 @app.get('/me')

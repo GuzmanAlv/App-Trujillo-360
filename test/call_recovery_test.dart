@@ -18,6 +18,31 @@ class RecoveryRoom extends Fake implements Room {
 
 void main() {
   testWidgets(
+    'Una transferencia desconecta la sala anterior y conserva la búsqueda del mismo SOS',
+    (tester) async {
+      final room = RecoveryRoom();
+      final call =
+          CallSession(
+              callId: 'case',
+              operator: false,
+              room: room,
+              readStatus: () async => {
+                'state': 'waiting_assignment',
+                'can_join': false,
+              },
+            )
+            ..joined = true
+            ..joinedRoom = 'previous-room';
+      await call.refresh();
+      expect(room.disconnects, 1);
+      expect(call.joined, isFalse);
+      expect(call.finished, isFalse);
+      expect(call.message, contains('otro operador'));
+      call.dispose();
+      await tester.pump();
+    },
+  );
+  testWidgets(
     'Un fallo temporal conserva el audio y se recupera; autorización denegada lo corta',
     (tester) async {
       final room = RecoveryRoom();

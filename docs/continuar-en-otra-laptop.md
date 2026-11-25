@@ -1,5 +1,92 @@
 # Continuar Trujillo 360 en otra laptop
 
+## SOS pendiente visible al ciudadano (035)
+
+Aplicar después de 034, antes de desplegar backend e instalar el APK nuevo:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_citizen_pending_sos.py --apply
+cd ..
+```
+
+`/ready` incluye `citizen_pending_sos_version: 1`. La ruta privada `/my-sos/map`
+lista los SOS pendientes y confirmados del usuario. El SOS sin respuesta queda
+visible con un marcador SOS rojo animado en el GPS registrado al solicitar ayuda
+(y no en un punto promedio ni en el GPS actual si se movió). Un aviso compacto
+indica «SOS recibido · esperando atención». El pin y el aviso persisten mientras
+esté pendiente, también al volver a abrir la app con la cuenta correspondiente.
+No se publica en el mapa de otros ciudadanos ni anuncia envío de una unidad.
+
+Al confirmar, el marcador se transforma al tipo de incidente y conserva el flujo
+normal de atención. Solo los confirmados reemplazan el botón SOS por llamada al
+operador/cámara; los reintentos de un pendiente reutilizan el mismo caso según
+034. El detalle pendiente explica que la solicitud sigue activa y deshabilita
+aportes hasta confirmar; `/my-sos` mantiene su contrato de confirmados para el
+seguimiento de ubicación. Resolver/descartar retira el pin activo.
+
+El botón del contador del operador usa `FloatingActionButton.small`, como el GPS,
+y un triángulo rojo. La cabecera de su bandeja es más compacta, con triángulo
+blanco y controles de sonido/actualización conservados. Verificar el cambio con
+SOS sin contestar, vuelta al mapa, cierre/reinicio, confirmación y cuentas distintas.
+
+## Escalamiento, transferencias y límites SOS (034)
+
+Aplicar después de 033 y antes de desplegar backend/APK:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_sos_dispatch.py --apply
+cd ..
+```
+
+`/ready` incluye `sos_dispatch_version: 1`. El backend ejecuta un reloj de despacho
+cada cinco segundos, independiente de `PUSH_ENABLED`. La instancia debe estar
+activa; un proceso suspendido/apagado no ejecuta el reloj. El envío FCM sigue
+requiriendo sus credenciales y configuración existentes.
+
+- SOS pendiente sin asignar: 15 km inicialmente, 30 km a los 30 s, 60 km a los
+  60 s y todos los operadores conectados con posición reciente a los 120 s.
+  El reloj parte de la recepción del SOS; continúa si la llamada de 90 s termina.
+  Cada nivel/dispositivo se notifica una sola vez. Contestar o confirmar detiene
+  el escalamiento mientras exista una reserva/atención válida.
+- El operador envía disponibilidad cada 30 s además del GPS. Al salir de sesión
+  intenta marcarse desconectado; una pérdida de conexión tiene 120 s de gracia.
+  La nueva versión del APK debe instalarse en TODOS los operadores antes de
+  poner esta política en servicio. Los latidos/GPS atrasados no reactivan una
+  cuenta marcada desconectada: el nuevo inicio de sesión declara disponibilidad.
+  Solo los clientes que declaran disponibilidad con el endpoint nuevo pueden
+  recibir ofertas automáticas de transferencia; se evita asignarlas a APK antiguos.
+- Caso confirmado sin operador conectado: busca el más cercano por distancia
+  geográfica, con GPS de menos de 120 s, latido de menos de 90 s y sin otra
+  reserva, caso activo ni llamada. Ofrece el traslado durante 45 s. Hasta que
+  acepte, el ciudadano ve que se está buscando otra unidad. Si no acepta, prueba
+  otro; el anterior se excluye cinco minutos para evitar rebotes. Sin candidatos,
+  conserva el mismo SOS abierto y sigue buscando. No representa un despacho
+  oficial ni garantiza que haya una unidad disponible.
+- «Transferir a otra unidad» permite solicitar el relevo sin cerrar el caso.
+  Se conservan incidente, evidencias y notas, se registra el historial y se
+  revoca el audio/ruta anteriores. Las salas antiguas se cierran mediante una
+  cola con reintentos de LiveKit, además de la desconexión del cliente.
+- La llamada del ciudadano conserva el caso. Si el asignado no está disponible
+  o está ocupado, espera otro operador. Las solicitudes de contacto esperan
+  hasta 90 s; que termine ese intento de audio NO cierra el SOS.
+- Un único SOS abierto por ciudadano: pendientes y confirmados se reutilizan
+  incluso con identificadores nuevos o envíos concurrentes. No se eliminan ni
+  fusionan automáticamente duplicados históricos anteriores a esta migración.
+- Límite de casos nuevos: 3 en 10 minutos y 10 en una hora por cuenta. Las
+  reaperturas de audio requieren 15 s entre intentos y permiten 6 en 5 minutos.
+  Reintentar una llamada todavía activa o recuperar el recibo no gasta otro
+  intento; responder, cortar, consultar y aportar información no se bloquean.
+  Se devuelve HTTP 429 con `Retry-After`; no hay suspensiones automáticas.
+
+Prueba con tres teléfonos: ciudadano, operador asignado y otro libre. Apagar la
+red del asignado; comprobar oferta al cercano libre, rechazo/expiración de oferta,
+aceptación, nueva ruta/audio y búsqueda sin candidatos. También probar cierre de
+sesión, dos operadores simultáneos intentando aceptar y reintentos de SOS.
+Las pruebas automatizadas usan PostgreSQL aislado; no se aplica la migración ni
+se despliega en producción automáticamente.
+
 ## Avisos por radio y recuperación de rutas (033)
 
 Aplicar después de 032, antes de desplegar backend e instalar el APK nuevo:

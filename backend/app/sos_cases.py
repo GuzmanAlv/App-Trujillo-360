@@ -9,6 +9,28 @@ from app.workflows import execute
 
 router = APIRouter(prefix='/operator')
 
+@router.post('/availability/online')
+def availability_online(response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims,'SELECT trujillo.operator_begin_duty()')
+
+@router.post('/availability/heartbeat')
+def availability_heartbeat(response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims,'SELECT trujillo.operator_heartbeat(true)')
+
+@router.post('/availability/offline')
+def availability_offline(response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    result=execute(claims,'SELECT trujillo.operator_heartbeat(false)')
+    execute(claims,'SELECT trujillo.sos_dispatch_tick()')
+    return result
+
+@router.post('/sos-cases/{case_id}/handoff')
+def handoff(case_id:UUID,response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims,'SELECT trujillo.operator_handoff(%s)',(case_id,))
+
 @router.get('/sos-map')
 def map_cases(response: Response, claims=Depends(identity)):
     """Same authorized queue as Ayuda; publish only marker fields to operators."""

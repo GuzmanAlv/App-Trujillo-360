@@ -117,6 +117,8 @@ class WorkflowClient {
                   ? 'La llamada terminó, ya fue atendida o tienes otra llamada activa.'
                   : 'El identificador ya fue usado con otros datos.',
             422 => 'Revisa los datos o el estado del caso.',
+            429 =>
+              'Has hecho varios intentos seguidos. Espera un momento; tu SOS actual sigue abierto.',
             _ =>
               'El servidor no confirmó la respuesta. Revisa el resultado o reintenta con la misma solicitud.',
           }, status: response.statusCode);

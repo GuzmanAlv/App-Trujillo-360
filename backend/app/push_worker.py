@@ -41,6 +41,8 @@ def message(job):
         data['incident'] = job['incident']
     if job.get('assigned_call') is True:
         data['assigned_call'] = 'true'
+    if job.get('assignment_offer') is True:
+        data['assignment_offer'] = 'true'
     if job.get('quiet') is True:
         data['quiet'] = 'true'
     title, body = job['title'], job['body']

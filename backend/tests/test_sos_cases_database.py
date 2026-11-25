@@ -222,6 +222,7 @@ def test_active_sos_live_navigation_and_assigned_redial(database):
     # The recorded incident location is never moved by tracking GPS.
     with psycopg.connect(database) as c:
         assert c.execute('SELECT latitude FROM trujillo.sos_cases WHERE id=%s',(case,)).fetchone()[0]==-8.11
+    with psycopg.connect(database) as c:c.execute("UPDATE trujillo.sos_rate_events SET created_at=now()-interval '20 seconds' WHERE actor_id=%s",(citizen,))
     for recipient in (op,other):
         query(recipient,'SELECT trujillo.push_register(%s,%s,false,true,NULL,NULL,500,false)',(uuid4(),'redial-test-'+str(uuid4())))
     result=query(citizen,'SELECT trujillo.citizen_call_operator(%s)',(case,))
@@ -235,7 +236,7 @@ def test_active_sos_live_navigation_and_assigned_redial(database):
         assert c.execute('SELECT trujillo.push_claim()').fetchone()[0] is None
     assert query(op,'SELECT trujillo.assigned_incoming_calls()')['id']==case
     assert query(other,'SELECT trujillo.assigned_incoming_calls()',many=True)==[]
-    with pytest.raises(psycopg.errors.RaiseException):query(other,"SELECT trujillo.call_action(%s,'accept')",(case,))
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):query(other,"SELECT trujillo.call_action(%s,'accept')",(case,))
     query(op,"SELECT trujillo.call_action(%s,'accept')",(case,))
     assert query(citizen,"SELECT trujillo.call_action(%s,'status')",(case,))['can_join']
     query(op,"SELECT trujillo.call_action(%s,'end')",(case,))
