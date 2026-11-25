@@ -125,7 +125,6 @@ class _AccountPanelState extends State<AccountPanel> {
                     'Inicia sesión para identificarte en Trujillo 360.',
                   ),
                 if (user?.email != null) Text(user!.email!),
-                if (user != null) const Text('Sesión iniciada con Firebase.'),
                 if (user != null)
                   BackendProfile(key: ValueKey(user.uid), user: user),
                 const SizedBox(height: 12),

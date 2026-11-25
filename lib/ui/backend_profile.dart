@@ -56,7 +56,7 @@ class _BackendProfileState extends State<BackendProfile> {
             throw const FormatException();
           }
           status =
-              'Cuenta conectada a Supabase.\nRol: ${['operator', 'admin'].contains(data['role']) ? 'Operador autorizado' : 'Ciudadano'}';
+              'Rol: ${['operator', 'admin'].contains(data['role']) ? 'Operador autorizado' : 'Ciudadano'}';
         } else {
           status = switch (response.statusCode) {
             401 =>

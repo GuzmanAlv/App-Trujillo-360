@@ -633,13 +633,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
       const ListTile(
-        leading: Icon(Icons.cloud_off_outlined),
-        title: Text('Backend y WebSocket'),
-        subtitle: Text(
-          'Los reportes enviados se guardan en el servidor. WebSocket pendiente.',
-        ),
-      ),
-      const ListTile(
         leading: Icon(Icons.lock_outline),
         title: Text('Privacidad'),
         subtitle: Text(
