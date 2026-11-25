@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Android 12+ keeps its native startup transition; only Flutter shows branding. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowSplashScreenBackground">#f4f6f2</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/startup_empty_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#f4f6f2</item>
         <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
 </resources>

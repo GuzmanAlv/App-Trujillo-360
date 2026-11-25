@@ -1,3 +1,7 @@
+from app.sos_routes import router as sos_routes_router
+from app.reinforcements import router as reinforcements_router
+from app.citizen_sos import router as citizen_sos_router
+from app.sos_cases import router as sos_cases_router
 import logging
 from contextlib import asynccontextmanager
 import psycopg
@@ -11,6 +15,8 @@ from app.push import router as push_router
 from app.push_worker import PushWorker
 from app.ai import router as ai_router
 from app.ai_simulation import router as ai_simulation_router
+from app.sos_dispatch_worker import SosDispatchWorker
+from app.calls import router as calls_router
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -42,8 +48,11 @@ def readiness_failure_reason(error):
 @asynccontextmanager
 async def lifespan(app):
     worker = PushWorker()
+    dispatch = SosDispatchWorker()
     worker.start()
+    dispatch.start()
     yield
+    dispatch.close()
     worker.close()
 
 app = FastAPI(title='Trujillo 360 API', version='0.1.0', lifespan=lifespan,
@@ -53,11 +62,16 @@ app.include_router(workflows_router)
 app.include_router(push_router)
 app.include_router(ai_router)
 app.include_router(ai_simulation_router)
+app.include_router(calls_router)
+app.include_router(sos_cases_router)
+app.include_router(citizen_sos_router)
+app.include_router(sos_routes_router)
+app.include_router(reinforcements_router)
 
 
 @app.middleware('http')
 async def limit_report_body(request: Request, call_next):
-    if request.method in ('POST','PUT') and (request.url.path in ('/reports','/help-requests') or request.url.path.startswith(('/operator/','/push/'))):
+    if request.method in ('POST','PUT') and (request.url.path in ('/reports','/help-requests') or request.url.path.startswith(('/operator/','/push/','/my-sos/'))):
         # Three 2-MB images expand to about 8 MB when encoded in JSON.
         chunks = []
         size = 0
@@ -95,11 +109,49 @@ def ready():
             ai_version=conn.execute('SELECT max(version) FROM trujillo.ai_migrations').fetchone()[0]
             if ai_version != 2:
                 raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.call_action(uuid,text)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.return_calls()') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_citizen_submit(uuid,uuid,text,jsonb)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_case_update(uuid,uuid,integer,jsonb)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_arrival_check(uuid,double precision,double precision,double precision,timestamp with time zone)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.push_register_sos(uuid,text)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.reinforcement_destination(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_suspension_version()') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.resolved_map_version()') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.citizen_sos_history(integer,integer)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.nearby_sos(double precision,double precision)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.claim_sos(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_offer_status(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.take_sos_call(uuid,uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.citizen_sos_map_cases(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_dispatch_tick()') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.operator_sos_map_data()') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.sos_navigation_target(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
+            if not conn.execute("SELECT to_regprocedure('trujillo.release_sos_claim(uuid)') IS NOT NULL").fetchone()[0]:
+                raise RuntimeError('Migración pendiente')
     except (psycopg.Error, RuntimeError) as error:
         logger.error('READY_FAIL reason=%s', readiness_failure_reason(error))
         # Do not disclose host, credentials or database diagnostics over HTTP.
         raise HTTPException(503, 'Base de datos no disponible') from None
-    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'ai_version':ai_version}
+    return {'status': 'ready', 'schema_version': version, 'workflow_version':workflow_version, 'push_version':push_version, 'sos_version':sos_version, 'ai_version':ai_version, 'calls_version':1, 'sos_cases_version':2, 'citizen_sos_version':1, 'sos_arrival_version':1, 'sos_notifications_version':1, 'reinforcements_version':1, 'sos_suspension_version':1, 'resolved_map_version':1, 'citizen_history_version':1, 'nearby_sos_version':1, 'sos_offers_version':2, 'sos_reliability_version':1, 'sos_live_navigation_version':1, 'operator_sos_zones_version':1, 'sos_dispatch_version':1, 'citizen_pending_sos_version':1, 'sos_concurrency_version':1}
 
 
 @app.get('/me')

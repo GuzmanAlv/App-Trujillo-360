@@ -32,6 +32,16 @@ class LocationInput(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
 
+class SosDeviceInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    token: str = Field(min_length=20, max_length=4096)
+
+@router.put('/devices/{device_id}/sos')
+def register_sos(device_id: UUID, data: SosDeviceInput, response: Response, claims=Depends(identity)):
+    response.headers['Cache-Control'] = 'private, no-store'
+    execute(claims, 'SELECT trujillo.push_register_sos(%s,%s)', (device_id,data.token))
+    return {'status':'registered'}
+
 @router.get('/devices/{device_id}')
 def preferences(device_id: UUID, response: Response, claims=Depends(identity)):
     response.headers['Cache-Control'] = 'private, no-store'

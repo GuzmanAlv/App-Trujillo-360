@@ -77,7 +77,7 @@ internal class SosNativeSender(private val context: Context) {
                 if (connection.responseCode == 401 && attempt == 0) continue
                 if (connection.responseCode != 200) return false
                 val reply = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-                if (reply.optString("request_id") != requestId || reply.optString("source") != "sos") return false
+                if ((!reply.optBoolean("existing_active") && reply.optString("request_id") != requestId) || reply.optString("source") != "sos") return false
                 prefs.edit().clear().commit()
                 return true
             } finally {

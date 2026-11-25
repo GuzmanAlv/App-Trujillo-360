@@ -36,23 +36,35 @@ class NearbyIncidentPage extends StatelessWidget {
       mapToolbarEnabled: false,
     );
     return Scaffold(
-      appBar: AppBar(title: const Text('Incidencia cerca de ti')),
+      appBar: AppBar(
+        title: Text(
+          incident.isSos ? 'SOS cerca de ti' : 'Incidencia cerca de ti',
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           Text(incident.type, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 12),
           Text(
-            confirmed
+            incident.isSos
+                ? incident.sosStatusLabel
+                : confirmed
                 ? 'Corroborado por la comunidad'
                 : 'Pendiente de corroboración',
           ),
-          Text('Reportado ${reportTime(incident.createdAt)}'),
+          Text('Solicitado ${reportDateTime(incident.createdAt)}'),
+          if (incident.isResolved)
+            Text('Resuelto ${reportDateTime(incident.resolvedAt!)}'),
+          if (incident.isSos && incident.description.isNotEmpty)
+            Text(incident.description),
           if (distance != null && distance!.isFinite)
             Text('${distance!.round()} m de tu ubicación actual'),
           const SizedBox(height: 16),
-          const Text(
-            'Aviso ciudadano. No confirma que el incidente siga en curso ni que una autoridad esté atendiendo el caso.',
+          Text(
+            incident.isSos
+                ? 'El estado corresponde a la última actualización del caso.'
+                : 'Aviso ciudadano. No confirma que el incidente siga en curso ni que una autoridad esté atendiendo el caso.',
           ),
           const SizedBox(height: 16),
           if (available) ...[

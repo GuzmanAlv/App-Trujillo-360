@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -6,14 +7,55 @@ import 'package:http/http.dart' as http;
 import '../core/config.dart';
 import '../models/incident.dart';
 import 'report_sender.dart';
+import 'single_flight.dart';
+
+class WorkflowFailure extends StateError {
+  WorkflowFailure(super.message, {this.status});
+  final int? status;
+  bool get temporary =>
+      status == null || status == 408 || status == 429 || status! >= 500;
+}
 
 class WorkflowClient {
+  static final _reads = SingleFlight();
   static Future<dynamic> request(
     String method,
     String path, {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     bool bytes = false,
+    Duration? timeout,
+  }) {
+    final user = Firebase.apps.isEmpty
+        ? null
+        : FirebaseAuth.instance.currentUser;
+    Future<dynamic> work() => _perform(
+      method,
+      path,
+      body: body,
+      query: query,
+      bytes: bytes,
+      timeout: timeout,
+    );
+    if (method.toUpperCase() != 'GET' || user == null) return work();
+    final ordered = query == null
+        ? null
+        : Map.fromEntries(
+            query.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+          );
+    return _reads.run(
+      '${user.uid}|${ReportSender.endpoint}|$path|${jsonEncode(ordered)}|$bytes|${timeout?.inMilliseconds}',
+      work,
+    );
+  }
+
+  static Future<dynamic> _perform(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? query,
+    bool bytes = false,
+    Duration? timeout,
   }) async {
     if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null) {
       throw StateError('Inicia sesión con Google en Configuración.');
@@ -34,7 +76,9 @@ class WorkflowClient {
     final client = http.Client();
     try {
       for (var attempt = 0; attempt < 2; attempt++) {
-        final token = await user.getIdToken(attempt == 1);
+        final token = await user
+            .getIdToken(attempt == 1)
+            .timeout(const Duration(seconds: 10));
         if (token == null) throw StateError('Sesión vencida.');
         final req =
             http.Request(
@@ -51,27 +95,90 @@ class WorkflowClient {
             await (() async => http.Response.fromStream(
               await client.send(req),
             ))().timeout(
-              AppConfig.backendRequestTimeout(const Duration(seconds: 30)),
+              timeout ??
+                  AppConfig.backendRequestTimeout(const Duration(seconds: 30)),
             );
         if (FirebaseAuth.instance.currentUser?.uid != user.uid) {
           throw StateError('La sesión cambió. Vuelve a abrir la pantalla.');
         }
         if (response.statusCode == 401 && attempt == 0) continue;
         if (response.statusCode != 200) {
-          throw StateError(switch (response.statusCode) {
+          if (response.statusCode == 409 ||
+              path.endsWith('/route') ||
+              path.endsWith('/preview-route')) {
+            try {
+              final error = jsonDecode(response.body);
+              final detail = error is Map ? error['detail'] : null;
+              final code = detail is Map ? detail['code'] : null;
+              const routeErrors = {
+                'SOS_BUSY':
+                    'Finaliza la llamada o el caso actual antes de atender otro SOS.',
+                'SOS_TAKEN':
+                    'Este SOS cambió o fue tomado por otro operador. Actualiza la lista.',
+                'SOS_CALL_CHANGED':
+                    'La llamada cambió o terminó. El SOS sigue disponible para evaluación.',
+                'SOS_PREVIEW_UNAVAILABLE':
+                    'Este SOS ya no está disponible. Actualiza la lista.',
+                'REINFORCEMENT_CLOSED':
+                    'La solicitud de refuerzos ya finalizó o caducó.',
+                'SOS_PRIORITY':
+                    'Primero llega al SOS ciudadano que tienes asignado. Después podrás trazar la ruta de refuerzos.',
+                'ROUTES_NOT_CONFIGURED':
+                    'SOS confirmado. Falta configurar Google Routes en el servidor.',
+                'ROUTES_REJECTED':
+                    'Google Routes rechazó la consulta. Revisa la clave, la API y su facturación.',
+                'ROUTE_NOT_FOUND':
+                    'No se encontró una ruta en vehículo para este destino.',
+                'ROUTES_UNAVAILABLE':
+                    'No se pudo consultar Google Routes. Puedes reintentar.',
+                'ROUTES_RATE_LIMIT':
+                    'Espera unos segundos antes de actualizar la ruta.',
+                'ROUTE_CLOSED':
+                    'El SOS ya no está activo o aún no está confirmado.',
+              };
+              if (routeErrors.containsKey(code)) {
+                throw StateError(routeErrors[code]!);
+              }
+            } on FormatException {
+              /* Use the regular HTTP message. */
+            }
+          }
+          throw WorkflowFailure(switch (response.statusCode) {
             401 => 'Sesión vencida. Vuelve a ingresar.',
-            403 => 'Tu cuenta no está autorizada para esta operación.',
+            403 =>
+              path == '/me'
+                  ? 'Tu cuenta está suspendida en Trujillo 360.'
+                  : 'Tu cuenta no está autorizada para esta operación.',
             404 =>
               'Esta función aún no está disponible en el servidor conectado.',
-            409 => 'El identificador ya fue usado con otros datos.',
+            409 =>
+              path.startsWith('/operator/sos-cases/')
+                  ? 'El caso cambió o la acción no está disponible. Recarga la ficha antes de continuar.'
+                  : path.startsWith('/calls/')
+                  ? 'La llamada terminó, ya fue atendida o tienes otra llamada activa.'
+                  : 'El identificador ya fue usado con otros datos.',
             422 => 'Revisa los datos o el estado del caso.',
+            429 =>
+              'Has hecho varios intentos seguidos. Espera un momento; tu SOS actual sigue abierto.',
             _ =>
-              'Servidor no disponible. No se confirmó ningún cambio. Vuelve a intentar.',
-          });
+              'El servidor no confirmó la respuesta. Revisa el resultado o reintenta con la misma solicitud.',
+          }, status: response.statusCode);
         }
         return bytes ? response.bodyBytes : jsonDecode(response.body);
       }
       throw StateError('Sesión vencida.');
+    } on TimeoutException {
+      throw WorkflowFailure(
+        'El servidor tardó demasiado en responder. Puedes reintentar.',
+      );
+    } on http.ClientException {
+      throw WorkflowFailure(
+        'Se interrumpió la conexión. Comprueba internet y reintenta.',
+      );
+    } on FormatException {
+      throw WorkflowFailure(
+        'El servidor devolvió una respuesta incompleta. Puedes reintentar.',
+      );
     } finally {
       client.close();
     }

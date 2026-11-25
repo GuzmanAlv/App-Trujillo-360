@@ -16,10 +16,17 @@ class MapPanel extends StatefulWidget {
   const MapPanel({
     super.key,
     this.incidents = const [],
+    this.extraMarkers = const {},
+    this.polylines = const {},
+    this.routeBounds,
+    this.routeRevision = 0,
+    this.focusTarget,
+    this.focusRevision = 0,
     this.selected,
     this.onPick,
     this.onIncident,
     this.currentLocation,
+    this.currentLocationLabel = 'Mi ubicación',
     this.onLocate,
     this.onViewportChanged,
     this.locating = false,
@@ -27,10 +34,19 @@ class MapPanel extends StatefulWidget {
     this.active = true,
     this.zoomControls = false,
     this.overlays = const {},
+    this.bottomInset = 0,
   });
   final List<Incident> incidents;
+  final Set<Marker> extraMarkers;
+  final Set<Polyline> polylines;
+  final double bottomInset;
+  final LatLngBounds? routeBounds;
+  final int routeRevision;
+  final LatLng? focusTarget;
+  final int focusRevision;
   final Set<Circle> overlays;
   final LatLng? currentLocation;
+  final String currentLocationLabel;
   final VoidCallback? onLocate;
   final ValueChanged<LatLngBounds>? onViewportChanged;
 
@@ -48,6 +64,35 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   StreamSubscription<Position>? subscription;
   final service = LocationService();
   final Map<String, BitmapDescriptor> reportIcons = {};
+  final pulseIcons = <String, List<BitmapDescriptor>>{};
+  BitmapDescriptor? animatedIcon(Incident incident) {
+    final frames = pulseIcons[incident.type];
+    return incident.attention == 'en_route' && frames != null
+        ? frames[pulseFrame]
+        : null;
+  }
+
+  Timer? markerPulse;
+  int pulseFrame = 0;
+  void configureMarkerPulse() {
+    markerPulse?.cancel();
+    if (!widget.active ||
+        !foreground ||
+        MediaQuery.disableAnimationsOf(context) ||
+        !widget.incidents.any((i) => i.attention == 'en_route')) {
+      return;
+    }
+    markerPulse = Timer.periodic(const Duration(milliseconds: 220), (_) {
+      if (mounted) setState(() => pulseFrame = (pulseFrame + 1) % 6);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    configureMarkerPulse();
+  }
+
   int iconGeneration = 0;
   BitmapDescriptor? locationIcon;
   BitmapDescriptor? explorationIcon;
@@ -74,7 +119,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   }
 
   String iconKey(Incident incident) =>
-      '${incident.type}|${reportTime(incident.createdAt)}';
+      '${incident.type}|${reportTime(incident.createdAt)}|${incident.attention}|${incident.isResolved}';
 
   Future<void> prepareReportIcons() async {
     final generation = ++iconGeneration;
@@ -82,18 +127,46 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
     final next = <String, BitmapDescriptor>{};
     for (final incident in incidents) {
       final key = iconKey(incident);
+      if (incident.attention == 'en_route' &&
+          !pulseIcons.containsKey(incident.type)) {
+        final style = ReportStyle.forCategory(incident.type);
+        final frames = <BitmapDescriptor>[];
+        for (final phase in [0.0, .35, .75, 1.0, .75, .35]) {
+          final bytes = await renderPendingSosMarker(
+            phase,
+            symbol: style.icon,
+            color: style.color,
+          );
+          if (!mounted || generation != iconGeneration) return;
+          frames.add(
+            BitmapDescriptor.bytes(
+              bytes,
+              imagePixelRatio: 2,
+              width: 64,
+              height: 76,
+            ),
+          );
+        }
+        pulseIcons[incident.type] = frames;
+      }
       if (next.containsKey(key)) continue;
       try {
         next[key] =
             reportIcons[key] ??
             BitmapDescriptor.bytes(
-              await renderReportMarker(
-                incident.type,
-                reportTime(incident.createdAt),
-              ),
+              incident.isResolved
+                  ? await renderActorMarker(
+                      ReportStyle.forCategory(incident.type).icon,
+                      ReportStyle.forCategory(incident.type).color,
+                    )
+                  : await renderReportMarker(
+                      incident.type,
+                      reportTime(incident.createdAt),
+                      onScene: incident.attention == 'on_scene',
+                    ),
               imagePixelRatio: 2,
-              width: 174,
-              height: 82,
+              width: incident.isResolved ? 48 : 174,
+              height: incident.isResolved ? 56 : 82,
             );
       } catch (_) {
         // Keep a category-colored marker if image rendering is unavailable.
@@ -114,6 +187,23 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant MapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    configureMarkerPulse();
+    if (widget.routeBounds != null &&
+        (widget.routeRevision != oldWidget.routeRevision ||
+            widget.routeBounds != oldWidget.routeBounds)) {
+      centerRequested = false;
+      controller?.animateCamera(
+        CameraUpdate.newLatLngBounds(widget.routeBounds!, 44),
+      );
+    }
+    if (widget.focusTarget != null &&
+        (widget.focusTarget != oldWidget.focusTarget ||
+            widget.focusRevision != oldWidget.focusRevision)) {
+      centerRequested = false;
+      controller?.animateCamera(
+        CameraUpdate.newLatLngZoom(widget.focusTarget!, 16),
+      );
+    }
     if (widget.selected != null && widget.selected != oldWidget.selected) {
       controller?.animateCamera(CameraUpdate.newLatLng(widget.selected!));
     }
@@ -185,6 +275,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
+    configureMarkerPulse();
     if (!foreground) {
       subscription?.cancel();
       subscription = null;
@@ -197,6 +288,7 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     subscription?.cancel();
     viewportGeneration++;
+    markerPulse?.cancel();
     controller?.dispose();
     super.dispose();
   }
@@ -273,7 +365,11 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           }
                         : const <Factory<OneSequenceGestureRecognizer>>{},
                     initialCameraPosition: CameraPosition(
-                      target: widget.selected ?? displayedLocation ?? trujillo,
+                      target:
+                          widget.focusTarget ??
+                          widget.selected ??
+                          displayedLocation ??
+                          trujillo,
                       zoom: widget.zoomControls
                           ? 16
                           : displayedLocation == null
@@ -282,12 +378,27 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     ),
                     onMapCreated: (c) {
                       controller = c;
+                      final bounds = widget.routeBounds;
+                      if (widget.focusTarget != null || bounds != null) {
+                        centerRequested = false;
+                      }
+                      if (bounds != null) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            controller?.animateCamera(
+                              CameraUpdate.newLatLngBounds(bounds, 44),
+                            );
+                          }
+                        });
+                      }
                       if (widget.active) {
                         centerIfRequested();
                         reportViewport();
                       }
                     },
                     onCameraIdle: reportViewport,
+                    polylines: widget.polylines,
+                    padding: EdgeInsets.only(bottom: widget.bottomInset),
                     circles: {
                       ...widget.overlays,
                       ...locationHighlight(
@@ -299,14 +410,21 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                     myLocationButtonEnabled: false,
                     zoomControlsEnabled: widget.zoomControls,
                     markers: {
+                      ...widget.extraMarkers,
                       for (final i in widget.incidents)
                         Marker(
                           markerId: MarkerId(i.id),
                           position: LatLng(i.latitude, i.longitude),
-                          anchor: reportIcons.containsKey(iconKey(i))
+                          anchor: i.isResolved
+                              ? const Offset(.5, 55 / 56)
+                              : i.attention == 'en_route' &&
+                                    pulseIcons.containsKey(i.type)
+                              ? const Offset(.5, 74 / 76)
+                              : reportIcons.containsKey(iconKey(i))
                               ? const Offset(0.5, 78 / 82)
                               : const Offset(0.5, 1),
                           icon:
+                              animatedIcon(i) ??
                               reportIcons[iconKey(i)] ??
                               BitmapDescriptor.defaultMarkerWithHue(
                                 switch (i.type) {
@@ -318,11 +436,22 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                                 },
                               ),
                           infoWindow: InfoWindow(
-                            title:
-                                '${i.type} · Reportado ${reportTime(i.createdAt)}',
-                            snippet: i.place,
+                            title: i.isResolved
+                                ? '${i.type} · Caso resuelto'
+                                : '${i.type} · Reportado ${reportTime(i.createdAt)}',
+                            snippet: i.isResolved
+                                ? 'Aquí ocurrió un incidente · ${reportDateTime(i.createdAt)}'
+                                : i.attention == 'on_scene'
+                                ? 'Unidad en la zona · ${i.place}'
+                                : i.place,
                           ),
-                          onTap: () => widget.onIncident?.call(i),
+                          onTap: () {
+                            if (i.isResolved) {
+                              controller?.showMarkerInfoWindow(MarkerId(i.id));
+                            } else {
+                              widget.onIncident?.call(i);
+                            }
+                          },
                         ),
                       if (displayedLocation != null && locationIcon != null)
                         Marker(
@@ -331,7 +460,9 @@ class _MapPanelState extends State<MapPanel> with WidgetsBindingObserver {
                           icon: locationIcon!,
                           anchor: const Offset(0.5, 0.5),
                           zIndexInt: 2,
-                          infoWindow: const InfoWindow(title: 'Mi ubicación'),
+                          infoWindow: InfoWindow(
+                            title: widget.currentLocationLabel,
+                          ),
                         ),
                       if (exploredLocation != null && explorationIcon != null)
                         Marker(

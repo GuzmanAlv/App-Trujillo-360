@@ -11,10 +11,9 @@ String? get currentReportOwner =>
     Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser?.uid;
 
 Future<List<Incident>> fetchNearbyReports(double latitude, double longitude) =>
-    fetchCommunityReports('/incidents/nearby', {
+    fetchCommunityReports('/incidents/nearby-sos', {
       'latitude': '$latitude',
       'longitude': '$longitude',
-      'radius': '1000',
     });
 
 Future<List<Incident>> fetchIncidentReports(String id) =>
@@ -76,7 +75,10 @@ Future<List<Incident>> fetchCommunityReports(
       'id': j['id'],
       'type': j['category'],
       'place': j['place'] as String? ?? 'Incidente de la comunidad',
-      'description': '',
+      'description': j['description'] as String? ?? '',
+      'attention': j['attention'],
+      'resolvedAt': j['resolved_at'],
+      'isSos': j['is_sos'],
       'latitude': j['latitude'],
       'longitude': j['longitude'],
       'createdAt': j['occurred_at'],

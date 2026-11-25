@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'backend_profile.dart';
 import '../services/push_service.dart';
+import '../services/workflow_client.dart';
 
 /// Firebase persists the session; no tokens are stored in local preferences.
 class AccountPanel extends StatefulWidget {
@@ -27,6 +28,15 @@ class _AccountPanelState extends State<AccountPanel> {
     });
     try {
       if (signOut) {
+        try {
+          await WorkflowClient.request(
+            'POST',
+            '/operator/availability/offline',
+            timeout: const Duration(seconds: 8),
+          );
+        } catch (_) {
+          // Offline operators also expire by heartbeat; citizens have no access here.
+        }
         await PushService.instance.beforeSignOut();
         await FirebaseAuth.instance.signOut();
         if (googleInitialization != null) {
@@ -125,7 +135,6 @@ class _AccountPanelState extends State<AccountPanel> {
                     'Inicia sesión para identificarte en Trujillo 360.',
                   ),
                 if (user?.email != null) Text(user!.email!),
-                if (user != null) const Text('Sesión iniciada con Firebase.'),
                 if (user != null)
                   BackendProfile(key: ValueKey(user.uid), user: user),
                 const SizedBox(height: 12),

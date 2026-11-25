@@ -9,6 +9,7 @@ from google.auth import exceptions
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
 from app.db import ROOT
+from app.certificate_cache import certificate_cache
 
 bearer = HTTPBearer(auto_error=False)
 CLOCK_SKEW_SECONDS = 60
@@ -22,7 +23,7 @@ def verify_token(token):
     with requests.Session() as session:
         request = Request(session=session)
         claims = id_token.verify_firebase_token(
-            token, partial(request, timeout=10), audience=project,
+            token, partial(certificate_cache.request,request,timeout=10), audience=project,
             clock_skew_in_seconds=CLOCK_SKEW_SECONDS)
     if (claims.get('iss') != f'https://securetoken.google.com/{project}'
             or not isinstance(claims.get('sub'), str)

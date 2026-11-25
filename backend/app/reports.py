@@ -13,6 +13,19 @@ from psycopg.rows import dict_row
 
 router = APIRouter()
 
+
+def with_public_case_fields(conn, rows):
+    if not rows:
+        return rows
+    additions = conn.execute('SELECT trujillo.public_case_fields(%s::uuid[])',
+                             ([r['id'] for r in rows],)).fetchall()
+    fields = {str(row[0]['id']): row[0] for row in additions}
+    for row in rows:
+        extra = fields.get(str(row['id']), {})
+        row.update({k: v for k, v in extra.items() if k != 'id' and v is not None})
+    return rows
+
+
 class ReportInput(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True, allow_inf_nan=False)
     request_id: UUID
@@ -107,7 +120,7 @@ def nearby_incidents(response: Response,
                 cursor.execute('SELECT * FROM trujillo.nearby_incidents(%s,%s,%s)',
                                (latitude, longitude, radius))
                 response.headers['Cache-Control'] = 'private, no-store'
-                return cursor.fetchall()
+                return with_public_case_fields(conn, cursor.fetchall())
     except psycopg.errors.InsufficientPrivilege:
         raise HTTPException(403, 'Cuenta no disponible') from None
     except (psycopg.Error, RuntimeError):
@@ -149,7 +162,7 @@ def map_incidents(response: Response,
             with conn.cursor(row_factory=dict_row) as cursor:
                 cursor.execute('SELECT * FROM trujillo.map_incidents(%s,%s,%s,%s)', (south,north,west,east))
                 response.headers['Cache-Control'] = 'private, no-store'
-                return cursor.fetchall()
+                return with_public_case_fields(conn, cursor.fetchall())
     except psycopg.errors.InsufficientPrivilege:
         raise HTTPException(403, 'Cuenta no disponible') from None
     except (psycopg.Error, RuntimeError):

@@ -61,6 +61,13 @@ def test_payload_does_not_include_private_case_details():
     assert 'latitude' not in payload['data'] and 'description' not in payload['data']
     assert payload['android']['notification']['tag']=='event'
 
+def test_assigned_redial_uses_call_channel_and_short_lifetime():
+    payload=message(dict(token='test',kind='operator',target_id='case',account_uid='uid',job_id='event',
+        title='Llamada',body='Responder',assigned_call=True,quiet=False))['message']
+    assert payload['android']['notification']['channel_id']=='trujillo_sos_calls'
+    assert payload['android']['ttl']=='90s'
+    assert payload['data']['assigned_call']=='true'
+
 def test_citizen_alert_uses_incident_category_without_claiming_live_distance():
     payload=message(dict(token='test',kind='citizen',target_id='target',account_uid='uid',job_id='event',title='Incidente confirmado en tu zona',body='Robo. Toca para consultar el detalle.'))['message']
     assert payload['notification']['title']=='🚨 Alerta: Robo en tu zona'
@@ -83,3 +90,14 @@ def test_invalid_token_and_auth_failure_differ():
 def test_sender_stays_off_without_explicit_configuration():
     with patch('app.push_worker.settings',return_value={}):
         assert configured() is False
+
+@pytest.mark.parametrize('kind,quiet,channel',[
+    ('operator',True,'trujillo_sos_quiet'),
+    ('sos_arrival',False,'trujillo_sos_arrival'),
+    ('sos_callback',False,'trujillo_sos_calls'),
+])
+def test_sos_notification_channels_and_private_payload(kind,quiet,channel):
+    payload=message(dict(token='test',kind=kind,quiet=quiet,target_id='case',account_uid='uid',job_id='event',title='SOS',body='Aviso'))['message']
+    assert payload['android']['notification']['channel_id']==channel
+    assert payload['data']['kind']==kind
+    assert payload['android']['ttl']==('90s' if kind=='sos_callback' else '300s')

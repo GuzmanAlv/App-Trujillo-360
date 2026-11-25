@@ -45,7 +45,14 @@ def execute(claims, query, parameters=(), many=False):
             if claims.get('email') and claims.get('email_verified') is True:
                 conn.execute('SELECT trujillo.sync_identity_email(%s)', (claims['email'],))
             cursor = conn.execute(query, parameters)
-            return [r[0] for r in cursor.fetchall()] if many else cursor.fetchone()[0]
+            result = [r[0] for r in cursor.fetchall()] if many else cursor.fetchone()[0]
+        # Raised AFTER commit, so the limiter's counter survives the rejection.
+        if isinstance(result,dict) and result.get('error_code')=='SOS_RATE_LIMIT':
+            raise HTTPException(429,'Espera antes de iniciar otra llamada o un nuevo SOS. El caso actual sigue abierto.',
+                headers={'Retry-After':str(result.get('retry_after',60))})
+        if isinstance(result,dict) and result.get('error_code') in ('SOS_BUSY','SOS_TAKEN','SOS_CALL_CHANGED'):
+            raise HTTPException(409,{'code':result['error_code']})
+        return result
     except psycopg.errors.InsufficientPrivilege:
         raise HTTPException(403, 'Tu cuenta no tiene acceso a esta operación') from None
     except psycopg.errors.NoDataFound:
@@ -77,7 +84,7 @@ def mine(response: Response, claims=Depends(identity)):
 @router.get('/operator/help-requests')
 def inbox(response: Response, claims=Depends(identity)):
     response.headers['Cache-Control'] = 'private, no-store'
-    return execute(claims, 'SELECT * FROM trujillo.list_help(true)', many=True)
+    return execute(claims, 'SELECT trujillo.operator_help_cases()', many=True)
 
 @router.post('/operator/help-requests/{request_id}/decisions')
 def decide_help(request_id: UUID, data: HelpDecision, claims=Depends(identity)):

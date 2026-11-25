@@ -17,6 +17,7 @@ class ProximityAlertPolicy {
   ) => items.where((i) {
     final age = now.difference(i.createdAt);
     if (age.isNegative ||
+        i.isResolved ||
         age >= const Duration(days: 7) ||
         !i.isCommunityVisible ||
         distance(i) > 500 ||

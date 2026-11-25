@@ -10,6 +10,10 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.Address
+import android.location.Geocoder
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
@@ -17,6 +21,46 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private val addressWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private fun lookupSosAddress(latitude: Double?, longitude: Double?, result: MethodChannel.Result) {
+        if (latitude == null || longitude == null || latitude !in -90.0..90.0 ||
+            longitude !in -180.0..180.0 || !Geocoder.isPresent()) {
+            result.success(null)
+            return
+        }
+        val geocoder = Geocoder(applicationContext, java.util.Locale.forLanguageTag("es-PE"))
+        fun respond(address: Address?) {
+            val street = address?.thoroughfare?.takeIf { it.isNotBlank() }
+            val label = if (street != null) {
+                listOfNotNull(street, address?.subThoroughfare?.takeIf { it.isNotBlank() }).joinToString(" ")
+            } else {
+                address?.subLocality ?: address?.locality
+            }
+            runOnUiThread { result.success(label) }
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                geocoder.getFromLocation(latitude, longitude, 1, object : Geocoder.GeocodeListener {
+                    override fun onGeocode(addresses: MutableList<Address>) = respond(addresses.firstOrNull())
+                    override fun onError(errorMessage: String?) = respond(null)
+                })
+            } catch (_: Exception) {
+                respond(null)
+            }
+        } else {
+            addressWorker.execute {
+                @Suppress("DEPRECATION")
+                val address = runCatching { geocoder.getFromLocation(latitude, longitude, 1)?.firstOrNull() }.getOrNull()
+                respond(address)
+            }
+        }
+    }
+    private val incomingAlarm by lazy { SosIncomingAlarm(this) }
+    private val userSignals by lazy { SosUserSignals(this) }
+    private val progressSignals by lazy { SosProgressSignals(this) { incomingAlarm.active || userSignals.active } }
+    private var callNotice: SosCallNotice? = null
+    private var activityVisible = false
     private var channel: MethodChannel? = null
     private var permissionResult: MethodChannel.Result? = null
     private val alertChannel = "nearby_incidents"
@@ -29,9 +73,63 @@ class MainActivity : FlutterActivity() {
             alertChannel, "Incidencias a 500 metros", NotificationManager.IMPORTANCE_HIGH))
         if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(
             "trujillo_push", "Avisos de Trujillo 360", NotificationManager.IMPORTANCE_HIGH))
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(NotificationChannel("trujillo_sos_quiet", "Avisos durante una atención SOS", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(null, null); enableVibration(false)
+            })
+            manager.createNotificationChannel(NotificationChannel("trujillo_sos_calls", "Llamadas del operador SOS", NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
+                enableVibration(true); vibrationPattern = longArrayOf(0, 550, 250, 550)
+            })
+            manager.createNotificationChannel(NotificationChannel("trujillo_sos_arrival", "Llegada de la policía al SOS", NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(Uri.parse("android.resource://$packageName/${R.raw.sos_arrival}"), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT).build())
+                enableVibration(true); vibrationPattern = longArrayOf(0, 200, 800, 200, 800, 200, 800, 200)
+            })
+        }
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "trujillo360/proximity")
         channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                "sosArrivalTracking" -> {
+                    val intent = Intent(this, SosArrivalService::class.java)
+                    if (call.argument<Boolean>("enabled") == true) {
+                        if (!activityVisible) {
+                            result.success(false)
+                        } else {
+                            try {
+                                if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+                                result.success(true)
+                            } catch (_: RuntimeException) {
+                                result.success(false)
+                            }
+                        }
+                    } else {
+                        stopService(intent)
+                        result.success(true)
+                    }
+                }
+                "sosAddress" -> lookupSosAddress(call.argument<Double>("latitude"), call.argument<Double>("longitude"), result)
+                "sosProgressSignal" -> {
+                    progressSignals.update(if (activityVisible) call.argument<String>("mode") else null)
+                    result.success(null)
+                }
+                "sosCallNotice" -> {
+                    if (call.argument<Boolean>("enabled") == true && activityVisible) {
+                        if (callNotice == null) callNotice = SosCallNotice(this)
+                        callNotice?.play()
+                    } else callNotice?.stop()
+                    result.success(null)
+                }
+                "sosCallbackRing" -> {
+                    if (call.argument<Boolean>("enabled") == true && activityVisible) userSignals.startRing() else userSignals.stopRing()
+                    result.success(null)
+                }
+                "sosArrivalSignal" -> { if (activityVisible) userSignals.arrival(); result.success(null) }
+                "stopSosArrivalSignal" -> { userSignals.stopArrival(); result.success(null) }
+                "sosIncomingAlarm" -> {
+                    if (call.argument<Boolean>("enabled") == true && activityVisible) incomingAlarm.start()
+                    else incomingAlarm.stop()
+                    result.success(null)
+                }
                 "sosVolumeStatus" -> {
                     val (enabled, testOnly) = SosVolumeConfig.read(this)
                     val accessibility = getSystemService(AccessibilityManager::class.java)
@@ -98,7 +196,9 @@ class MainActivity : FlutterActivity() {
                             .putExtra(if (isPush) "push_payload" else "nearby_payload", payload)
                         val pending = PendingIntent.getActivity(this, id.hashCode(), target,
                             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (isPush) "trujillo_push" else alertChannel) else Notification.Builder(this)
+                        val quiet = call.argument<Boolean>("quiet") == true
+                        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, if (quiet) "trujillo_sos_quiet" else if (isPush) "trujillo_push" else alertChannel) else Notification.Builder(this)
+                        if (quiet && Build.VERSION.SDK_INT < 26) builder.setSound(null).setVibrate(longArrayOf(0))
                         val notification = builder
                             .setSmallIcon(R.drawable.ic_notification)
                             .setColor(Color.rgb(211, 47, 47))
@@ -119,6 +219,29 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        activityVisible = true
+    }
+
+    override fun onPause() {
+        activityVisible = false
+        progressSignals.stop()
+        incomingAlarm.stop()
+        userSignals.stop()
+        callNotice?.stop()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        addressWorker.shutdownNow()
+        progressSignals.stop()
+        callNotice?.dispose()
+        incomingAlarm.stop()
+        userSignals.stop()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

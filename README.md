@@ -24,6 +24,28 @@ público. No subir archivos `.env`, claves privadas ni `backend/.secrets/`.
 
 ## Flujo integrado de ciudadano y operador
 
+Actualización: [solicitudes SOS directas para operadores](docs/sos-offers.md). Requiere migración 029, backend y APK nuevos.
+
+Actualización: [Mis Solicitudes y SOS cercanos a 1 km](docs/sos-only-requests.md). Requiere migración 028, backend y APK nuevos; esta pantalla ya no muestra reportes manuales.
+
+Actualización: [historial ciudadano, pestañas por rol y colores del mapa](docs/citizen-history-and-role-navigation.md). Requiere migración 027, backend y APK nuevos.
+
+Actualización: [casos resueltos durante siete días y avisos de trayecto](docs/resolved-map-and-progress-cues.md). Requiere migración 026, backend y APK nuevos.
+
+Último cambio: [descarte durante el trayecto, suspensión y controles superpuestos](docs/sos-suspension-and-map-controls.md). Requiere migración 025, backend y APK nuevos.
+
+Actualización: [mapa compacto, refuerzos privados y reevaluación tras llegar al SOS](docs/reinforcements-and-compact-map.md). Requiere migración 024, backend y APK nuevos.
+
+Última mejora: [avisos según atención activa, llegada al ciudadano y llamadas minimizadas](docs/sos-notification-experience.md). Requiere migración 023 antes de desplegar backend e instalar APK nuevo.
+
+Estados actuales: [confirmación con unidad en camino y llegada automática por GPS](docs/sos-arrival.md). Requiere migración 022, backend y APK nuevos.
+
+Ruta en el mapa al confirmar un SOS: [configuración de Google Routes y prueba en dos celulares](docs/sos-routes.md). Requiere configurar `GOOGLE_ROUTES_API_KEY` solo en Render y actualizar backend y app; no requiere migración.
+
+Nuevo flujo: [evaluación del SOS, llamada entrante y estados de atención](docs/sos-cases.md). Requiere migración 018 y actualizar backend y app; incluye la prueba de aceptación en dos celulares.
+
+Nuevo piloto: [SOS mantenido tres segundos y llamadas privadas con LiveKit](docs/audio-calls.md). Requiere la migración 017, despliegue del backend y app actualizada; las claves quedan exclusivamente en Render.
+
 La aplicación conserva cuenta Google, reportes, fotos, filtros y configuración.
 Agrega solicitudes privadas, revisión por operadores autorizados y concentración
 histórica por horario. Consulta [las reglas y pasos de prueba](docs/integrated-workflows.md).
@@ -54,7 +76,6 @@ Para Android, conecta un teléfono con depuración USB, autoriza el equipo y sel
 - Servicio de GPS y seguimiento en primer plano. Requiere consentimiento y ubicación habilitada; se detiene al pasar la app a segundo plano.
 - Google Maps integrado, desactivado hasta configurar una clave. Sin clave se muestra un aviso y puedes probar reportes con coordenadas manuales.
 - Paquetes instalados: google_maps_flutter, geolocator, shared_preferences, http, web_socket_channel, firebase_core y firebase_messaging.
-
 Los reportes de esta primera versión NO se publican a otros usuarios. SharedPreferences es almacenamiento de demostración, no una base segura de evidencias: usa datos de prueba.
 
 ## Activar Google Maps en Android
@@ -91,7 +112,7 @@ flutter analyze
 flutter test
 flutter build web
 ```
-Los archivos locales de configuración quedan excluidos de Git. El identificador interno del paquete se mantiene como alerta_ciudadana por compatibilidad; el nombre visible es Trujillo 360. Antes de publicar Android se necesita una firma de producción.
+Los archivos locales de configuración quedan excluidos de Git. El identificador interno del paquete se mantiene como alerta_ciudadana por compatibilidad; el nombre visible es Trujillo 360. Antes de publicar Android se necesita una firma de producción. JASKJKASJKSJ
 
 ## Estado de la verificación en este equipo
 Flutter 3.44.4 y Dart 3.12.2 detectados. El análisis estático terminó sin observaciones y pasaron las tres pruebas iniciales. Chrome está disponible. `flutter doctor` no encuentra cmdline-tools en la ruta Android SDK configurada: para ejecutar en celular, abre Android Studio > SDK Manager y confirma la ruta del SDK; instala Android SDK Command-line Tools (latest), Platform-Tools y una plataforma Android compatible. Después configura Flutter con `flutter config --android-sdk RUTA_DEL_SDK` si la ruta es diferente, y ejecuta `flutter doctor --android-licenses`. No se ha verificado una compilación Android. La advertencia de Visual Studio corresponde a escritorio Windows y no impide desarrollar Android o web con Visual Studio Code.
