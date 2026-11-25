@@ -1,5 +1,39 @@
 # Continuar Trujillo 360 en otra laptop
 
+## SOS simultáneos y aceptación de llamada (036)
+
+Aplicar después de 035, antes de desplegar el backend y distribuir el APK nuevo:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe migrate_sos_concurrency.py --apply
+cd ..
+```
+
+`/ready` añade `sos_concurrency_version: 1`. El operador reserva el caso y acepta
+su audio en una sola transacción (`POST /operator/sos-cases/{id}/take-call`). Una
+unidad atiende una llamada a la vez; el resto sigue pendiente. Elegir otro SOS
+sin audio activo libera únicamente la reserva pendiente anterior, sin cerrar ni
+descartar el SOS. Un caso confirmado no se libera de esta forma.
+
+La pestaña Pendientes muestra también los casos reservados sin decisión. Los
+errores temporales del mapa conservan la última información con aviso de
+reconexión. Las lecturas de estado y del mapa ya no renuevan reservas ni toman
+el bloqueo global de asignación. Durante el audio aceptado, el operador envía
+un heartbeat cada 30 segundos. La ficha mantiene su propio heartbeat.
+
+El cierre incluye la sala/generación para que una petición atrasada no cierre
+una llamada nueva. Los certificados públicos de Firebase se reutilizan según
+su vigencia; cada token sigue verificándose. Se comparten GET simultáneos de
+una misma cuenta, sin guardar resultados, y las pestañas ocultas no consultan
+periódicamente. La sincronización de identidad evita escribir filas sin cambios.
+
+El botón de transferencia manual está retirado temporalmente. Se conserva la
+reasignación automática por desconexión. Probar en teléfonos: dos ciudadanos
+llaman a la vez, atender uno, finalizar sin decisión, localizar ambos pendientes,
+abrir el segundo y reconectar internet. Estas pruebas locales no certifican la
+capacidad máxima ni sustituyen verificar Render y LiveKit en dispositivos reales.
+
 ## SOS pendiente visible al ciudadano (035)
 
 Aplicar después de 034, antes de desplegar backend e instalar el APK nuevo:

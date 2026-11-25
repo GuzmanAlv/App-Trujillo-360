@@ -16,9 +16,11 @@ class SosWaitingQueue extends StatelessWidget {
     this.addressFor,
     this.selected,
     this.assignmentOffers = const {},
+    this.ownedCases = const {},
   });
   final List<String> calls;
   final Set<String> assignmentOffers;
+  final Set<String> ownedCases;
   final Map<String, bool> waitingCalls;
   final Map<String, int> minutes;
   final String? accepting, selected;
@@ -192,7 +194,11 @@ class SosWaitingQueue extends StatelessWidget {
                                   ? null
                                   : () => onOpen!(id),
                               child: Text(
-                                accepting == id ? 'Tomando…' : 'Aceptar',
+                                accepting == id
+                                    ? 'Tomando…'
+                                    : ownedCases.contains(id)
+                                    ? 'Abrir'
+                                    : 'Aceptar',
                               ),
                             ),
                           ],

@@ -3,6 +3,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('La reserva pendiente sigue accesible para su operador', (
+    tester,
+  ) async {
+    final opened = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SosWaitingQueue(
+            calls: const ['owned', 'available'],
+            ownedCases: const {'owned'},
+            onOpen: opened.add,
+            onSelect: (_) {},
+            muted: false,
+            onMute: () {},
+            onRefresh: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Abrir'), findsOneWidget);
+    expect(find.text('Aceptar'), findsOneWidget);
+    await tester.tap(find.text('Abrir'));
+    expect(opened, ['owned']);
+  });
   testWidgets(
     'SOS simultáneos aparecen directamente y se ordenan por minutos',
     (tester) async {

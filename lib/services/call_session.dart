@@ -14,10 +14,16 @@ class CallSession extends ChangeNotifier {
     this.callback = false,
     this.answer = false,
     this.redial = false,
+    this.prepared = false,
+    String? expectedRoom,
     this.readStatus,
     Room? room,
-  }) : room = room ?? Room();
+  }) : selectedRoom = expectedRoom,
+       room = room ?? Room();
   final String callId;
+  final bool prepared;
+  String? selectedRoom;
+  DateTime? lastHeartbeat;
   final bool operator, callback, answer, redial;
   final Room room;
   final Future<dynamic> Function()? readStatus;
@@ -85,28 +91,36 @@ class CallSession extends ChangeNotifier {
     if (beginning || finished) return;
     beginning = true;
     try {
+      if (prepared) started = true;
       if (!await Permission.microphone.request().isGranted) {
         throw StateError(
           'Permite el micrófono para conversar. El SOS sigue registrado.',
         );
       }
       if (!mounted || finished) return;
-      await WorkflowClient.request(
-        'POST',
-        '$path/${redial
-            ? 'redial'
-            : callback
-            ? 'callback'
-            : answer
-            ? 'answer'
-            : operator
-            ? 'accept'
-            : 'start'}',
-      );
+      if (!prepared) {
+        final initial = await WorkflowClient.request(
+          'POST',
+          '$path/${redial
+              ? 'redial'
+              : callback
+              ? 'callback'
+              : answer
+              ? 'answer'
+              : operator
+              ? 'accept'
+              : 'start'}',
+        );
+        selectedRoom = initial['room'] as String?;
+      }
       started = true;
       if (!finished && mounted) await notice(true);
       if (!mounted || finished) {
-        await WorkflowClient.request('POST', '$path/end');
+        await WorkflowClient.request(
+          'POST',
+          '$path/end',
+          body: {'room': selectedRoom ?? joinedRoom},
+        );
         return;
       }
       poll = Timer.periodic(const Duration(seconds: 3), (_) => refresh());
@@ -141,6 +155,24 @@ class CallSession extends ChangeNotifier {
               timeout: const Duration(seconds: 8),
             );
       if (!mounted || finished) return;
+      if (operator && selectedRoom != null && data['room'] != selectedRoom) {
+        finished = true;
+        poll?.cancel();
+        await room.disconnect();
+        showFailure(
+          StateError('La llamada cambió. Vuelve a abrir el caso SOS.'),
+        );
+        return;
+      }
+      selectedRoom ??= data['room'] as String?;
+      if (operator &&
+          started &&
+          data['state'] == 'accepted' &&
+          (lastHeartbeat == null ||
+              DateTime.now().difference(lastHeartbeat!).inSeconds >= 30)) {
+        await WorkflowClient.request('POST', '$path/heartbeat');
+        lastHeartbeat = DateTime.now();
+      }
       if (joined && data['room'] != joinedRoom) {
         await room.disconnect();
         joined = false;
@@ -171,6 +203,11 @@ class CallSession extends ChangeNotifier {
           await notice(false);
           final access = await WorkflowClient.request('POST', '$path/token');
           if (!mounted || finished) return;
+          if (access['room'] != data['room'] ||
+              (operator && access['room'] != selectedRoom)) {
+            throw StateError('La llamada cambió. Vuelve a abrir el caso SOS.');
+          }
+          selectedRoom = access['room'] as String;
           await room.connect(
             access['url'] as String,
             access['token'] as String,
@@ -186,7 +223,7 @@ class CallSession extends ChangeNotifier {
           }
           await AudioManager.instance.setSpeakerOutputPreferred(speaker);
           joined = true;
-          joinedRoom = data['room'] as String?;
+          joinedRoom = access['room'] as String;
           failure = null;
           roomChanged();
         } finally {
@@ -254,7 +291,11 @@ class CallSession extends ChangeNotifier {
         },
       if (started)
         () async {
-          await WorkflowClient.request('POST', '$path/end');
+          await WorkflowClient.request(
+            'POST',
+            '$path/end',
+            body: {'room': selectedRoom ?? joinedRoom},
+          );
         },
     ]);
     if (mounted) {

@@ -86,7 +86,7 @@ class _OperatorPortalState extends State<OperatorPortal> {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 3,
+    length: 4,
     child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.embedded,
@@ -94,7 +94,9 @@ class _OperatorPortalState extends State<OperatorPortal> {
         title: widget.embedded ? null : const Text('Seguridad ciudadana'),
         bottom: allowed
             ? const TabBar(
+                isScrollable: true,
                 tabs: [
+                  Tab(text: 'Pendientes'),
                   Tab(text: 'Confirmados'),
                   Tab(text: 'Descartados'),
                   Tab(text: 'Cámaras / IA'),
@@ -126,6 +128,11 @@ class _OperatorPortalState extends State<OperatorPortal> {
             )
           : TabBarView(
               children: [
+                WorkflowPanel(
+                  operator: true,
+                  sosDecision: 'pending',
+                  onDenied: check,
+                ),
                 WorkflowPanel(
                   operator: true,
                   sosDecision: 'confirmed',
@@ -191,14 +198,18 @@ class _WorkflowPanelState extends State<WorkflowPanel>
       load();
     }
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (foreground) load();
+      if (foreground && TickerMode.getValuesNotifier(context).value.enabled) {
+        load();
+      }
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
-    if (foreground) load();
+    if (foreground && TickerMode.getValuesNotifier(context).value.enabled) {
+      load();
+    }
   }
 
   Future<void> load() async {
@@ -234,7 +245,7 @@ class _WorkflowPanelState extends State<WorkflowPanel>
     } catch (e) {
       if (mounted && ticket == generation) {
         setState(() {
-          rows = [];
+          if (e is WorkflowFailure && [401, 403].contains(e.status)) rows = [];
           error = e is StateError
               ? e.message.toString()
               : 'No se pudo consultar la bandeja.';
@@ -307,7 +318,10 @@ class _WorkflowPanelState extends State<WorkflowPanel>
               .where(
                 (r) =>
                     r['source'] == 'sos' &&
-                    (r['sos_case'] as Map?)?['decision'] == widget.sosDecision,
+                    ((r['sos_case'] as Map?)?['decision'] ?? 'pending') ==
+                        widget.sosDecision &&
+                    (widget.sosDecision != 'pending' ||
+                        !['Cerrada', 'Descartada'].contains(r['stage'])),
               )
               .toList();
     final pendingCount = rows.where((r) => r['status'] == 'pending').length;
@@ -370,6 +384,8 @@ class _WorkflowPanelState extends State<WorkflowPanel>
                               'No hay incidentes verificados por un operador.',
                             _ => 'No hay reportes pendientes de revisión.',
                           }
+                        : widget.sosDecision == 'pending'
+                        ? 'No hay SOS pendientes.'
                         : widget.sosDecision == 'confirmed'
                         ? 'No hay SOS confirmados.'
                         : widget.sosDecision == 'discarded'

@@ -9,6 +9,15 @@ from app.workflows import execute
 
 router = APIRouter(prefix='/operator')
 
+class TakeCall(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    generation: UUID | None = None
+
+@router.post('/sos-cases/{case_id}/take-call')
+def take_call(case_id:UUID,data:TakeCall,response:Response,claims=Depends(identity)):
+    response.headers['Cache-Control']='private, no-store'
+    return execute(claims,'SELECT trujillo.take_sos_call(%s,%s)',(case_id,data.generation))
+
 @router.post('/availability/online')
 def availability_online(response:Response,claims=Depends(identity)):
     response.headers['Cache-Control']='private, no-store'
