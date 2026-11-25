@@ -131,6 +131,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void dutyPriorityChanged() {
     final uid = currentReportOwner;
+    if (sosRoute.caseId != null &&
+        !sosRoute.isReinforcement &&
+        !OperatorDuty.cases.value.any((r) => r['id'] == sosRoute.caseId)) {
+      sosRoute.clear();
+    }
     if (mounted && uid != null && OperatorDuty.owner == uid) {
       final id = routeRecovery.recover(
         uid,
@@ -443,7 +448,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final key = '${data['event_id']}';
     if (!openedPush.add(key)) return;
     PushService.instance.pending = null;
-    if (data['assigned_call'] == 'true' && operatorAllowed) {
+    if ((data['assigned_call'] == 'true' ||
+            data['assignment_offer'] == 'true') &&
+        operatorAllowed) {
       returnToMap();
       return;
     }

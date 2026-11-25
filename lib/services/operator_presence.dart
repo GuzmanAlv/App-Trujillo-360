@@ -13,6 +13,7 @@ class OperatorPresence extends ValueNotifier<Position?> {
   int _generation = 0;
   bool _starting = false, _sending = false, _disposed = false, _asked = false;
   DateTime? _lastSent;
+  bool _needsOnline = true;
   void configure(String? owner) {
     if (owner == _owner) return;
     _owner = owner;
@@ -21,6 +22,7 @@ class OperatorPresence extends ValueNotifier<Position?> {
     _gps = null;
     _timer?.cancel();
     _asked = false;
+    _needsOnline = true;
     _lastSent = null;
     value = null;
     if (owner == null) return;
@@ -33,6 +35,14 @@ class OperatorPresence extends ValueNotifier<Position?> {
     final ticket = _generation;
     _starting = true;
     try {
+      await WorkflowClient.request(
+        'POST',
+        _needsOnline
+            ? '/operator/availability/online'
+            : '/operator/availability/heartbeat',
+      );
+      if (_disposed || ticket != _generation) return;
+      _needsOnline = false;
       if (_gps == null) {
         var permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied && !_asked) {

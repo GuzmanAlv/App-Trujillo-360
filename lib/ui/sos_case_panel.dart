@@ -778,6 +778,47 @@ class SosCasePanelState extends State<SosCasePanel>
                       icon: const Icon(Icons.local_police, color: Colors.blue),
                       label: const Text('Mi ubicación'),
                     ),
+                    if (confirmed && editable)
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.swap_horiz),
+                        label: const Text('Transferir a otra unidad'),
+                        onPressed: () async {
+                          if (!await confirm(
+                            '¿Transferir el SOS? Se cerrará el audio y se buscará otro operador disponible, sin cerrar el caso.',
+                          )) {
+                            return;
+                          }
+                          final call = ActiveCall.session.value;
+                          if (call?.callId == widget.caseId) {
+                            await call!.finish();
+                          }
+                          try {
+                            await request('POST', '$path/handoff');
+                            final uid = Firebase.apps.isEmpty
+                                ? null
+                                : FirebaseAuth.instance.currentUser?.uid;
+                            if (uid != null) {
+                              OperatorDuty.replace(
+                                uid,
+                                OperatorDuty.cases.value
+                                    .where((r) => r['id'] != widget.caseId)
+                                    .toList(),
+                              );
+                            }
+                            if (mounted) {
+                              dirty = false;
+                              await load();
+                            }
+                          } catch (_) {
+                            if (mounted) {
+                              setState(
+                                () => error =
+                                    'No se pudo transferir el caso. Comprueba la conexión y reintenta.',
+                              );
+                            }
+                          }
+                        },
+                      ),
                     OutlinedButton.icon(
                       onPressed: () => setState(
                         () => focusPoint = LatLng(
@@ -932,6 +973,20 @@ class SosCasePanelState extends State<SosCasePanel>
                 ExpansionTile(
                   title: const Text('Historial privado del caso'),
                   children: [
+                    for (final transfer in d['transfers'] as List? ?? [])
+                      ListTile(
+                        leading: const Icon(Icons.swap_horiz),
+                        title: Text(
+                          '${transfer['reason'] == 'assignment_accepted'
+                              ? 'Transferencia aceptada'
+                              : transfer['reason'] == 'operator_offer'
+                              ? 'Oferta a otra unidad'
+                              : 'Reasignación por indisponibilidad'} · ${caseTime(transfer['created_at'])}',
+                        ),
+                        subtitle: const Text(
+                          'El SOS y sus evidencias se conservan.',
+                        ),
+                      ),
                     for (final event in d['events'] as List? ?? [])
                       ListTile(
                         title: Text(

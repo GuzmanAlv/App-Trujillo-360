@@ -44,7 +44,10 @@ def test_zone_filters_notifications_but_keeps_global_map_and_total(database):
     for uid,in_range in [(near,True),(far,False)]:
         row=next(r for r in query(uid,'SELECT trujillo.operator_sos_map_data()',many=True) if r['id']==case)
         assert row['alert_in_range'] is in_range
-    query(citizen,'SELECT trujillo.submit_sos(%s,-8.11,-79)',(uuid4(),))
+    second_citizen=uuid4()
+    with psycopg.connect(database) as c:
+        c.execute("INSERT INTO trujillo.users(id,auth_provider,auth_subject,display_name,role) VALUES(%s,'firebase',%s,'Second citizen','citizen')",(second_citizen,str(second_citizen)))
+    query(second_citizen,'SELECT trujillo.submit_sos(%s,-8.11,-79)',(uuid4(),))
     query(near,'SELECT trujillo.operator_position(-8.4,-79,10,clock_timestamp())')
     with psycopg.connect(database) as c:
         c.execute('SET LOCAL ROLE trujillo_api')

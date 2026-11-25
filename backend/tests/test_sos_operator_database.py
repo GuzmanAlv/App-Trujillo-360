@@ -40,4 +40,6 @@ def test_optional_public_fields_support_and_return_call_consent(database):
     assert call(operator,'token')['room']==returning['room']
     assert call(citizen,'token')['room']==returning['room']
     call(operator,'end')
+    assert call(operator,'callback')['error_code']=='SOS_RATE_LIMIT'
+    with psycopg.connect(database) as c:c.execute("UPDATE trujillo.sos_rate_events SET created_at=now()-interval '20 seconds' WHERE actor_id=%s",(operator,))
     assert call(operator,'callback')['room']!=returning['room']

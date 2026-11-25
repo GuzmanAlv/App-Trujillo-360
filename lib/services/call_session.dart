@@ -26,6 +26,7 @@ class CallSession extends ChangeNotifier {
   StreamSubscription<User?>? auth;
   String message = 'Preparando llamada…';
   String? failure;
+  String? joinedRoom;
   bool checking = false, joining = false, joined = false, finished = false;
   bool closing = false, muted = false, speaker = false, started = false;
   bool beginning = false;
@@ -140,6 +141,11 @@ class CallSession extends ChangeNotifier {
               timeout: const Duration(seconds: 8),
             );
       if (!mounted || finished) return;
+      if (joined && data['room'] != joinedRoom) {
+        await room.disconnect();
+        joined = false;
+        joinedRoom = null;
+      }
       verificationDeadline?.cancel();
       verificationDeadline = null;
       if (joined) setState(() => failure = null);
@@ -180,11 +186,17 @@ class CallSession extends ChangeNotifier {
           }
           await AudioManager.instance.setSpeakerOutputPreferred(speaker);
           joined = true;
+          joinedRoom = data['room'] as String?;
           failure = null;
           roomChanged();
         } finally {
           joining = false;
         }
+      } else if (data['state'] == 'waiting_assignment') {
+        setState(() {
+          failure = null;
+          message = 'Buscando otro operador disponible para tu mismo SOS…';
+        });
       } else if (data['state'] == 'waiting') {
         setState(() {
           failure = null;

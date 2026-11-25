@@ -292,6 +292,9 @@ class _CitizenSosMapLayerState extends State<CitizenSosMapLayer> {
                                   child: Text(
                                     citizenSosMessage(
                                       '${current['attention']}',
+                                      assignmentState:
+                                          current['assignment_state']
+                                              as String?,
                                     ),
                                     style: const TextStyle(
                                       color: Color(0xff592800),

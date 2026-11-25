@@ -5,9 +5,9 @@ from test_sos_cases_database import database
 
 
 def test_expired_reservation_can_be_recovered_and_pending_reservations_are_bounded(database):
-    citizen, first, second = [uuid4() for _ in range(3)]
+    citizen, second_citizen, first, second = [uuid4() for _ in range(4)]
     with psycopg.connect(database) as c:
-        for uid, role in [(citizen,'citizen'),(first,'operator'),(second,'operator')]:
+        for uid, role in [(citizen,'citizen'),(second_citizen,'citizen'),(first,'operator'),(second,'operator')]:
             c.execute("INSERT INTO trujillo.users(id,auth_provider,auth_subject,display_name,role) VALUES(%s,'firebase',%s,'Test',%s)",(uid,str(uid),role))
     def query(uid,sql,args=()):
         with psycopg.connect(database) as c:
@@ -15,7 +15,7 @@ def test_expired_reservation_can_be_recovered_and_pending_reservations_are_bound
             c.execute('SET LOCAL ROLE trujillo_api')
             return c.execute(sql,args).fetchall()
     case=query(citizen,'SELECT trujillo.submit_sos(%s,-8,-79)',(uuid4(),))[0][0]['id']
-    another=query(citizen,'SELECT trujillo.submit_sos(%s,-8,-79)',(uuid4(),))[0][0]['id']
+    another=query(second_citizen,'SELECT trujillo.submit_sos(%s,-8,-79)',(uuid4(),))[0][0]['id']
     query(citizen,"SELECT trujillo.call_action(%s,'start')",(case,))
     query(first,'SELECT trujillo.claim_sos(%s)',(case,))
     query(first,"SELECT trujillo.call_action(%s,'accept')",(case,))

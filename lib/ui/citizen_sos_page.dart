@@ -9,12 +9,15 @@ import '../services/workflow_client.dart';
 import '../services/report_sender.dart';
 import 'report_style.dart';
 
-String citizenSosMessage(String attention) => switch (attention) {
-  'en_route' => 'La policía se encuentra en camino. Mantente en calma.',
-  'on_scene' => 'Unidad en la zona.',
-  'resolved' => 'La atención ha finalizado.',
-  _ => 'Incidente confirmado. Esperando asignación de personal.',
-};
+String citizenSosMessage(String attention, {String? assignmentState}) =>
+    assignmentState == 'searching' || assignmentState == 'offered'
+    ? 'Estamos buscando otra unidad disponible para tu SOS. Tu solicitud sigue abierta.'
+    : switch (attention) {
+        'en_route' => 'La policía se encuentra en camino. Mantente en calma.',
+        'on_scene' => 'Unidad en la zona.',
+        'resolved' => 'La atención ha finalizado.',
+        _ => 'Incidente confirmado. Esperando asignación de personal.',
+      };
 
 class CitizenSosPage extends StatefulWidget {
   const CitizenSosPage({super.key, required this.caseId});
@@ -180,7 +183,12 @@ class _CitizenSosPageState extends State<CitizenSosPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(citizenSosMessage('${data!['attention']}')),
+                Text(
+                  citizenSosMessage(
+                    '${data!['attention']}',
+                    assignmentState: data!['assignment_state'] as String?,
+                  ),
+                ),
                 if ('${data!['description']}'.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),

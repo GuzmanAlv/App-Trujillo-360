@@ -18,11 +18,14 @@ def test_nearby_sos_includes_own_and_others_but_not_legacy_private_or_expired(da
             c.execute('SET LOCAL ROLE trujillo_api')
             return [r[0] for r in c.execute(sql,args)]
     def case(uid,lat,action=None):
+        case_operator=uuid4()
+        with psycopg.connect(database) as c:
+            c.execute("INSERT INTO trujillo.users(id,auth_provider,auth_subject,display_name,role) VALUES(%s,'firebase',%s,'Case operator','operator')",(case_operator,str(case_operator)))
         sos=query(uid,'SELECT trujillo.submit_sos(%s,%s,-79)',(uuid4(),lat))[0]['id']
         data=dict(action='confirm',category='Auxilio',latitude=lat,longitude=-79,place='',public_description='',outcome='',internal_note='PRIVATE OPERATOR NOTE')
-        confirmed=query(operator,'SELECT trujillo.sos_case_update(%s,%s,0,%s)',(sos,uuid4(),Jsonb(data)))[0]
+        confirmed=query(case_operator,'SELECT trujillo.sos_case_update(%s,%s,0,%s)',(sos,uuid4(),Jsonb(data)))[0]
         if action:
-            query(operator,'SELECT trujillo.sos_case_update(%s,%s,1,%s)',(sos,uuid4(),Jsonb({**data,'action':action,'outcome':'Atención finalizada'})))
+            query(case_operator,'SELECT trujillo.sos_case_update(%s,%s,1,%s)',(sos,uuid4(),Jsonb({**data,'action':action,'outcome':'Atención finalizada'})))
         return confirmed['incident_id']
     own=case(owner,-8.1)
     foreign=case(other,-8.103)

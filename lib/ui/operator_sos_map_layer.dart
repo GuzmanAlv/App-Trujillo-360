@@ -1,4 +1,5 @@
 import '../services/sos_alert_state.dart';
+import '../services/sos_navigation.dart';
 import 'sos_overview_button.dart';
 import '../services/operator_duty.dart';
 import '../services/reinforcements_store.dart';
@@ -130,6 +131,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   final categoryIcons = <String, List<BitmapDescriptor>>{};
   Map<String, String> categoryIds = {};
   Set<String> phoneIds = {}, urgentIds = {};
+  Set<String> assignmentOffers = {};
   int alertCount = 0;
   Map<String, bool> queueStates = {};
   Map<String, int> queueMinutes = {};
@@ -347,6 +349,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         categoryIds = {};
         phoneIds = {};
         urgentIds = {};
+        assignmentOffers = {};
         alertCount = 0;
         queueStates = {};
         queueMinutes = {};
@@ -412,6 +415,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgent = <String>{};
       var alerts = 0;
       final nextQueue = <String, bool>{};
+      final nextOffers = <String>{};
       final allAvailable = <String>{};
       final nextMinutes = <String, int>{};
       final categories = <String, String>{};
@@ -470,7 +474,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           categories[markerId] = category;
         }
         final waiting = row['call_waiting'] == true;
-        if (row['available'] == true) {
+        if (row['assignment_offer'] == true) nextOffers.add(markerId);
+        if (row['available'] == true || row['assignment_offer'] == true) {
           allAvailable.add(markerId);
           if (row['alert_in_range'] == true) nextQueue[markerId] = waiting;
           if (lastPosition != null) {
@@ -511,7 +516,9 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                   ? 'Ver o atender este SOS'
                   : 'Abrir caso SOS',
             ),
-            onTap: row['decision'] == 'pending' && row['claimed_by_me'] != true
+            onTap: row['assignment_offer'] == true
+                ? () => offerOutsideQueue(markerId)
+                : row['decision'] == 'pending' && row['claimed_by_me'] != true
                 ? (row['available'] == true
                       ? () => offerOutsideQueue(markerId)
                       : null)
@@ -538,6 +545,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgentIds = urgent;
           alertCount = alerts;
           queueStates = nextQueue;
+          assignmentOffers = nextOffers;
           queueMinutes = nextMinutes;
           incidentIds = ids;
           note = null;
@@ -589,8 +597,18 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     final id = markerId.replaceFirst('operator_sos_', '');
     setState(() => accepting = markerId);
     try {
-      await WorkflowClient.request('POST', '/operator/sos-cases/$id/claim');
+      final accepted = await WorkflowClient.request(
+        'POST',
+        '/operator/sos-cases/$id/claim',
+      );
       if (!mounted) return;
+      if (accepted['decision'] == 'confirmed') {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          OperatorDuty.upsert(uid, Map<String, dynamic>.from(accepted as Map));
+        }
+        SosNavigation.open(id);
+      }
       if (previewMarker == markerId) clearPreview();
       setState(() {
         queueStates.remove(markerId);
@@ -725,6 +743,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                               SosWaitingQueue(
                                 quiet: duty.isNotEmpty,
                                 calls: queueIds,
+                                assignmentOffers: assignmentOffers,
                                 waitingCalls: queueStates,
                                 minutes: queueMinutes,
                                 accepting: accepting,

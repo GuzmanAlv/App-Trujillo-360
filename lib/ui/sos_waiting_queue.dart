@@ -15,8 +15,10 @@ class SosWaitingQueue extends StatelessWidget {
     this.quiet = false,
     this.addressFor,
     this.selected,
+    this.assignmentOffers = const {},
   });
   final List<String> calls;
+  final Set<String> assignmentOffers;
   final Map<String, bool> waitingCalls;
   final Map<String, int> minutes;
   final String? accepting, selected;
@@ -128,7 +130,9 @@ class SosWaitingQueue extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    waitingCalls[id] == true
+                                    assignmentOffers.contains(id)
+                                        ? 'Transferencia SOS · Acepta para atender'
+                                        : waitingCalls[id] == true
                                         ? 'Llamada en espera'
                                         : 'Pendiente de atención',
                                     maxLines: 1,

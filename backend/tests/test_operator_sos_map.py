@@ -36,7 +36,7 @@ def test_private_map_permissions_location_and_closed_cases(database):
     rows=[r[0] for r in query(operator,sql,many=True)]
     marker=next(r for r in rows if r['id']==case)
     assert marker['decision']=='pending' and marker['latitude']==-8
-    assert set(marker)=={'id','latitude','longitude','decision','attention','support_requested','incident_id','call_state','call_waiting','unanswered_alert','category','can_track','available','claimed_by_me','received_at','alert_in_range'}
+    assert set(marker)=={'id','latitude','longitude','decision','attention','support_requested','incident_id','call_state','call_waiting','unanswered_alert','category','can_track','available','claimed_by_me','received_at','alert_in_range','assignment_state','assignment_offer','operator_name','offer_expires_at','escalation_level'}
     assert marker['available'] is True
     payload=dict(action='support',category='Robo',latitude=-8.12,longitude=-79.04,
                  place='',public_description='',internal_note='Solo para el operador',outcome='')

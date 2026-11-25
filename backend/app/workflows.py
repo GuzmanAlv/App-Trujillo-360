@@ -45,7 +45,12 @@ def execute(claims, query, parameters=(), many=False):
             if claims.get('email') and claims.get('email_verified') is True:
                 conn.execute('SELECT trujillo.sync_identity_email(%s)', (claims['email'],))
             cursor = conn.execute(query, parameters)
-            return [r[0] for r in cursor.fetchall()] if many else cursor.fetchone()[0]
+            result = [r[0] for r in cursor.fetchall()] if many else cursor.fetchone()[0]
+        # Raised AFTER commit, so the limiter's counter survives the rejection.
+        if isinstance(result,dict) and result.get('error_code')=='SOS_RATE_LIMIT':
+            raise HTTPException(429,'Espera antes de iniciar otra llamada o un nuevo SOS. El caso actual sigue abierto.',
+                headers={'Retry-After':str(result.get('retry_after',60))})
+        return result
     except psycopg.errors.InsufficientPrivilege:
         raise HTTPException(403, 'Tu cuenta no tiene acceso a esta operación') from None
     except psycopg.errors.NoDataFound:
