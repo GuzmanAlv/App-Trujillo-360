@@ -1,6 +1,6 @@
 # Cámara Android → RTX → mapa de operadores
 
-La cuenta elegida para emitir video de prueba es `ansleyalvarado15@gmail.com`.
+La cuenta elegida para emitir video de prueba es `kinley.guzman.2015@gmail.com`.
 El permiso lo concede el servidor; cambiar el correo o rol en Flutter no lo habilita.
 Todos los operadores activos pueden ver y atender los casos de simulación.
 
@@ -21,7 +21,7 @@ Desde `backend`, con las credenciales administrativas de la base usada por la AP
 
 ```powershell
 .\.venv\Scripts\python.exe migrate.py
-.\.venv\Scripts\python.exe authorize_sim_camera.py --email ansleyalvarado15@gmail.com --camera-id phone-sim-1
+.\.venv\Scripts\python.exe authorize_sim_camera.py --email kinley.guzman.2015@gmail.com --camera-id phone-sim-1 --replace-email ansleyalvarado15@gmail.com
 ```
 
 `migrate.py` aplica primero los candidatos IA (versión 1) y luego la simulación
@@ -32,10 +32,16 @@ Al reiniciar la API, `/ready` debe indicar `ai_version: 2`.
 
 El script administrativo invita/promueve solo la cuenta elegida a operador,
 habilita su cámara de simulación y permite crear sesiones cuando el perfil Firebase
-sincroniza su correo verificado. Para revocar solo la cámara:
+sincroniza su correo verificado.
+
+`--replace-email` sustituye el permiso anterior y detiene sus sesiones de cámara
+en una sola transacción, conservando su rol de aplicación. Si todavía no existe
+ese permiso, autoriza directamente la cuenta nueva. Repetir el comando es seguro.
+
+Para revocar solo la cámara:
 
 ```powershell
-.\.venv\Scripts\python.exe authorize_sim_camera.py --email ansleyalvarado15@gmail.com --revoke
+.\.venv\Scripts\python.exe authorize_sim_camera.py --email kinley.guzman.2015@gmail.com --revoke
 ```
 
 ## Prueba con dos teléfonos
