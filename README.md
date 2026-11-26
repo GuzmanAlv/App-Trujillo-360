@@ -1,7 +1,5 @@
 # Trujillo 360
 
-## Continuar el proyecto desde otra laptop
-
 La versión actual es la app integrada de ciudadanos y operadores, conectada al
 backend público https://trujillo-360-api.onrender.com. La app instalada puede
 usarse con internet sin USB ni laptop. El código compartido está en `main`.
