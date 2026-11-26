@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Cámara de simulación · Trujillo 360</title>
+<style>body{font:17px system-ui;background:#f3f6f8;color:#152b37;margin:0;padding:22px;max-width:680px;margin:auto}h1{font-size:25px}video{width:100%;background:#172732;border-radius:14px;min-height:200px}button{font:inherit;border:0;padding:14px 20px;border-radius:12px;margin:8px 8px 8px 0;background:#006c67;color:white}button:disabled{opacity:.45}.tag{color:#7b4300;background:#fff0cf;border-radius:9px;padding:8px 12px;display:inline-block}#status{min-height:3em}p{line-height:1.5}</style>
+<h1>Cámara de simulación</h1><span class="tag">Prueba de Trujillo 360</span>
+<p>Coloca el celular fijo. La RTX analizará secuencias cortas y registrará posibles forcejeos para revisión de operadores. La ubicación del caso es la elegida al crear la sesión.</p>
+<section id="access-panel" hidden>
+<h2>Conecta tu sesión</h2>
+<p>En Trujillo 360, crea una sesión y pulsa «Copiar acceso completo de cámara». Pega ese único acceso aquí.</p>
+<label for="camera-access">Acceso de cámara</label>
+<input id="camera-access" type="password" autocomplete="off" style="box-sizing:border-box;width:100%;padding:14px;font:inherit">
+<button id="connect">Conectar sesión</button>
+<p id="session-status" role="status"></p>
+</section>
+<video id="preview" playsinline muted></video><canvas id="canvas" width="224" height="224" hidden></canvas>
+<div><button id="start">Iniciar cámara</button><button id="stop" disabled>Detener</button></div>
+<p id="status" role="status" aria-live="polite">La cámara está detenida.</p>
+<h2>Último análisis</h2>
+<p id="last-result" role="status" aria-live="polite">Todavía no se recibió un análisis de la RTX.</p>
+<p id="last-case" role="status" aria-live="polite"></p>
+<p>Permanece en esta pantalla. Al ocultarla o perder la conexión, se detiene la captura. Las puntuaciones son experimentales y requieren revisión humana.</p>
+<script>
+const preview=document.querySelector('#preview'), canvas=document.querySelector('#canvas'), ctx=canvas.getContext('2d'), status=document.querySelector('#status'), start=document.querySelector('#start'), stop=document.querySelector('#stop');
+const suppliedPairing=new URLSearchParams(location.hash.slice(1)).get('pair');
+let pairing=suppliedPairing;
+try{if(suppliedPairing)sessionStorage.setItem('trujillo-camera-pair',suppliedPairing);else pairing=sessionStorage.getItem('trujillo-camera-pair');}catch{}
+const accessPanel=document.querySelector('#access-panel'), accessInput=document.querySelector('#camera-access'), connectButton=document.querySelector('#connect'), sessionStatus=document.querySelector('#session-status');
+let needsAccess=false,sessionReady=false;
+let cameraBinding='';
+try{cameraBinding=sessionStorage.getItem('trujillo-camera-binding')||'';}catch{}
+const lastResult=document.querySelector('#last-result'), lastCase=document.querySelector('#last-case');
+history.replaceState(null,'',location.pathname);
+let running=false, stream=null, controller=null, generation=0;
+function halt(message='Cámara detenida.'){running=false;generation++;controller?.abort();stream?.getTracks().forEach(track=>track.stop());stream=null;preview.srcObject=null;start.disabled=false;stop.disabled=true;status.textContent=message;}
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function checkSession(){
+  if(!pairing)return;
+  start.disabled=true;
+  try{const response=await fetch('/api/session',{headers:{'X-Pairing-Token':pairing,'X-Camera-Binding':cameraBinding},cache:'no-store'});if(!response.ok)throw Error('La vinculación venció. Escanea el QR que muestra la RTX.');const data=await response.json();needsAccess=data.needsAccess;sessionReady=data.sessionReady;accessPanel.hidden=!needsAccess;start.disabled=needsAccess&&!sessionReady;sessionStatus.textContent=sessionReady?'Sesión conectada. Pulsa Iniciar cámara.':'Pega el acceso completo que copiaste de la app.';}catch(error){status.textContent=error.message;}
+}
+connectButton.onclick=async()=>{
+  if(running){sessionStatus.textContent='Pulsa Detener antes de cambiar la sesión.';return;}
+  connectButton.disabled=true;
+  try{
+    const encoded=accessInput.value.trim(), prefix='TRUJILLO-CAMERA-1.';
+    if(!encoded.startsWith(prefix))throw Error('Copia el acceso completo desde la app actualizada.');
+    let raw=encoded.slice(prefix.length).replace(/-/g,'+').replace(/_/g,'/');
+    raw+='='.repeat((4-raw.length%4)%4);
+    const access=JSON.parse(atob(raw));
+    accessInput.value='';
+    const response=await fetch('/api/session',{
+      method:'POST',headers:{'Content-Type':'application/json','X-Pairing-Token':pairing},body:JSON.stringify(access)
+    });
+    const data=await response.json();
+    if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Acceso inválido. Crea una sesión nueva.');
+    cameraBinding=data.binding;
+    try{sessionStorage.setItem('trujillo-camera-binding',cameraBinding);}catch{}
+    sessionReady=true;
+    start.disabled=false;
+    lastResult.textContent='Todavía no se recibió un análisis de esta sesión.';
+    lastCase.textContent='';
+    sessionStatus.textContent='Sesión conectada. Pulsa Iniciar cámara.';
+  }catch(error){sessionStatus.textContent=error.message;}
+  finally{connectButton.disabled=false;}
+};
+checkSession();
+async function capture(ticket){
+  const frames=[], offsets=[];let previous=-1;const origin=performance.now();
+  while(frames.length<32){
+    await sleep(125);
+    if(!running||ticket!==generation)throw Error('Captura detenida.');
+    if(performance.now()-origin>8000)throw Error('La cámara está demasiado lenta. Prueba con más luz y vuelve a iniciar.');
+    if(preview.readyState<2||preview.currentTime===previous)continue;
+    previous=preview.currentTime;
+    ctx.drawImage(preview,0,0,224,224);
+    frames.push(canvas.toDataURL('image/jpeg',.75).split(',')[1]);offsets.push(performance.now()-origin);
+  }
+  return{frames,offsets_ms:offsets};
+}
+async function run(ticket){
+  while(running&&ticket===generation){
+    status.textContent='Capturando secuencia para la RTX…';
+    const body=await capture(ticket);controller=new AbortController();
+    status.textContent='Analizando en la RTX…';
+    const timeout=setTimeout(()=>controller.abort(),45000);
+    let response;
+    try{response=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json','X-Pairing-Token':pairing,'X-Camera-Binding':cameraBinding},body:JSON.stringify(body),signal:controller.signal});}finally{clearTimeout(timeout);}
+    const result=await response.json();
+    if(!response.ok)throw Error(typeof result.detail==='string'?result.detail:'No se confirmó el análisis. Revisa la bandeja de simulación.');
+    if(!running||ticket!==generation)return;
+    const messages={created:'Caso de simulación registrado; los operadores pueden atenderlo.',warming_up:'Posible forcejeo; esperando otra secuencia para evitar alertas aisladas.',cooldown:'El evento ya fue registrado recientemente. Se evita un reporte duplicado.',below_threshold:'No alcanzó el umbral de la simulación.'};
+    const analyzedAt=new Date().toLocaleTimeString();
+    lastResult.textContent=`${analyzedAt} · Puntuación del modelo: ${(result.confidence*100).toFixed(1)}%. ${messages[result.result?.status]||'Resultado recibido; revisa la bandeja.'}`;
+    if(result.result?.status==='created')lastCase.textContent=`Último caso de simulación registrado a las ${analyzedAt}. Puedes abrirlo en el mapa de operadores.`;
+    status.textContent='Secuencia analizada. Preparando la siguiente captura…';
+    await sleep(1000);
+  }
+}
+start.onclick=async()=>{
+  if(!pairing){status.textContent='Falta la vinculación. Abre el enlace generado en la laptop.';return;}
+  if(needsAccess&&!sessionReady){status.textContent='Primero conecta el acceso de la app en esta página.';return;}
+  if(!navigator.mediaDevices?.getUserMedia){status.textContent='Abre el enlace HTTPS privado generado en la RTX, o localhost si usas USB.';return;}
+  start.disabled=true;const ticket=++generation;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:640},height:{ideal:480},frameRate:{ideal:15,max:30}}});
+    if(ticket!==generation){stream.getTracks().forEach(track=>track.stop());return;}
+    preview.srcObject=stream;await preview.play();running=true;stop.disabled=false;
+    stream.getVideoTracks()[0].addEventListener('ended',()=>halt('La cámara se desconectó.'));
+    await run(ticket);
+  }catch(error){if(ticket===generation){halt(error.name==='AbortError'?'Se perdió la conexión. Revisa la bandeja antes de reintentar.':error.message);checkSession();}}
+};
+stop.onclick=()=>halt();document.addEventListener('visibilitychange',()=>{if(document.hidden)halt('Cámara detenida al salir de esta pantalla.');});window.addEventListener('pagehide',()=>halt());window.addEventListener('offline',()=>halt('Sin conexión. Cámara detenida.'));
+</script></html>

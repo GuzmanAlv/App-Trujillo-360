@@ -12,6 +12,7 @@ import '../services/active_call.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -132,6 +133,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
   Map<String, String> categoryIds = {};
   Set<String> phoneIds = {}, urgentIds = {};
   Set<String> assignmentOffers = {};
+  Set<String> ownedPending = {};
   int alertCount = 0;
   Map<String, bool> queueStates = {};
   Map<String, int> queueMinutes = {};
@@ -350,6 +352,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         phoneIds = {};
         urgentIds = {};
         assignmentOffers = {};
+        ownedPending = {};
+        callGenerations.clear();
         alertCount = 0;
         queueStates = {};
         queueMinutes = {};
@@ -416,6 +420,8 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
       var alerts = 0;
       final nextQueue = <String, bool>{};
       final nextOffers = <String>{};
+      final nextOwned = <String>{};
+      final nextGenerations = <String, String?>{};
       final allAvailable = <String>{};
       final nextMinutes = <String, int>{};
       final categories = <String, String>{};
@@ -474,10 +480,16 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           categories[markerId] = category;
         }
         final waiting = row['call_waiting'] == true;
+        nextGenerations[markerId] = row['call_generation'] as String?;
+        if (row['claimed_by_me'] == true) nextOwned.add(markerId);
         if (row['assignment_offer'] == true) nextOffers.add(markerId);
-        if (row['available'] == true || row['assignment_offer'] == true) {
+        if (row['available'] == true ||
+            row['assignment_offer'] == true ||
+            row['claimed_by_me'] == true) {
           allAvailable.add(markerId);
-          if (row['alert_in_range'] == true) nextQueue[markerId] = waiting;
+          if (row['alert_in_range'] == true || row['claimed_by_me'] == true) {
+            nextQueue[markerId] = waiting;
+          }
           if (lastPosition != null) {
             final meters = Geolocator.distanceBetween(
               lastPosition!.latitude,
@@ -545,6 +557,10 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
           urgentIds = urgent;
           alertCount = alerts;
           queueStates = nextQueue;
+          ownedPending = nextOwned;
+          callGenerations
+            ..clear()
+            ..addAll(nextGenerations);
           assignmentOffers = nextOffers;
           queueMinutes = nextMinutes;
           incidentIds = ids;
@@ -552,24 +568,30 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         });
         configurePulse();
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted && ticket == generation) {
-        clearPreview();
-        setState(() {
-          markers = {};
-          baseMarkers = {};
-          pendingIds = {};
-          categoryIds = {};
-          phoneIds = {};
-          urgentIds = {};
-          alertCount = 0;
-          queueStates = {};
-          queueMinutes = {};
-          focus = null;
-          pulseTimer?.cancel();
-          incidentIds = {};
-          note = 'No se pudieron actualizar los SOS del operador.';
-        });
+        if (e is WorkflowFailure && [401, 403].contains(e.status)) {
+          clearPreview();
+          setState(() {
+            markers = {};
+            baseMarkers = {};
+            pendingIds = {};
+            categoryIds = {};
+            phoneIds = {};
+            urgentIds = {};
+            alertCount = 0;
+            queueStates = {};
+            ownedPending = {};
+            callGenerations.clear();
+            queueMinutes = {};
+            incidentIds = {};
+            pulseTimer?.cancel();
+          });
+        }
+        setState(
+          () => note =
+              'No se pudo actualizar. Se conserva la última información de SOS.',
+        );
       }
     } finally {
       if (ticket == generation) busy = false;
@@ -584,9 +606,22 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
     await refresh();
   }
 
+  final callGenerations = <String, String?>{};
+
   Future<void> acceptCase(String markerId) async {
     if (accepting != null || !mounted) return;
-    if (ActiveCall.id.value != null) {
+    final id = markerId.replaceFirst('operator_sos_', '');
+    final active = ActiveCall.session.value;
+    if (active != null && !active.finished && active.callId == id) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => AudioCallPage(callId: id, operator: true),
+        ),
+      );
+      return;
+    }
+    if (ActiveCall.session.value != null &&
+        !ActiveCall.session.value!.finished) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Finaliza la llamada actual antes de tomar otro SOS.'),
@@ -594,13 +629,21 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
       );
       return;
     }
-    final id = markerId.replaceFirst('operator_sos_', '');
     setState(() => accepting = markerId);
     try {
-      final accepted = await WorkflowClient.request(
+      if (queueStates[markerId] == true &&
+          !await Permission.microphone.request().isGranted) {
+        throw StateError(
+          'Permite el micrófono para atender la llamada. El SOS sigue pendiente.',
+        );
+      }
+      if (!mounted) return;
+      final taken = await WorkflowClient.request(
         'POST',
-        '/operator/sos-cases/$id/claim',
+        '/operator/sos-cases/$id/take-call',
+        body: {'generation': callGenerations[markerId]},
       );
+      final accepted = taken['case'];
       if (!mounted) return;
       if (accepted['decision'] == 'confirmed') {
         final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -614,28 +657,30 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
         queueStates.remove(markerId);
         queueMinutes.remove(markerId);
       });
-      dynamic call;
-      try {
-        call = await WorkflowClient.request('GET', '/calls/$id');
-      } catch (_) {
-        // The SOS remains claimed even when its short call window has ended.
-      }
+      final call = taken['call'];
       if (!mounted) return;
-      if (call is Map && call['state'] == 'waiting') {
+      if (call is Map && taken['call_accepted'] == true) {
         await Navigator.of(context).push<void>(
           MaterialPageRoute(
-            builder: (_) => AudioCallPage(callId: id, operator: true),
+            builder: (_) => AudioCallPage(
+              callId: id,
+              operator: true,
+              prepared: true,
+              expectedRoom: call['room'] as String?,
+            ),
           ),
         );
       } else {
         await openCase(id);
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Este SOS ya fue tomado o no está disponible. Actualizando…',
+              e is StateError
+                  ? e.message.toString()
+                  : 'No se pudo atender este SOS. Reintenta.',
             ),
           ),
         );
@@ -744,6 +789,7 @@ class _OperatorSosMapLayerState extends State<OperatorSosMapLayer> {
                                 quiet: duty.isNotEmpty,
                                 calls: queueIds,
                                 assignmentOffers: assignmentOffers,
+                                ownedCases: ownedPending,
                                 waitingCalls: queueStates,
                                 minutes: queueMinutes,
                                 accepting: accepting,

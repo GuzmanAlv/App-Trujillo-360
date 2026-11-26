@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../core/config.dart';
 import '../models/incident.dart';
 import 'report_sender.dart';
+import 'single_flight.dart';
 
 class WorkflowFailure extends StateError {
   WorkflowFailure(super.message, {this.status});
@@ -16,7 +17,39 @@ class WorkflowFailure extends StateError {
 }
 
 class WorkflowClient {
+  static final _reads = SingleFlight();
   static Future<dynamic> request(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? query,
+    bool bytes = false,
+    Duration? timeout,
+  }) {
+    final user = Firebase.apps.isEmpty
+        ? null
+        : FirebaseAuth.instance.currentUser;
+    Future<dynamic> work() => _perform(
+      method,
+      path,
+      body: body,
+      query: query,
+      bytes: bytes,
+      timeout: timeout,
+    );
+    if (method.toUpperCase() != 'GET' || user == null) return work();
+    final ordered = query == null
+        ? null
+        : Map.fromEntries(
+            query.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+          );
+    return _reads.run(
+      '${user.uid}|${ReportSender.endpoint}|$path|${jsonEncode(ordered)}|$bytes|${timeout?.inMilliseconds}',
+      work,
+    );
+  }
+
+  static Future<dynamic> _perform(
     String method,
     String path, {
     Map<String, dynamic>? body,
@@ -70,12 +103,20 @@ class WorkflowClient {
         }
         if (response.statusCode == 401 && attempt == 0) continue;
         if (response.statusCode != 200) {
-          if (path.endsWith('/route') || path.endsWith('/preview-route')) {
+          if (response.statusCode == 409 ||
+              path.endsWith('/route') ||
+              path.endsWith('/preview-route')) {
             try {
               final error = jsonDecode(response.body);
               final detail = error is Map ? error['detail'] : null;
               final code = detail is Map ? detail['code'] : null;
               const routeErrors = {
+                'SOS_BUSY':
+                    'Finaliza la llamada o el caso actual antes de atender otro SOS.',
+                'SOS_TAKEN':
+                    'Este SOS cambió o fue tomado por otro operador. Actualiza la lista.',
+                'SOS_CALL_CHANGED':
+                    'La llamada cambió o terminó. El SOS sigue disponible para evaluación.',
                 'SOS_PREVIEW_UNAVAILABLE':
                     'Este SOS ya no está disponible. Actualiza la lista.',
                 'REINFORCEMENT_CLOSED':

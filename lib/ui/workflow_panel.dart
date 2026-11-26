@@ -5,10 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../data/ai_detection_store.dart';
 import '../services/workflow_client.dart';
 import '../services/nearby_reports_client.dart';
-import 'ai_detection_panel.dart';
+import 'ai_review_panel.dart';
 import 'map_panel.dart';
 import 'community_photo_view.dart';
 import 'audio_call_page.dart';
@@ -27,7 +26,6 @@ class OperatorPortal extends StatefulWidget {
 }
 
 class _OperatorPortalState extends State<OperatorPortal> {
-  final ai = AiDetectionStore();
   bool allowed = false, busy = true;
   String? error;
   int generation = 0;
@@ -80,13 +78,12 @@ class _OperatorPortalState extends State<OperatorPortal> {
   void dispose() {
     generation++;
     session?.cancel();
-    ai.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 3,
+    length: 4,
     child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.embedded,
@@ -94,7 +91,9 @@ class _OperatorPortalState extends State<OperatorPortal> {
         title: widget.embedded ? null : const Text('Seguridad ciudadana'),
         bottom: allowed
             ? const TabBar(
+                isScrollable: true,
                 tabs: [
+                  Tab(text: 'Pendientes'),
                   Tab(text: 'Confirmados'),
                   Tab(text: 'Descartados'),
                   Tab(text: 'Cámaras / IA'),
@@ -128,6 +127,11 @@ class _OperatorPortalState extends State<OperatorPortal> {
               children: [
                 WorkflowPanel(
                   operator: true,
+                  sosDecision: 'pending',
+                  onDenied: check,
+                ),
+                WorkflowPanel(
+                  operator: true,
                   sosDecision: 'confirmed',
                   onDenied: check,
                 ),
@@ -136,7 +140,7 @@ class _OperatorPortalState extends State<OperatorPortal> {
                   sosDecision: 'discarded',
                   onDenied: check,
                 ),
-                AiDetectionPanel(store: ai),
+                const AiReviewPanel(),
               ],
             ),
     ),
@@ -191,14 +195,18 @@ class _WorkflowPanelState extends State<WorkflowPanel>
       load();
     }
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (foreground) load();
+      if (foreground && TickerMode.getValuesNotifier(context).value.enabled) {
+        load();
+      }
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
-    if (foreground) load();
+    if (foreground && TickerMode.getValuesNotifier(context).value.enabled) {
+      load();
+    }
   }
 
   Future<void> load() async {
@@ -234,7 +242,7 @@ class _WorkflowPanelState extends State<WorkflowPanel>
     } catch (e) {
       if (mounted && ticket == generation) {
         setState(() {
-          rows = [];
+          if (e is WorkflowFailure && [401, 403].contains(e.status)) rows = [];
           error = e is StateError
               ? e.message.toString()
               : 'No se pudo consultar la bandeja.';
@@ -307,7 +315,10 @@ class _WorkflowPanelState extends State<WorkflowPanel>
               .where(
                 (r) =>
                     r['source'] == 'sos' &&
-                    (r['sos_case'] as Map?)?['decision'] == widget.sosDecision,
+                    ((r['sos_case'] as Map?)?['decision'] ?? 'pending') ==
+                        widget.sosDecision &&
+                    (widget.sosDecision != 'pending' ||
+                        !['Cerrada', 'Descartada'].contains(r['stage'])),
               )
               .toList();
     final pendingCount = rows.where((r) => r['status'] == 'pending').length;
@@ -370,6 +381,8 @@ class _WorkflowPanelState extends State<WorkflowPanel>
                               'No hay incidentes verificados por un operador.',
                             _ => 'No hay reportes pendientes de revisión.',
                           }
+                        : widget.sosDecision == 'pending'
+                        ? 'No hay SOS pendientes.'
                         : widget.sosDecision == 'confirmed'
                         ? 'No hay SOS confirmados.'
                         : widget.sosDecision == 'discarded'

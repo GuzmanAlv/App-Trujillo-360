@@ -42,7 +42,7 @@ def navigation_target(case_id:UUID,response:Response,claims=Depends(identity)):
 def preview_route(case_id: UUID, origin: RouteOrigin, response: Response, claims=Depends(identity)):
     response.headers['Cache-Control'] = 'private, no-store'
     case = execute(claims, '''SELECT coalesce((
-        SELECT trujillo.sos_case_read((h->>'id')::uuid)
+        SELECT h || trujillo.sos_case_read((h->>'id')::uuid)
             || trujillo.sos_offer_status((h->>'id')::uuid)
         FROM trujillo.operator_sos_map_data() h
         WHERE (h->>'id')::uuid=%s
@@ -51,7 +51,7 @@ def preview_route(case_id: UUID, origin: RouteOrigin, response: Response, claims
         failure(409, 'SOS_PREVIEW_UNAVAILABLE')
     if not case.get('can_edit'):
         raise HTTPException(403, 'SOS no disponible para este operador')
-    if not case.get('available') or case['decision'] != 'pending':
+    if not (case.get('available') or case.get('claimed_by_me')) or case['decision'] != 'pending':
         failure(409, 'SOS_PREVIEW_UNAVAILABLE')
     destination = {'latitude': case['caller_latitude'], 'longitude': case['caller_longitude']}
     return compute_route(case_id, origin, destination, claims, case['category'], preview=True)

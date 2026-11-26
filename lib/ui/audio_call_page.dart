@@ -16,8 +16,12 @@ class AudioCallPage extends StatefulWidget {
     this.callback = false,
     this.answer = false,
     this.redial = false,
+    this.prepared = false,
+    this.expectedRoom,
   });
   final String callId;
+  final bool prepared;
+  final String? expectedRoom;
   final bool operator, callback, answer, redial;
   @override
   State<AudioCallPage> createState() => _AudioCallPageState();
@@ -50,6 +54,8 @@ class _AudioCallPageState extends State<AudioCallPage> {
             callback: widget.callback,
             answer: widget.answer,
             redial: widget.redial,
+            prepared: widget.prepared,
+            expectedRoom: widget.expectedRoom,
           );
     session.minimized = false;
     session.addListener(changed);

@@ -1,7 +1,60 @@
-# Integración de IA: contrato propuesto v1
+# Integración de IA: candidatos y revisión v1
 
-Estado: receptor Flutter y bandeja temporal implementados. No hay servidor de
-inferencia, cámaras conectadas, modelo entrenado ni evaluación de precisión.
+Nueva etapa: [cámara Android de simulación y mapa de operadores](camera-simulation.md).
+Incluye sesiones efímeras y casos de prueba; requiere migración IA versión 2.
+
+Estado: API de candidatos persistentes y bandeja Flutter de revisión implementadas.
+La migración `017_ai_candidates.sql` debe aplicarse antes de iniciar esta versión.
+No hay servidor de inferencia, cámaras conectadas, modelo entrenado ni evaluación
+de precisión. El receptor WebSocket original se conserva para una futura conexión.
+
+## Activar el piloto
+
+Desde `backend`, ejecutar `python migrate.py` con las credenciales administrativas
+locales y reiniciar la API. `/ready` exige `ai_version: 1`.
+Las cámaras y sus permisos se provisionan administrativamente, no desde la app:
+
+```sql
+INSERT INTO trujillo.ai_cameras(id) VALUES ('camera-authorized-id');
+INSERT INTO trujillo.ai_camera_access(camera_id, operator_id)
+VALUES ('camera-authorized-id', '<UUID del operador>');
+```
+
+El usuario debe tener rol `operator` o `admin` y estar activo. Los administradores
+acceden a todas las cámaras activas; los operadores solo a las asignadas. Desactivar
+una cámara impide leer, registrar y revisar sus candidatos.
+
+## API del piloto
+
+Todos los endpoints requieren un token Firebase en `Authorization: Bearer ...`:
+
+- `POST /operator/ai/candidates`: importa un candidato con el JSON v1 de abajo.
+  Es un ingreso autenticado para el piloto, no un endpoint anónimo para cámaras.
+- `GET /operator/ai/candidates?limit=50&before=123`: devuelve `items` y
+  `nextCursor`. Usar ese cursor como `before` hasta recibir `null`. El orden es
+  de recepción descendente, independiente de la fecha del video. Actualizar
+  vuelve a consultar la primera página y permite recuperar la bandeja tras cerrar
+  la app o perder la conexión. No hay suscripción en tiempo real todavía.
+- `POST /operator/ai/candidates/{sequence}/decisions`: acepta
+  `{"decision":"confirmed","reason":"Revisión realizada en el sistema de cámaras"}`
+  o `discarded`. El motivo tiene entre 5 y 500 caracteres. Se guardan identidad y
+  fecha del servidor; una decisión final no puede sobrescribirse.
+
+Los candidatos son inmutables: reenviar el mismo ID y contenido es idempotente;
+reutilizar el ID con otro contenido devuelve 409. Repetir una decisión idéntica
+por el mismo operador también es idempotente. No se crean reportes ciudadanos,
+incidentes públicos ni notificaciones al confirmar. La evidencia todavía debe
+consultarse en el sistema autorizado de cámaras; no se sirven videos desde esta API.
+
+Flutter usa estos endpoints en **Seguridad ciudadana → Cámaras / IA**, con botones
+para actualizar, cargar anteriores y confirmar o descartar con motivo.
+
+Pruebas: `python -m pytest -q`; `python verify_ai.py` verifica permisos reales,
+RLS, deduplicación, paginación y decisiones contra PostgreSQL y revierte todos los
+cambios. Requiere la base existente y credenciales administrativas. Si falta la
+migración de IA, el verificador la aplica solo dentro de la transacción revertida.
+
+## Contrato de inferencia y futura conexión en tiempo real
 
 El servidor de inferencia procesa video fuera de Flutter y emite candidatos.
 El backend debe autenticar al operador, autorizar el acceso a las cámaras y
@@ -42,10 +95,10 @@ más recientes. Es una vista temporal en memoria: no constituye historial de
 auditoría y se pierde al cerrar la app. El servidor debe conservar el historial
 y gestionar reenvíos; un ID representa un candidato inmutable.
 
-La siguiente etapa del servidor debe añadir consulta paginada de candidatos,
-recuperación tras desconexión, evidencia con acceso autorizado y decisiones de
-operadores registradas con identidad y fecha. Confirmar o descartar requiere
-autorización del servidor. Esta entrega no publica incidentes automáticamente.
+La siguiente etapa debe conectar un productor de inferencia con credenciales y
+permisos propios, añadir evidencia con acceso autorizado y tickets WebSocket.
+La consulta paginada y las decisiones auditadas ya existen en la API del piloto.
+Esta entrega no publica incidentes automáticamente.
 
 Antes de activar alertas, evaluar el modelo con videos representativos del
 entorno, medir falsos positivos y falsos negativos, y definir el proceso de

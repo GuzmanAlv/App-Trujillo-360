@@ -691,52 +691,6 @@ class SosCasePanelState extends State<SosCasePanel>
                         : null,
                   ),
                 ),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    if (confirmed && editable)
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.swap_horiz),
-                        label: const Text('Transferir a otra unidad'),
-                        onPressed: () async {
-                          if (!await confirm(
-                            '¿Transferir el SOS? Se cerrará el audio y se buscará otro operador disponible, sin cerrar el caso.',
-                          )) {
-                            return;
-                          }
-                          final call = ActiveCall.session.value;
-                          if (call?.callId == widget.caseId) {
-                            await call!.finish();
-                          }
-                          try {
-                            await request('POST', '$path/handoff');
-                            final uid = Firebase.apps.isEmpty
-                                ? null
-                                : FirebaseAuth.instance.currentUser?.uid;
-                            if (uid != null) {
-                              OperatorDuty.replace(
-                                uid,
-                                OperatorDuty.cases.value
-                                    .where((r) => r['id'] != widget.caseId)
-                                    .toList(),
-                              );
-                            }
-                            if (mounted) {
-                              dirty = false;
-                              await load();
-                            }
-                          } catch (_) {
-                            if (mounted) {
-                              setState(
-                                () => error =
-                                    'No se pudo transferir el caso. Comprueba la conexión y reintenta.',
-                              );
-                            }
-                          }
-                        },
-                      ),
-                  ],
-                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: category,

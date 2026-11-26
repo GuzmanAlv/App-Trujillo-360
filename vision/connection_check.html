@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trujillo 360 · Prueba de conexión</title>
+<style>body{font:18px system-ui;max-width:650px;margin:30px auto;padding:20px}video{width:100%;background:#111;border-radius:15px}button{padding:14px;margin:8px 8px 8px 0}p{line-height:1.5}</style>
+<h1>Conexión con la laptop RTX</h1>
+<p id="network" role="status">Comprobando conexión…</p>
+<p>Esta prueba verifica la conexión privada y el permiso de cámara. La vista previa permanece en tu celular; todavía no se analiza ni se crean reportes.</p>
+<video id="preview" autoplay muted playsinline></video>
+<button id="start">Probar cámara</button><button id="stop" disabled>Detener</button>
+<p id="message" role="status"></p>
+<script>
+history.replaceState(null,'',location.pathname);
+let stream=null,starting=false,generation=0;
+const video=document.querySelector('#preview'),start=document.querySelector('#start'),stop=document.querySelector('#stop'),message=document.querySelector('#message');
+function halt(){generation++;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;start.disabled=false;stop.disabled=true;message.textContent='Cámara detenida.';}
+start.onclick=async()=>{if(starting||stream)return;starting=true;start.disabled=true;const ticket=++generation;try{if(!isSecureContext||!navigator.mediaDevices)throw Error('Abre esta página mediante la dirección HTTPS privada.');const next=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});if(ticket!==generation||document.hidden){next.getTracks().forEach(t=>t.stop());return;}stream=next;video.srcObject=stream;stop.disabled=false;message.textContent='Cámara disponible. La imagen se muestra solo en este celular.';}catch(error){message.textContent=error.message;start.disabled=false;}finally{starting=false;}};
+stop.onclick=halt;document.addEventListener('visibilitychange',()=>{if(document.hidden)halt();});window.addEventListener('pagehide',halt);
+fetch('/health',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error();return r.json();}).then(data=>{if(data.mode!=='connection_test')throw Error();document.querySelector('#network').textContent='Conexión con el servicio de prueba confirmada.';}).catch(()=>{document.querySelector('#network').textContent='No se pudo confirmar la conexión. Comprueba Tailscale y la laptop RTX.';});
+</script></html>

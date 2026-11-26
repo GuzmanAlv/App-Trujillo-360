@@ -9,8 +9,13 @@ from aiohttp import ClientTimeout
 from livekit import api
 from app.auth import identity
 from app.workflows import execute
+from pydantic import BaseModel,ConfigDict,Field
 
 router = APIRouter(prefix='/calls')
+
+class RoomGuard(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    room:str | None=Field(default=None,max_length=120)
 
 def configuration():
     url = os.environ.get('LIVEKIT_URL', '').strip()
@@ -64,9 +69,14 @@ def status(call_id: UUID, response: Response, claims=Depends(identity)):
 def accept(call_id: UUID, response: Response, claims=Depends(identity)):
     private(response)
     configuration()
-    result = action(call_id, 'accept', claims)
-    result.pop('participant', None)
-    return result
+    result=execute(claims,'SELECT trujillo.take_sos_call(%s,NULL)',(call_id,))
+    if not result['call_accepted']:raise HTTPException(409,{'code':'SOS_CALL_CHANGED'})
+    return result['call']
+
+@router.post('/{call_id}/heartbeat')
+def heartbeat(call_id:UUID,response:Response,claims=Depends(identity)):
+    private(response)
+    return execute(claims,'SELECT trujillo.call_heartbeat(%s)',(call_id,))
 
 @router.post('/{call_id}/token')
 def token(call_id: UUID, response: Response, claims=Depends(identity)):
@@ -78,12 +88,19 @@ def token(call_id: UUID, response: Response, claims=Depends(identity)):
         can_publish_sources=['microphone'])
     jwt = (api.AccessToken(key, secret).with_identity(result['participant'])
            .with_ttl(timedelta(seconds=60)).with_grants(grant).to_jwt())
-    return {'url': url, 'token': jwt}
+    return {'url': url, 'token': jwt, 'room':result['room']}
 
 @router.post('/{call_id}/end')
-async def end(call_id: UUID, response: Response, claims=Depends(identity)):
+async def end(call_id: UUID, response: Response, data:RoomGuard=RoomGuard(), claims=Depends(identity)):
     private(response)
-    result = await run_in_threadpool(action, call_id, 'end', claims)
+    generation=None
+    if data.room:
+        prefix='sos-'+str(call_id)+'-'
+        try:
+            if not data.room.startswith(prefix):raise ValueError()
+            generation=UUID(data.room[len(prefix):])
+        except ValueError:raise HTTPException(422,'Sala no válida para este SOS') from None
+    result=await run_in_threadpool(execute,claims,'SELECT trujillo.end_call_generation(%s,%s)',(call_id,generation))
     result.pop('participant', None)
     # Mark ended before contacting LiveKit: no further tokens may be issued.
     url, key, secret = configuration()

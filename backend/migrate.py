@@ -67,6 +67,10 @@ def main():
             conn.execute((ROOT / 'migrations/015_moving_alerts.sql').read_text(encoding='utf-8'))
         if conn.execute('SELECT max(version) FROM trujillo.push_migrations').fetchone()[0] == 2:
             conn.execute((ROOT / 'migrations/016_restore_sos_push.sql').read_text(encoding='utf-8'))
+        if not conn.execute("SELECT to_regclass('trujillo.ai_migrations')").fetchone()[0]:
+            conn.execute((ROOT / 'migrations/017_ai_candidates.sql').read_text(encoding='utf-8'))
+        if conn.execute('SELECT max(version) FROM trujillo.ai_migrations').fetchone()[0] == 1:
+            conn.execute((ROOT / 'supabase/migrations/20261125193721_ai_camera_simulation.sql').read_text(encoding='utf-8'))
         if not conn.execute("SELECT to_regclass('trujillo.call_sessions')").fetchone()[0]:
             conn.execute((ROOT / 'migrations/017_calls.sql').read_text(encoding='utf-8'))
         if not conn.execute("SELECT to_regclass('trujillo.sos_cases')").fetchone()[0]:
