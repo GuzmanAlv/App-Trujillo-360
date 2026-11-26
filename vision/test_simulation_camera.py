@@ -9,7 +9,88 @@ from PIL import Image
 import httpx
 import pytest
 
-from simulation_camera import BackendPublisher, create_app
+from simulation_camera import BackendPublisher, CameraAccess, SessionPublisher, create_app
+
+
+def session_access(**changes):
+    return {'schemaVersion': 1, 'id': str(uuid4()), 'workerToken': 'x' * 43,
+            'expiresAt': (datetime.now(timezone.utc)+timedelta(minutes=29)).isoformat(), **changes}
+
+
+def test_standby_configure_renew_without_reloading_model_or_exposing_token():
+    publisher = SessionPublisher('https://api.example')
+    scorer = Mock(return_value=.72)
+    proxy = TestClient(create_app('local-pair', scorer, publisher))
+    headers = {'X-Pairing-Token': 'local-pair'}
+    assert proxy.get('/api/session', headers=headers).json()['sessionReady'] is False
+    assert proxy.post('/api/analyze', json=batch(), headers=headers).status_code == 410
+    scorer.assert_not_called()
+    first = session_access()
+    assert proxy.post('/api/session', json=first).status_code == 401
+    assert not publisher.ready()
+    response = proxy.post('/api/session', json=first, headers=headers)
+    assert response.status_code == 200 and first['workerToken'] not in response.text
+    first_binding = response.json()['binding']
+    headers['X-Camera-Binding'] = first_binding
+    assert proxy.get('/api/session', headers=headers).json()['sessionReady'] is True
+    second = session_access()
+    response = proxy.post('/api/session', json=second, headers=headers)
+    assert response.status_code == 200
+    assert proxy.post('/api/analyze', json=batch(), headers=headers).status_code == 409
+    assert proxy.get('/api/session', headers=headers).json()['sessionReady'] is False
+    headers['X-Camera-Binding'] = response.json()['binding']
+    with patch('simulation_camera.httpx.post', return_value=httpx.Response(200, json={'status': 'below_threshold', 'case': None})) as post:
+        result = proxy.post('/api/analyze', json=batch(), headers=headers)
+    assert result.status_code == 200
+    assert second['id'] in post.call_args.args[0]
+    scorer.assert_called_once()
+    assert second['workerToken'] not in result.text
+
+
+def test_standby_rejects_expired_access_and_clears_rejected_credentials():
+    publisher = SessionPublisher('https://api.example')
+    proxy = TestClient(create_app('local-pair', Mock(), publisher))
+    headers = {'X-Pairing-Token': 'local-pair'}
+    expired = session_access(expiresAt=(datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat())
+    assert proxy.post('/api/session', json=expired, headers=headers).status_code == 410
+    assert not publisher.ready()
+    publisher.configure(CameraAccess(**session_access()))
+    with patch('simulation_camera.httpx.post', return_value=httpx.Response(409)):
+        with pytest.raises(Exception) as raised:
+            publisher(.8, uuid4())
+    assert raised.value.status_code == 409
+    assert not publisher.ready()
+
+
+def test_private_https_proxy_accepts_only_configured_host_and_origin():
+    app = create_app('local-pair', Mock(return_value=.9), Mock(return_value={'status': 'warming_up', 'case': None}),
+                     public_origin='https://rtx.example.ts.net')
+    proxy = TestClient(app, base_url='http://rtx.example.ts.net')
+    response = proxy.post('/api/analyze', json=batch(), headers={
+        'Origin': 'https://rtx.example.ts.net', 'X-Pairing-Token': 'local-pair'})
+    assert response.status_code == 200
+    assert proxy.get('/health').json()['status'] == 'ok'
+    assert proxy.get('/health', headers={'Host': 'unknown.ts.net'}).status_code == 400
+    assert proxy.post('/api/analyze', json=batch(), headers={
+        'Origin': 'https://unknown.ts.net', 'X-Pairing-Token': 'local-pair'}).status_code == 403
+    assert proxy.post('/api/analyze', json=batch()).status_code == 401
+
+
+def test_connection_check_never_calls_model_or_backend():
+    scorer, publisher = Mock(), Mock()
+    proxy = TestClient(create_app('local-pair', scorer, publisher, connection_test=True))
+    assert proxy.get('/health').json() == {'status': 'ok', 'mode': 'connection_test'}
+    assert 'Prueba de conexión' in proxy.get('/').text
+    assert proxy.post('/api/analyze', json=batch(), headers={'X-Pairing-Token': 'local-pair'}).status_code == 409
+    scorer.assert_not_called()
+    publisher.assert_not_called()
+
+
+@pytest.mark.parametrize('origin', ['http://rtx.ts.net', 'https://rtx.ts.net/path',
+    'https://user:password@rtx.ts.net', 'https://rtx.ts.net?query=yes', 'https://rtx.ts.net:1234'])
+def test_public_origin_cannot_broaden_trust(origin):
+    with pytest.raises(ValueError):
+        create_app('local-pair', Mock(), Mock(), public_origin=origin)
 
 
 def batch(size=(224, 224)):

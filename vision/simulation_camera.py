@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -118,10 +118,66 @@ class BackendPublisher:
                     raise HTTPException(503, 'No se confirmó el registro en el servidor. Se detuvo la cámara; revisa la bandeja antes de reintentar.') from None
 
 
-def create_app(pairing_token, scorer, publisher, expires_at=None):
+class CameraAccess(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    schemaVersion: int = Field(strict=True, ge=1, le=1)
+    id: UUID
+    workerToken: str = Field(min_length=40, max_length=128)
+    expiresAt: AwareDatetime
+
+
+class SessionPublisher:
+    """Keep the model running while the operator renews scoped sessions on the phone."""
+    def __init__(self, base_url):
+        self.base_url = base_url
+        self.publisher = None
+        self.expires_at = None
+        self.binding = None
+
+    def ready(self):
+        return self.publisher is not None and self.expires_at > datetime.now(timezone.utc)
+
+    def configure(self, access):
+        if not datetime.now(timezone.utc) < access.expiresAt <= datetime.now(timezone.utc) + timedelta(minutes=31):
+            raise HTTPException(410, 'El acceso venció. Crea otra sesión en la app y copia el nuevo acceso.')
+        self.publisher = BackendPublisher(self.base_url, access.id, access.workerToken)
+        self.expires_at = access.expiresAt
+        self.binding = secrets.token_urlsafe(24)
+
+    def bound_to(self, request):
+        binding = request.headers.get('X-Camera-Binding', '')
+        return self.ready() and bool(binding) and hmac.compare_digest(binding, self.binding)
+
+    def __call__(self, confidence, request_id):
+        if not self.ready():
+            raise HTTPException(410, 'Conecta un acceso vigente desde la app antes de iniciar.')
+        try:
+            return self.publisher(confidence, request_id)
+        except HTTPException as error:
+            if error.status_code in (401, 403, 409, 410):
+                self.publisher = None
+            raise
+
+
+def validate_public_origin(value):
+    if value is None:
+        return None
+    parsed = urlsplit(value)
+    if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
+            or parsed.path not in ('', '/') or parsed.query or parsed.fragment
+            or parsed.port not in (None, 443)):
+        raise ValueError('La dirección pública debe ser un origen HTTPS sin ruta ni credenciales')
+    return 'https://' + parsed.hostname
+
+
+def create_app(pairing_token, scorer, publisher, expires_at=None, public_origin=None, connection_test=False):
+    public_origin = validate_public_origin(public_origin)
     expires_at = expires_at or datetime.now(timezone.utc) + timedelta(minutes=30)
     app = FastAPI(title='Trujillo 360 · Cámara de simulación', docs_url=None, redoc_url=None, openapi_url=None)
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'testserver'])
+    hosts = ['127.0.0.1', 'localhost', 'testserver']
+    if public_origin:
+        hosts.append(urlsplit(public_origin).hostname)
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
     busy = asyncio.Lock()
 
     @app.middleware('http')
@@ -133,7 +189,7 @@ def create_app(pairing_token, scorer, publisher, expires_at=None):
             if datetime.now(timezone.utc) >= expires_at:
                 return JSONResponse({'detail': 'La vinculación de cámara venció'}, status_code=410)
             origin = request.headers.get('origin')
-            if origin and origin != str(request.base_url).rstrip('/'):
+            if origin and origin not in (str(request.base_url).rstrip('/'), public_origin):
                 return JSONResponse({'detail': 'Origen de cámara no permitido'}, status_code=403)
             chunks, size = [], 0
             async for chunk in request.stream():
@@ -151,10 +207,39 @@ def create_app(pairing_token, scorer, publisher, expires_at=None):
 
     @app.get('/', response_class=HTMLResponse)
     def camera_page():
-        return (ROOT / 'simulation_camera.html').read_text(encoding='utf-8')
+        page = 'connection_check.html' if connection_test else 'simulation_camera.html'
+        return (ROOT / page).read_text(encoding='utf-8')
+
+    @app.get('/health')
+    def health():
+        return {'status': 'ok', 'mode': 'connection_test' if connection_test else 'simulation',
+                **({'standby': True} if isinstance(publisher, SessionPublisher) else {})}
+
+    @app.get('/api/session')
+    def session_status(request: Request):
+        if not isinstance(publisher, SessionPublisher):
+            return {'needsAccess': False, 'sessionReady': not connection_test}
+        return {'needsAccess': True, 'sessionReady': publisher.bound_to(request),
+                'expiresAt': publisher.expires_at if publisher.bound_to(request) else None}
+
+    @app.post('/api/session')
+    async def connect_session(access: CameraAccess):
+        if not isinstance(publisher, SessionPublisher):
+            raise HTTPException(409, 'Este iniciador ya tiene una sesión fija.')
+        if busy.locked():
+            raise HTTPException(409, 'Detén la cámara y espera a que termine el análisis antes de cambiar de sesión.')
+        async with busy:
+            publisher.configure(access)
+        return {'sessionReady': True, 'expiresAt': publisher.expires_at, 'binding': publisher.binding}
 
     @app.post('/api/analyze')
-    async def analyze(batch: FrameBatch):
+    async def analyze(batch: FrameBatch, request: Request):
+        if connection_test:
+            raise HTTPException(409, 'Esta prueba solo verifica conexión y permiso de cámara')
+        if isinstance(publisher, SessionPublisher) and not publisher.ready():
+            raise HTTPException(410, 'Pega un acceso vigente de la app para iniciar la cámara.')
+        if isinstance(publisher, SessionPublisher) and not publisher.bound_to(request):
+            raise HTTPException(409, 'Se conectó otra sesión de cámara. Vuelve a pegar tu acceso para continuar.')
         if busy.locked():
             raise HTTPException(429, 'La RTX está procesando otra secuencia; espera y reintenta')
         async with busy:
@@ -177,23 +262,51 @@ def create_app(pairing_token, scorer, publisher, expires_at=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--session', type=UUID, required=True)
-    parser.add_argument('--api-base', required=True)
+    parser.add_argument('--session', type=UUID)
+    parser.add_argument('--api-base')
+    parser.add_argument('--public-origin', help='Origen HTTPS privado asignado por Tailscale Serve')
+    parser.add_argument('--check-connection', action='store_true', help='Prueba de red y cámara, sin IA ni reportes')
+    parser.add_argument('--standby', action='store_true', help='Conectar sesiones desde el celular sin reiniciar el modelo')
+    parser.add_argument('--qr', action='store_true', help='Mostrar un QR de vinculación en la terminal')
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--weights', type=Path, default=ROOT / 'weights/r2plus1d_best.pt')
     args = parser.parse_args()
     token = os.environ.get('TRUJILLO_SIM_TOKEN', '').strip()
-    if not token:
+    try:
+        public_origin = validate_public_origin(args.public_origin)
+    except ValueError as error:
+        parser.error(str(error))
+    if args.standby and (args.check_connection or not args.api_base):
+        parser.error('--standby requiere --api-base y no admite --check-connection')
+    if not args.check_connection and not args.standby and (not token or not args.session or not args.api_base):
         parser.error('Define TRUJILLO_SIM_TOKEN con el workerToken efímero de la sesión de simulación')
-    publisher = BackendPublisher(args.api_base, args.session, token)
-    scorer = GpuScorer(args.weights)
+    publisher = None if args.check_connection else (
+        SessionPublisher(args.api_base) if args.standby else BackendPublisher(args.api_base, args.session, token))
+    scorer = None if args.check_connection else GpuScorer(args.weights)
     pairing = secrets.token_urlsafe(32)
-    print('Cámara de simulación lista en loopback. Vinculación local válida por 30 minutos.')
-    print(f'En Android por USB: adb reverse tcp:{args.port} tcp:{args.port}')
-    print(f'Abre en el celular: http://localhost:{args.port}/#pair={pairing}')
+    lifetime = timedelta(hours=8) if args.standby else timedelta(minutes=30)
+    print('Cámara de simulación lista. Mantén esta ventana abierta.')
+    if not public_origin:
+        print(f'En Android por USB: adb reverse tcp:{args.port} tcp:{args.port}')
+    origin = public_origin or f'http://localhost:{args.port}'
+    camera_url = f'{origin}/#pair={pairing}'
+    print(f'Abre en el celular: {camera_url}')
+    if args.qr:
+        import qrcode
+        qr = qrcode.QRCode(border=4)
+        qr.add_data(camera_url)
+        qr.make(fit=True)
+        qr.print_ascii(invert=True)
+    if args.standby:
+        print('Escanea el QR. Copia el acceso completo desde la app y pégalo en la página del celular.')
+        print('Vinculación de esta página: 8 horas. Las sesiones de la app siguen durando 30 minutos.')
+    if args.check_connection:
+        print('Modo prueba de conexión: no analiza ni envía reportes.')
     # Access logs are disabled; the backend worker credential never reaches the page.
     import uvicorn
-    uvicorn.run(create_app(pairing, scorer, publisher), host='127.0.0.1', port=args.port, access_log=False)
+    uvicorn.run(create_app(pairing, scorer, publisher, public_origin=public_origin,
+                          connection_test=args.check_connection, expires_at=datetime.now(timezone.utc)+lifetime),
+                host='127.0.0.1', port=args.port, access_log=False)
 
 
 if __name__ == '__main__':

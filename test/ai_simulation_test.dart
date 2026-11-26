@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:alerta_ciudadana/ui/ai_simulation_panel.dart';
@@ -135,6 +137,22 @@ void main() {
   testWidgets('Cuenta autorizada prepara ubicación y puede detener sesión', (
     tester,
   ) async {
+    String? copiedAccess;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedAccess = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
     final writes = <String>[];
     Future<dynamic> request(
       String method,
@@ -179,12 +197,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('session-1'), findsOneWidget);
     expect(find.text('temporary-scoped-token'), findsNothing);
+    await tester.ensureVisible(find.text('Copiar acceso completo de cámara'));
+    await tester.tap(find.text('Copiar acceso completo de cámara'));
+    await tester.pumpAndSettle();
+    expect(copiedAccess, startsWith('TRUJILLO-CAMERA-1.'));
+    final access = jsonDecode(
+      utf8.decode(
+        base64Url.decode(copiedAccess!.substring('TRUJILLO-CAMERA-1.'.length)),
+      ),
+    );
+    expect(access, {
+      'schemaVersion': 1,
+      'id': 'session-1',
+      'workerToken': 'temporary-scoped-token',
+      'expiresAt': '2026-11-25T02:00:00Z',
+    });
+    expect(find.text('Copiar acceso completo de cámara'), findsOneWidget);
     await tester.ensureVisible(find.text('Detener sesión de cámara'));
     await tester.tap(find.text('Detener sesión de cámara'));
     await tester.pumpAndSettle();
     expect(writes.last, '/operator/ai/simulation/sessions/session-1/stop');
     expect(find.text('Sesión de cámara detenida.'), findsOneWidget);
-    expect(find.text('Copiar acceso temporal para la laptop'), findsNothing);
+    expect(find.text('Copiar acceso completo de cámara'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

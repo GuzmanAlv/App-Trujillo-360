@@ -26,6 +26,7 @@ pydantic==2.14.4
 pydantic-core==2.50.5
 pygments==2.21.0
 pytest==9.1.1
+qrcode==8.2
 setuptools==78.1.0
 starlette==1.10.0
 sympy==1.14.0

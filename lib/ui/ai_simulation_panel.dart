@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -400,9 +401,14 @@ class _CreateSessionPageState extends State<_CreateSessionPage> {
                   validator: (value) => validate(value, -180, 180),
                 ),
                 TextButton.icon(
-                  onPressed: busy ? null : locate,
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          await locate();
+                          if (mounted && error == null) await create();
+                        },
                   icon: const Icon(Icons.my_location),
-                  label: const Text('Usar ubicación de este celular'),
+                  label: const Text('Crear con mi ubicación'),
                 ),
                 FilledButton(
                   onPressed: busy ? null : create,
@@ -416,29 +422,31 @@ class _CreateSessionPageState extends State<_CreateSessionPage> {
         if (session != null) ...[
           const SizedBox(height: 20),
           const Text(
-            'Sesión creada. Comparte este identificador con la laptop que procesa el video.',
+            'Sesión creada. Copia un solo acceso y pégalo en la página de cámara de este celular.',
           ),
           SelectableText('${session!['id']}'),
           Text('Vence: ${simulationTime(session!['expiresAt'])}'),
-          if (!stopped && !tokenCopied && session!['workerToken'] is String)
+          if (!stopped && session!['workerToken'] is String)
             TextButton.icon(
               onPressed: () async {
                 await Clipboard.setData(
-                  ClipboardData(text: session!['workerToken'] as String),
+                  ClipboardData(
+                    text:
+                        'TRUJILLO-CAMERA-1.${base64Url.encode(utf8.encode(jsonEncode({'schemaVersion': 1, 'id': session!['id'], 'workerToken': session!['workerToken'], 'expiresAt': session!['expiresAt']})))}',
+                  ),
                 );
                 if (mounted) {
                   setState(() {
                     tokenCopied = true;
-                    session!.remove('workerToken');
                   });
                 }
               },
               icon: const Icon(Icons.copy),
-              label: const Text('Copiar acceso temporal para la laptop'),
+              label: const Text('Copiar acceso completo de cámara'),
             ),
           if (tokenCopied)
             const Text(
-              'Acceso temporal copiado. Pégalo en TRUJILLO_SIM_TOKEN en la laptop.',
+              'Acceso copiado. Abre la página de cámara del QR, pégalo y pulsa Conectar sesión.',
             ),
           if (stopped) const Text('Sesión de cámara detenida.'),
           if (!stopped)
@@ -448,7 +456,7 @@ class _CreateSessionPageState extends State<_CreateSessionPage> {
             ),
           const SizedBox(height: 12),
           const Text(
-            'Conecta el celular por USB a la laptop y abre la dirección de cámara que muestre el servicio de visión. La laptop debe tener activo el modelo de IA.',
+            'La RTX debe tener abierto el iniciador de cámara. Escanea su QR y mantén Tailscale conectado para usarla por internet.',
           ),
           const Text(
             'Crear la sesión no enciende la cámara. El navegador pedirá permiso cuando pulses Iniciar cámara.',

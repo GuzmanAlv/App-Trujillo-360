@@ -1,4 +1,6 @@
 .venv/
+.venv-rtx/
+.python-rtx/
 data/
 outputs/
 weights/

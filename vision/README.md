@@ -1,5 +1,9 @@
 # Prototipo de visión — preparación del entorno
 
+Nuevo inicio simplificado: [prueba corta de cámara](../docs/quick-camera-test.md).
+La RTX abre `INICIAR_CAMARA_IA.cmd`; la app copia un solo acceso de sesión para
+pegar en la página del teléfono. No requiere IDs o claves en PowerShell.
+
 Para usar un segundo Android por USB como cámara y crear casos en el mapa de
 operadores, consultar [cámara de simulación](../docs/camera-simulation.md).
 
